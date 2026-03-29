@@ -106,6 +106,8 @@ func main() {
 				r.Use(apimw.RequireUserAPI(st))
 				r.Use(apimw.RequireAdminAPI())
 				r.Get("/admin/dashboard", h.APIAdminDashboard)
+				r.Get("/admin/sales-years", h.APIAdminSalesYears)
+				r.Get("/admin/sales-stats", h.APIAdminSalesStats)
 				r.Get("/admin/requests", h.APIAdminRequests)
 				r.Post("/admin/requests/{id}/fulfill", h.APIAdminFulfill)
 				r.Post("/admin/requests/{id}/reject", h.APIAdminReject)

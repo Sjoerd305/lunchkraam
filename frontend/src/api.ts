@@ -52,6 +52,22 @@ export type AdminDashboardStats = {
   payment_amount_eur: string
 }
 
+export type AdminSalesMonthBucket = {
+  month: number
+  fulfilled_count: number
+  revenue_eur: number
+  label_nl: string
+}
+
+export type AdminSalesStats = {
+  year: number
+  timezone: string
+  payment_amount_eur: string
+  monthly: AdminSalesMonthBucket[]
+  year_fulfilled_count: number
+  year_revenue_eur: number
+}
+
 export class ApiError extends Error {
   code: string
   status: number
@@ -66,6 +82,13 @@ export class ApiError extends Error {
 function jsonInt(v: unknown, fallback = 0): number {
   if (typeof v === 'number' && Number.isFinite(v)) {
     return Math.trunc(v)
+  }
+  return fallback
+}
+
+function jsonFloat(v: unknown, fallback = 0): number {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    return v
   }
   return fallback
 }
@@ -155,6 +178,36 @@ export async function cancelAllMyPendingRequests(csrf: string): Promise<number> 
   if (!res.ok) throw await parseError(res)
   const j = (await res.json()) as { cancelled_count?: number }
   return j.cancelled_count ?? 0
+}
+
+export async function getAdminSalesYears(): Promise<number[]> {
+  const res = await fetch('/api/admin/sales-years', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { years?: unknown }
+  const raw = j.years
+  if (!Array.isArray(raw)) return []
+  return raw.map((y) => jsonInt(y, 0)).filter((y) => y > 0)
+}
+
+export async function getAdminSalesStats(year: number): Promise<AdminSalesStats> {
+  const res = await fetch(`/api/admin/sales-stats?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as Record<string, unknown>
+  const rawMonthly = (j.monthly ?? []) as Record<string, unknown>[]
+  const monthly: AdminSalesMonthBucket[] = rawMonthly.map((row) => ({
+    month: jsonInt(row.month, 0),
+    fulfilled_count: jsonInt(row.fulfilled_count, 0),
+    revenue_eur: jsonFloat(row.revenue_eur, 0),
+    label_nl: typeof row.label_nl === 'string' ? row.label_nl : '',
+  }))
+  return {
+    year: jsonInt(j.year, year),
+    timezone: typeof j.timezone === 'string' ? j.timezone : 'Europe/Amsterdam',
+    payment_amount_eur: typeof j.payment_amount_eur === 'string' ? j.payment_amount_eur : '',
+    monthly,
+    year_fulfilled_count: jsonInt(j.year_fulfilled_count, 0),
+    year_revenue_eur: jsonFloat(j.year_revenue_eur, 0),
+  }
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboardStats> {

@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/csrf"
@@ -209,6 +212,80 @@ func (d *Deps) APIAdminDashboard(w http.ResponseWriter, r *http.Request) {
 		"cancelled_requests":                st.CancelledRequests,
 		"payment_amount_eur":                d.Config.PaymentAmountEUR,
 	})
+}
+
+func parsePaymentEURAmount(s string) float64 {
+	s = strings.TrimSpace(strings.ReplaceAll(s, ",", "."))
+	if s == "" {
+		return 0
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
+}
+
+func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
+	loc, locErr := time.LoadLocation("Europe/Amsterdam")
+	year := time.Now().Year()
+	if locErr == nil {
+		year = time.Now().In(loc).Year()
+	}
+	if ys := strings.TrimSpace(r.URL.Query().Get("year")); ys != "" {
+		if v, err := strconv.Atoi(ys); err == nil && v >= 2000 && v <= 2100 {
+			year = v
+		}
+	}
+
+	buckets, err := d.Store.AdminSalesByMonth(r.Context(), year)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+
+	price := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
+	monthly := make([]map[string]any, 0, 12)
+	var yearCount int64
+	var yearRevenue float64
+	for i := 0; i < 12; i++ {
+		c := buckets[i]
+		yearCount += c
+		rev := float64(c) * price
+		yearRevenue += rev
+		monthly = append(monthly, map[string]any{
+			"month":             i + 1,
+			"fulfilled_count":   c,
+			"revenue_eur":       math.Round(rev*100) / 100,
+			"label_nl":          monthLabelNL(i + 1),
+		})
+	}
+
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"year":                 year,
+		"timezone":             "Europe/Amsterdam",
+		"payment_amount_eur":   d.Config.PaymentAmountEUR,
+		"monthly":              monthly,
+		"year_fulfilled_count": yearCount,
+		"year_revenue_eur":     math.Round(yearRevenue*100) / 100,
+	})
+}
+
+func (d *Deps) APIAdminSalesYears(w http.ResponseWriter, r *http.Request) {
+	years, err := d.Store.AdminFulfilledYears(r.Context())
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"years": years})
+}
+
+func monthLabelNL(m int) string {
+	names := []string{"jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"}
+	if m < 1 || m > 12 {
+		return ""
+	}
+	return names[m-1]
 }
 
 func (d *Deps) APIAdminRequests(w http.ResponseWriter, r *http.Request) {

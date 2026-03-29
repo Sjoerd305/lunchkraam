@@ -6,6 +6,9 @@
 # Local scratch (repo root)
 /tmp/
 
+# Database dumps (scripts/backup-database.sh)
+/backups/
+
 # Go
 *.exe
 *.exe~

@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/AlertDialogProvider'
+const AdminSalesCharts = lazy(async () => {
+  const m = await import('./AdminSalesCharts')
+  return { default: m.AdminSalesCharts }
+})
 
 function parseEurPerCard(s: string): number {
   const n = parseFloat(String(s).replace(',', '.'))
@@ -93,6 +97,12 @@ export function AdminDashboardPage() {
       <p className="text-slate-600">
         Stand van zorgplicht en voorraad aan knipjes. Cijfers komen rechtstreeks uit de database.
       </p>
+
+      <Suspense
+        fallback={<p className="text-sm text-slate-600">Grafieken laden…</p>}
+      >
+        <AdminSalesCharts />
+      </Suspense>
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-900">Kaarten &amp; knipjes (totaal)</h2>

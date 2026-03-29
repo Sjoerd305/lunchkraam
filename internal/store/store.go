@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const adminSalesTZ = "Europe/Amsterdam"
+
 var ErrNotFound = errors.New("not found")
 var ErrNoKnipjes = errors.New("geen knipjes meer")
 var ErrForbidden = errors.New("verboden")
@@ -536,4 +538,58 @@ SELECT
 		return nil, err
 	}
 	return &st, nil
+}
+
+// AdminSalesByMonth counts fulfilled card_requests per calendar month in Europe/Amsterdam.
+// Indexes 0–11 are January–December.
+func (s *Store) AdminSalesByMonth(ctx context.Context, year int) ([12]int64, error) {
+	var buckets [12]int64
+	const q = `
+SELECT (EXTRACT(MONTH FROM fulfilled_at AT TIME ZONE $2))::int AS m,
+       COUNT(*)::bigint AS n
+FROM card_requests
+WHERE status = 'fulfilled'
+  AND fulfilled_at IS NOT NULL
+  AND (EXTRACT(YEAR FROM fulfilled_at AT TIME ZONE $2))::int = $1
+GROUP BY 1
+ORDER BY 1`
+	rows, err := s.pool.Query(ctx, q, year, adminSalesTZ)
+	if err != nil {
+		return buckets, fmt.Errorf("admin sales by month: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m int
+		var n int64
+		if err := rows.Scan(&m, &n); err != nil {
+			return buckets, err
+		}
+		if m >= 1 && m <= 12 {
+			buckets[m-1] = n
+		}
+	}
+	return buckets, rows.Err()
+}
+
+// AdminFulfilledYears returns calendar years (Europe/Amsterdam) that have at least one fulfilled sale, newest first.
+func (s *Store) AdminFulfilledYears(ctx context.Context) ([]int, error) {
+	const q = `
+SELECT DISTINCT (EXTRACT(YEAR FROM fulfilled_at AT TIME ZONE $1))::int AS y
+FROM card_requests
+WHERE status = 'fulfilled' AND fulfilled_at IS NOT NULL
+ORDER BY y DESC`
+	rows, err := s.pool.Query(ctx, q, adminSalesTZ)
+	if err != nil {
+		return nil, fmt.Errorf("admin fulfilled years: %w", err)
+	}
+	defer rows.Close()
+	var out []int
+	for rows.Next() {
+		var y int
+		if err := rows.Scan(&y); err != nil {
+			return nil, err
+		}
+		out = append(out, y)
+	}
+	return out, rows.Err()
 }
