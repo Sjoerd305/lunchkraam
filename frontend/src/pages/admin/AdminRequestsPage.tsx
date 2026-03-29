@@ -3,9 +3,10 @@ import * as api from '../../api'
 import { useAuth } from '../../AuthContext'
 import { PaymentRequestsPanel } from '../../components/PaymentRequestsPanel'
 import { useAlertDialog } from '../../components/AlertDialogProvider'
+import { useTostiRealtime } from '../../useTostiRealtime'
 
 export function AdminRequestsPage() {
-  const { csrf } = useAuth()
+  const { csrf, user } = useAuth()
   const { alert, confirm } = useAlertDialog()
   const [rows, setRows] = useState<api.AdminRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,6 +32,22 @@ export function AdminRequestsPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  const onPaymentRealtime = useCallback(
+    (reason: string) => {
+      if (reason === 'open' || reason === 'payment_requests') {
+        void load()
+      }
+    },
+    [load],
+  )
+
+  useTostiRealtime(
+    '/ws/kraam',
+    Boolean(user && (user.is_admin || user.is_operator)),
+    onPaymentRealtime,
+    ['payment_requests'],
+  )
 
   async function onFulfill(id: number, knipjesRemaining: number) {
     const msg =

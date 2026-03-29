@@ -59,10 +59,15 @@ export function OrderTostiPage() {
     void load()
   }, [load])
 
-  const onMineRealtime = useCallback(() => {
-    void load()
-    void refresh()
-  }, [load, refresh])
+  const onMineRealtime = useCallback(
+    (reason: string) => {
+      if (reason === 'open' || reason === 'my_tosti_orders') {
+        void load()
+        void refresh()
+      }
+    },
+    [load, refresh],
+  )
 
   useTostiRealtime('/ws/mijn-tosti', !!user, onMineRealtime, ['my_tosti_orders'])
 

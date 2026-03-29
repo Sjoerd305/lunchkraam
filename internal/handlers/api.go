@@ -166,6 +166,7 @@ func (d *Deps) APIBuyRequest(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Aanvraag opslaan mislukt.")
 		return
 	}
+	d.notifyPaymentRequestsMutation()
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -191,6 +192,7 @@ func (d *Deps) APICancelMyRequest(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
 		return
 	}
+	d.notifyPaymentRequestsMutation()
 	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -205,6 +207,9 @@ func (d *Deps) APICancelAllMyPending(w http.ResponseWriter, r *http.Request) {
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
 		return
+	}
+	if n > 0 {
+		d.notifyPaymentRequestsMutation()
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true, "cancelled_count": n})
 }
@@ -365,6 +370,7 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	d.notifyPaymentRequestsMutation()
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -388,5 +394,6 @@ func (d *Deps) APIAdminReject(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	d.notifyPaymentRequestsMutation()
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

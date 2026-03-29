@@ -24,7 +24,7 @@ func wsCheckOrigin(d *Deps, r *http.Request) bool {
 		strings.HasPrefix(lo, "http://[::1]")
 }
 
-// WSKraam is a WebSocket for operators/admins; pushes tosti_queue refresh hints.
+// WSKraam is a WebSocket for operators/admins; pushes tosti_queue and payment_requests refresh hints.
 func (d *Deps) WSKraam(w http.ResponseWriter, r *http.Request) {
 	if d.Hub == nil {
 		http.Error(w, "realtime niet beschikbaar", http.StatusServiceUnavailable)
@@ -81,4 +81,12 @@ func (d *Deps) notifyTostiMutation(ownerUserID int64) {
 	}
 	d.Hub.BroadcastKraam()
 	d.Hub.NotifyUserTostiOrders(ownerUserID)
+}
+
+// notifyPaymentRequestsMutation tells kraam WebSocket clients to refetch the payment queue.
+func (d *Deps) notifyPaymentRequestsMutation() {
+	if d.Hub == nil {
+		return
+	}
+	d.Hub.BroadcastKraamPaymentRequests()
 }

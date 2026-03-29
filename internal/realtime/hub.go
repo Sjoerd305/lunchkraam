@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	msgTostiQueue    = []byte(`{"t":"tosti_queue"}`)
-	msgMyTostiOrders = []byte(`{"t":"my_tosti_orders"}`)
+	msgTostiQueue       = []byte(`{"t":"tosti_queue"}`)
+	msgMyTostiOrders    = []byte(`{"t":"my_tosti_orders"}`)
+	msgPaymentRequests  = []byte(`{"t":"payment_requests"}`)
 )
 
 const (
@@ -25,8 +26,9 @@ type Hub struct {
 	unregisterKraam chan *Client
 	registerUser    chan userClientReg
 	unregisterUser  chan userClientReg
-	broadcastKraam  chan struct{}
-	notifyUserTosti chan int64
+	broadcastKraam           chan struct{}
+	broadcastPaymentRequests chan struct{}
+	notifyUserTosti          chan int64
 
 	mu    sync.Mutex
 	kraam map[*Client]struct{}
@@ -53,10 +55,11 @@ func NewHub() *Hub {
 		unregisterKraam: make(chan *Client),
 		registerUser:    make(chan userClientReg),
 		unregisterUser:  make(chan userClientReg),
-		broadcastKraam:  make(chan struct{}, 64),
-		notifyUserTosti: make(chan int64, 256),
-		kraam:           make(map[*Client]struct{}),
-		users:           make(map[int64]map[*Client]struct{}),
+		broadcastKraam:           make(chan struct{}, 64),
+		broadcastPaymentRequests: make(chan struct{}, 64),
+		notifyUserTosti:          make(chan int64, 256),
+		kraam:                    make(map[*Client]struct{}),
+		users:                    make(map[int64]map[*Client]struct{}),
 	}
 	go h.run()
 	return h
@@ -109,6 +112,16 @@ func (h *Hub) run() {
 			}
 			h.mu.Unlock()
 
+		case <-h.broadcastPaymentRequests:
+			h.mu.Lock()
+			for c := range h.kraam {
+				select {
+				case c.send <- msgPaymentRequests:
+				default:
+				}
+			}
+			h.mu.Unlock()
+
 		case uid := <-h.notifyUserTosti:
 			if uid == 0 {
 				continue
@@ -129,6 +142,14 @@ func (h *Hub) run() {
 func (h *Hub) BroadcastKraam() {
 	select {
 	case h.broadcastKraam <- struct{}{}:
+	default:
+	}
+}
+
+// BroadcastKraamPaymentRequests signals kraam subscribers to refetch the payment request queue (non-blocking).
+func (h *Hub) BroadcastKraamPaymentRequests() {
+	select {
+	case h.broadcastPaymentRequests <- struct{}{}:
 	default:
 	}
 }

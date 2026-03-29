@@ -8,14 +8,16 @@ function wsUrl(path: string): string {
 const maxBackoffMs = 30_000
 const initialBackoffMs = 1000
 
+export type RealtimeHintReason = 'open' | string
+
 /**
- * Subscribes to server push hints; calls onHint when a known event arrives.
- * Reconnects with exponential backoff while enabled and the tab is active.
+ * Subscribes to server push hints; calls onHint with 'open' after connect/reconnect
+ * and with the message type (e.g. tosti_queue) when a filtered event arrives.
  */
 export function useTostiRealtime(
   path: string,
   enabled: boolean,
-  onHint: () => void,
+  onHint: (reason: RealtimeHintReason) => void,
   filterTypes: string[],
 ) {
   const onHintRef = useRef(onHint)
@@ -45,7 +47,7 @@ export function useTostiRealtime(
 
       socket.onopen = () => {
         attempt = 0
-        onHintRef.current()
+        onHintRef.current('open')
       }
 
       socket.onmessage = (ev) => {
@@ -53,7 +55,7 @@ export function useTostiRealtime(
           const data = JSON.parse(ev.data as string) as { t?: string }
           const t = data.t
           if (t && filterRef.current.includes(t)) {
-            onHintRef.current()
+            onHintRef.current(t)
           }
         } catch {
           /* ignore */

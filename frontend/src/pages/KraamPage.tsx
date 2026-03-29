@@ -88,16 +88,31 @@ export function KraamPage() {
     return () => window.clearTimeout(t)
   }, [load])
 
-  const onKraamRealtime = useCallback(() => {
-    void loadOrders()
-    void load()
-  }, [loadOrders, load])
+  const onKraamRealtime = useCallback(
+    (reason: string) => {
+      if (reason === 'open') {
+        void loadOrders()
+        void load()
+        void loadPayments()
+        return
+      }
+      if (reason === 'tosti_queue') {
+        void loadOrders()
+        void load()
+        return
+      }
+      if (reason === 'payment_requests') {
+        void loadPayments()
+      }
+    },
+    [loadOrders, load, loadPayments],
+  )
 
   useTostiRealtime(
     '/ws/kraam',
     Boolean(user && (user.is_admin || user.is_operator)),
     onKraamRealtime,
-    ['tosti_queue'],
+    ['tosti_queue', 'payment_requests'],
   )
 
   if (!user) {
