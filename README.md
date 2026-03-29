@@ -51,8 +51,8 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 
 ## Rollen
 
-- **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (o.a. openstaande aanvragen, lokale gebruikers).
-- **Operator**: gebruikers die in de database als operator zijn gemarkeerd (kraampagina, tosti-wachtrij).
+- **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, betalingswachtrij).
+- **Operator (matroos)**: kraampagina (tosti-wachtrij, kaarten zoeken), betalingswachtrij accorderen/weigeren, en het menu **Betalingen** naar dezelfde wachtrij.
 
 ## Milieuvariabelen
 

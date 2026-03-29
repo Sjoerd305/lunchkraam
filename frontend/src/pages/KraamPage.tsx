@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../AuthContext'
+import { PaymentRequestsPanel } from '../components/PaymentRequestsPanel'
 import { useAlertDialog } from '../components/AlertDialogProvider'
 import { useTostiRealtime } from '../useTostiRealtime'
 
@@ -25,6 +26,26 @@ export function KraamPage() {
   const [loadingOrders, setLoadingOrders] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [busyOrder, setBusyOrder] = useState<{ id: number; action: 'deliver' | 'cancel' } | null>(null)
+  const [paymentRows, setPaymentRows] = useState<api.AdminRequest[]>([])
+  const [paymentLoading, setPaymentLoading] = useState(true)
+  const [paymentLoadFailed, setPaymentLoadFailed] = useState(false)
+  const [paymentBusyId, setPaymentBusyId] = useState<number | null>(null)
+
+  const loadPayments = useCallback(async () => {
+    setPaymentLoading(true)
+    setPaymentLoadFailed(false)
+    try {
+      const list = await api.getAdminRequests()
+      setPaymentRows(list)
+    } catch (e) {
+      setPaymentRows([])
+      setPaymentLoadFailed(true)
+      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
+      void alert({ title: 'Betalingswachtrij laden mislukt', message: msg, variant: 'error' })
+    } finally {
+      setPaymentLoading(false)
+    }
+  }, [alert])
 
   const loadOrders = useCallback(async () => {
     setLoadingOrders(true)
@@ -59,6 +80,10 @@ export function KraamPage() {
   }, [loadOrders])
 
   useEffect(() => {
+    void loadPayments()
+  }, [loadPayments])
+
+  useEffect(() => {
     const t = window.setTimeout(() => void load(), 300)
     return () => window.clearTimeout(t)
   }, [load])
@@ -83,7 +108,62 @@ export function KraamPage() {
   }
 
   async function refreshAll() {
-    await Promise.all([loadOrders(), load()])
+    await Promise.all([loadOrders(), loadPayments(), load()])
+  }
+
+  async function onPaymentFulfill(id: number, knipjesRemaining: number) {
+    const msg =
+      knipjesRemaining === 10
+        ? 'Betalingscontrole afronden? Het lid heeft de kaart al met 10 knipjes; tijdens de verkoop hoef je nu niets extra’s te doen.'
+        : `Betalingscontrole afronden? Op de kaart staan nog ${knipjesRemaining} knipje(s); het lid kon die al gebruiken.`
+    const ok = await confirm({
+      title: 'Betaling accorderen?',
+      message: msg,
+      confirmLabel: 'Accorderen',
+      cancelLabel: 'Terug',
+      tone: 'brand',
+    })
+    if (!ok) return
+    setPaymentBusyId(id)
+    try {
+      await api.fulfillRequest(csrf, id)
+      await loadPayments()
+      await refresh()
+      await alert({
+        title: 'Geaccordeerd',
+        message: 'De aanvraag is uit de wachtrij gehaald.',
+        variant: 'success',
+      })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Toekennen mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setPaymentBusyId(null)
+    }
+  }
+
+  async function onPaymentReject(id: number) {
+    const ok = await confirm({
+      title: 'Aanvraag weigeren?',
+      message:
+        'Geen betaling ontvangen? De voorlopige kaart wordt verwijderd. Het lid kan later opnieuw een kaart aanvragen.',
+      confirmLabel: 'Ja, weigeren',
+      cancelLabel: 'Terug',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setPaymentBusyId(id)
+    try {
+      await api.rejectAdminRequest(csrf, id)
+      await loadPayments()
+      await refresh()
+      await alert({ title: 'Afgewezen', message: 'De aanvraag is geannuleerd.', variant: 'success' })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Weigeren mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setPaymentBusyId(null)
+    }
   }
 
   async function onUseKnipje(c: api.OperatorCardRow) {
@@ -234,6 +314,47 @@ export function KraamPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-amber-200/90 bg-amber-50/40 p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-amber-950">Betalingen in de wachtrij</h2>
+            <p className="text-sm text-amber-900/85">
+              Zelfde lijst als onder Admin → Betalingswachtrij. Accordeer zodra de betaling binnen is; weigeren
+              alleen als er nog geen knipje is gebruikt.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadPayments()}
+            className="min-h-10 shrink-0 rounded-xl border border-amber-300/80 bg-white px-4 py-2 text-sm font-semibold text-amber-950 shadow-sm hover:bg-amber-100/60"
+          >
+            Vernieuwen
+          </button>
+        </div>
+        {paymentLoading && paymentRows.length === 0 ? (
+          <p className="text-amber-900/80">Betalingsaanvragen laden…</p>
+        ) : paymentLoadFailed && paymentRows.length === 0 ? (
+          <div className="rounded-xl border border-amber-200 bg-white/90 p-4 text-center">
+            <p className="text-sm text-amber-950">Kon de wachtrij niet laden.</p>
+            <button
+              type="button"
+              onClick={() => void loadPayments()}
+              className="mt-3 rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-900"
+            >
+              Opnieuw proberen
+            </button>
+          </div>
+        ) : (
+          <PaymentRequestsPanel
+            rows={paymentRows}
+            busyId={paymentBusyId}
+            onFulfill={(id, k) => void onPaymentFulfill(id, k)}
+            onReject={(id) => void onPaymentReject(id)}
+            layout="cards-only"
+          />
         )}
       </section>
 

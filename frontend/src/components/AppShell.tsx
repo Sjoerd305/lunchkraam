@@ -32,7 +32,11 @@ export function AppShell() {
             <NavLink to="/buy">Kaart kopen</NavLink>
             <NavLink to="/tosti">Tosti bestellen</NavLink>
             {user?.is_admin || user?.is_operator ? <NavLink to="/kraam">Kraam</NavLink> : null}
-            {user?.is_admin ? <NavLink to="/admin">Admin</NavLink> : null}
+            {user?.is_admin || user?.is_operator ? (
+              <NavLink to={user?.is_admin ? '/admin' : '/admin/requests'}>
+                {user?.is_admin ? 'Admin' : 'Betalingen'}
+              </NavLink>
+            ) : null}
             <button
               type="button"
               onClick={() => void onLogout()}
