@@ -184,8 +184,10 @@ export function AdminSalesCharts() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Omzet (geaccordeerde verkopen)</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Elke geaccordeerde aanvraag telt als één kaart tegen het huidige tarief (
-            {stats ? `€${stats.payment_amount_eur}` : '…'}). Maanden volgens tijdzone{' '}
+            Omzet is de som van de prijs die bij accordering is opgeslagen (wijzigingen in{' '}
+            <code className="rounded bg-slate-100 px-1">PAYMENT_AMOUNT_EUR</code> beïnvloeden historische
+            cijfers niet). Huidige catalogusprijs voor nieuwe verkopen:{' '}
+            {stats ? `€${stats.payment_amount_eur}` : '…'}. Maanden volgens tijdzone{' '}
             {stats?.timezone ?? 'Europe/Amsterdam'}.
           </p>
         </div>
@@ -272,7 +274,7 @@ export function AdminSalesCharts() {
               <p className="mt-1 text-sm text-emerald-900/80">
                 {stats.year_fulfilled_count === 0
                   ? 'Nog geen geaccordeerde verkopen in dit jaar.'
-                  : `À €${stats.payment_amount_eur} per kaart.`}
+                  : `Gemiddeld €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per geaccordeerde kaart (kan verschillen na tariefwijzigingen).`}
               </p>
             </div>
           </div>

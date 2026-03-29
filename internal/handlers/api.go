@@ -259,19 +259,18 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	price := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
 	monthly := make([]map[string]any, 0, 12)
 	var yearCount int64
 	var yearRevenue float64
 	for i := 0; i < 12; i++ {
-		c := buckets[i]
-		yearCount += c
-		rev := float64(c) * price
+		b := buckets[i]
+		yearCount += b.FulfilledCount
+		rev := math.Round(b.RevenueEUR*100) / 100
 		yearRevenue += rev
 		monthly = append(monthly, map[string]any{
 			"month":           i + 1,
-			"fulfilled_count": c,
-			"revenue_eur":     math.Round(rev*100) / 100,
+			"fulfilled_count": b.FulfilledCount,
+			"revenue_eur":     rev,
 			"label_nl":        monthLabelNL(i + 1),
 		})
 	}
@@ -353,7 +352,8 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige aanvraag.")
 		return
 	}
-	err = d.Store.FulfillCardRequest(r.Context(), reqID, u.ID)
+	salePrice := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
+	err = d.Store.FulfillCardRequest(r.Context(), reqID, u.ID, salePrice)
 	if err != nil {
 		switch err {
 		case store.ErrNotFound:

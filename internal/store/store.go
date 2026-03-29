@@ -100,6 +100,12 @@ type CardRequestRow struct {
 	UserName         string
 }
 
+// AdminSalesMonthAgg is fulfilled card count and revenue for one calendar month (Europe/Amsterdam).
+type AdminSalesMonthAgg struct {
+	FulfilledCount int64
+	RevenueEUR     float64
+}
+
 type Store struct {
 	pool *pgxpool.Pool
 }
@@ -458,7 +464,7 @@ ORDER BY cr.created_at ASC`
 	return out, rows.Err()
 }
 
-func (s *Store) FulfillCardRequest(ctx context.Context, requestID, adminUserID int64) error {
+func (s *Store) FulfillCardRequest(ctx context.Context, requestID, adminUserID int64, salePriceEUR float64) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -486,9 +492,9 @@ func (s *Store) FulfillCardRequest(ctx context.Context, requestID, adminUserID i
 	if existingCardID != nil {
 		tag, err := tx.Exec(ctx, `
 UPDATE card_requests
-SET status = 'fulfilled', fulfilled_at = now(), fulfilled_by_admin_id = $2
+SET status = 'fulfilled', fulfilled_at = now(), fulfilled_by_admin_id = $2, sale_price_eur = $3
 WHERE id = $1 AND status = 'pending'`,
-			requestID, adminUserID,
+			requestID, adminUserID, salePriceEUR,
 		)
 		if err != nil {
 			return err
@@ -511,9 +517,9 @@ WHERE id = $1 AND status = 'pending'`,
 
 	tag, err := tx.Exec(ctx, `
 UPDATE card_requests
-SET status = 'fulfilled', fulfilled_at = now(), fulfilled_by_admin_id = $2, card_id = $3
+SET status = 'fulfilled', fulfilled_at = now(), fulfilled_by_admin_id = $2, card_id = $3, sale_price_eur = $4
 WHERE id = $1 AND status = 'pending'`,
-		requestID, adminUserID, cardID,
+		requestID, adminUserID, cardID, salePriceEUR,
 	)
 	if err != nil {
 		return err
@@ -799,13 +805,14 @@ func scanCardWithOwnerRows(rows pgx.Rows) ([]CardWithOwner, error) {
 	return out, rows.Err()
 }
 
-// AdminSalesByMonth counts fulfilled card_requests per calendar month in Europe/Amsterdam.
-// Indexes 0–11 are January–December.
-func (s *Store) AdminSalesByMonth(ctx context.Context, year int) ([12]int64, error) {
-	var buckets [12]int64
+// AdminSalesByMonth aggregates fulfilled card_requests per calendar month in Europe/Amsterdam.
+// Revenue is SUM(sale_price_eur). Indexes 0–11 are January–December.
+func (s *Store) AdminSalesByMonth(ctx context.Context, year int) ([12]AdminSalesMonthAgg, error) {
+	var buckets [12]AdminSalesMonthAgg
 	const q = `
 SELECT (EXTRACT(MONTH FROM fulfilled_at AT TIME ZONE $2))::int AS m,
-       COUNT(*)::bigint AS n
+       COUNT(*)::bigint AS n,
+       COALESCE(SUM(sale_price_eur), 0)::float8 AS rev
 FROM card_requests
 WHERE status = 'fulfilled'
   AND fulfilled_at IS NOT NULL
@@ -820,12 +827,14 @@ ORDER BY 1`
 	for rows.Next() {
 		var m int
 		var n int64
-		if err := rows.Scan(&m, &n); err != nil {
+		var rev float64
+		if err := rows.Scan(&m, &n, &rev); err != nil {
 			return buckets, err
 		}
 		idx := m - 1
 		if idx >= 0 && idx < len(buckets) {
-			buckets[idx] = n
+			buckets[idx].FulfilledCount = n
+			buckets[idx].RevenueEUR = rev
 		}
 	}
 	return buckets, rows.Err()
