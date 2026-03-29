@@ -15,17 +15,17 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <div className="space-y-10">
+      <div className="flex flex-col gap-6 border-b border-slate-200/90 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">
             {operatorOnly ? 'Lunchkraam' : 'Beheer'}
           </p>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             {operatorOnly ? 'Betalingswachtrij' : 'Admin'}
           </h1>
         </div>
-        <nav className="flex flex-wrap gap-2">
+        <nav className="flex flex-wrap gap-2 sm:justify-end">
           {user.is_admin ? (
             <AdminTab to="/admin" end>
               Overzicht
@@ -35,6 +35,7 @@ export function AdminLayout() {
           {user.is_admin ? (
             <>
               <AdminTab to="/admin/accounts">Accounts</AdminTab>
+              <AdminTab to="/admin/expenses">Boodschappen</AdminTab>
               <AdminTab to="/admin/settings">Instellingen</AdminTab>
             </>
           ) : null}
@@ -59,7 +60,7 @@ function AdminTab({
       to={to}
       end={end}
       className={({ isActive }) =>
-        `rounded-xl px-4 py-2 text-sm font-semibold transition ${
+        `rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
           isActive
             ? 'bg-brand-700 text-white shadow-md'
             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'

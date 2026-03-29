@@ -53,12 +53,18 @@ export type AdminDashboardStats = {
   fulfilled_knipjes_remaining: number
   cancelled_requests: number
   payment_amount_eur: string
+  finance_year: number
+  year_revenue_eur: number
+  year_expenses_eur: number
+  year_net_eur: number
 }
 
 export type AdminSalesMonthBucket = {
   month: number
   fulfilled_count: number
   revenue_eur: number
+  expenses_eur: number
+  net_eur: number
   label_nl: string
 }
 
@@ -69,6 +75,16 @@ export type AdminSalesStats = {
   monthly: AdminSalesMonthBucket[]
   year_fulfilled_count: number
   year_revenue_eur: number
+  year_expenses_eur: number
+  year_net_eur: number
+}
+
+export type AdminShopExpense = {
+  id: number
+  amount_eur: number
+  spent_on: string
+  description: string
+  created_at: string
 }
 
 export class ApiError extends Error {
@@ -511,6 +527,8 @@ export async function getAdminSalesStats(year: number): Promise<AdminSalesStats>
     month: jsonInt(row.month, 0),
     fulfilled_count: jsonInt(row.fulfilled_count, 0),
     revenue_eur: jsonFloat(row.revenue_eur, 0),
+    expenses_eur: jsonFloat(row.expenses_eur, 0),
+    net_eur: jsonFloat(row.net_eur, 0),
     label_nl: typeof row.label_nl === 'string' ? row.label_nl : '',
   }))
   return {
@@ -520,6 +538,8 @@ export async function getAdminSalesStats(year: number): Promise<AdminSalesStats>
     monthly,
     year_fulfilled_count: jsonInt(j.year_fulfilled_count, 0),
     year_revenue_eur: jsonFloat(j.year_revenue_eur, 0),
+    year_expenses_eur: jsonFloat(j.year_expenses_eur, 0),
+    year_net_eur: jsonFloat(j.year_net_eur, 0),
   }
 }
 
@@ -538,7 +558,62 @@ export async function getAdminDashboard(): Promise<AdminDashboardStats> {
     fulfilled_knipjes_remaining: jsonInt(j.fulfilled_knipjes_remaining),
     cancelled_requests: jsonInt(j.cancelled_requests),
     payment_amount_eur: typeof j.payment_amount_eur === 'string' ? j.payment_amount_eur : '',
+    finance_year: jsonInt(j.finance_year, new Date().getFullYear()),
+    year_revenue_eur: jsonFloat(j.year_revenue_eur, 0),
+    year_expenses_eur: jsonFloat(j.year_expenses_eur, 0),
+    year_net_eur: jsonFloat(j.year_net_eur, 0),
   }
+}
+
+export async function getAdminShopExpenses(year: number): Promise<AdminShopExpense[]> {
+  const res = await fetch(`/api/admin/shop-expenses?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { expenses?: unknown }
+  const raw = j.expenses
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return {
+      id: jsonInt(r.id, 0),
+      amount_eur: jsonFloat(r.amount_eur, 0),
+      spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
+      description: typeof r.description === 'string' ? r.description : '',
+      created_at: typeof r.created_at === 'string' ? r.created_at : '',
+    }
+  })
+}
+
+export async function createShopExpense(
+  csrf: string,
+  body: { amount_eur: number; spent_on: string; description: string },
+): Promise<AdminShopExpense> {
+  const res = await fetch('/api/admin/shop-expenses', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw await parseError(res)
+  const r = (await res.json()) as Record<string, unknown>
+  return {
+    id: jsonInt(r.id, 0),
+    amount_eur: jsonFloat(r.amount_eur, 0),
+    spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
+    description: typeof r.description === 'string' ? r.description : '',
+    created_at: typeof r.created_at === 'string' ? r.created_at : '',
+  }
+}
+
+export async function deleteShopExpense(csrf: string, id: number): Promise<void> {
+  const res = await fetch(`/api/admin/shop-expenses/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
 }
 
 export async function getAdminRequests(): Promise<AdminRequest[]> {

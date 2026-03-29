@@ -271,7 +271,7 @@ export function OrderTostiPage() {
               <select
                 value={cardId === '' ? '' : String(cardId)}
                 onChange={(e) => setCardId(e.target.value ? Number(e.target.value) : '')}
-                className="mt-1 w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 py-2"
+                className="select-control mt-1.5 w-full max-w-md"
                 required
               >
                 {usableCards.map((c) => {

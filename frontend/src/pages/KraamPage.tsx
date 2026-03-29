@@ -385,13 +385,13 @@ export function KraamPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Zoek…"
-            className="min-h-11 w-full max-w-md rounded-xl border border-slate-300 px-4 py-2 text-slate-900 shadow-sm"
+            className="input-control min-h-11 max-w-md rounded-xl"
             aria-label="Zoek kaarten"
           />
           <button
             type="button"
             onClick={() => void refreshAll()}
-            className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+            className="btn-secondary min-h-11 rounded-xl px-4"
           >
             Alles vernieuwen
           </button>

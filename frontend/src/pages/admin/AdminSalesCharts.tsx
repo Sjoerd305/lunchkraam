@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -25,7 +27,10 @@ type ChartRow = {
   name: string
   kaarten: number
   omzet: number
+  uitgaven: number
+  netto: number
   cumulatief: number
+  cumulatiefNet: number
 }
 
 function monthlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
@@ -40,18 +45,28 @@ function monthlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
               month: m,
               fulfilled_count: 0,
               revenue_eur: 0,
+              expenses_eur: 0,
+              net_eur: 0,
               label_nl: MONTH_SHORT[i] ?? String(m),
             }
           )
         })
-  let cum = 0
+  let cumRev = 0
+  let cumNet = 0
   return ordered.map((x) => {
-    cum += x.revenue_eur
+    const omzet = Math.round(x.revenue_eur * 100) / 100
+    const uitgaven = Math.round(x.expenses_eur * 100) / 100
+    const netto = Math.round(x.net_eur * 100) / 100
+    cumRev += omzet
+    cumNet += netto
     return {
       name: x.label_nl || MONTH_SHORT[x.month - 1] || `M${x.month}`,
       kaarten: x.fulfilled_count,
-      omzet: Math.round(x.revenue_eur * 100) / 100,
-      cumulatief: Math.round(cum * 100) / 100,
+      omzet,
+      uitgaven,
+      netto,
+      cumulatief: Math.round(cumRev * 100) / 100,
+      cumulatiefNet: Math.round(cumNet * 100) / 100,
     }
   })
 }
@@ -64,26 +79,37 @@ function quarterlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
     { name: 'Q3', range: [6, 7, 8] },
     { name: 'Q4', range: [9, 10, 11] },
   ]
-  let cum = 0
+  let cumRev = 0
+  let cumNet = 0
   return chunks.map(({ name, range }) => {
     let kaarten = 0
     let omzet = 0
+    let uitgaven = 0
+    let netto = 0
     for (const i of range) {
       kaarten += m[i]?.kaarten ?? 0
       omzet += m[i]?.omzet ?? 0
+      uitgaven += m[i]?.uitgaven ?? 0
+      netto += m[i]?.netto ?? 0
     }
     omzet = Math.round(omzet * 100) / 100
-    cum += omzet
+    uitgaven = Math.round(uitgaven * 100) / 100
+    netto = Math.round(netto * 100) / 100
+    cumRev += omzet
+    cumNet += netto
     return {
       name,
       kaarten,
       omzet,
-      cumulatief: Math.round(cum * 100) / 100,
+      uitgaven,
+      netto,
+      cumulatief: Math.round(cumRev * 100) / 100,
+      cumulatiefNet: Math.round(cumNet * 100) / 100,
     }
   })
 }
 
-function OmzetTooltip({
+function PeriodFinanceTooltip({
   active,
   payload,
 }: {
@@ -96,12 +122,14 @@ function OmzetTooltip({
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
       <p className="font-semibold text-slate-900">{p.name}</p>
       <p className="text-slate-600">Omzet: {formatEUR(p.omzet)}</p>
+      <p className="text-slate-600">Uitgaven: {formatEUR(p.uitgaven)}</p>
+      <p className="text-slate-600">Netto: {formatEUR(p.netto)}</p>
       <p className="text-slate-600">Kaarten: {p.kaarten}</p>
     </div>
   )
 }
 
-function CumTooltip({
+function CumFinanceTooltip({
   active,
   payload,
 }: {
@@ -113,7 +141,8 @@ function CumTooltip({
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
       <p className="font-semibold text-slate-900">{p.name}</p>
-      <p className="text-slate-600">Cumulatief: {formatEUR(p.cumulatief)}</p>
+      <p className="text-slate-600">Cumulatieve omzet: {formatEUR(p.cumulatief)}</p>
+      <p className="text-slate-600">Cumulatief saldo: {formatEUR(p.cumulatiefNet)}</p>
     </div>
   )
 }
@@ -133,13 +162,17 @@ export function AdminSalesCharts() {
       try {
         const ys = await api.getAdminSalesYears()
         setAvailableYears(ys)
+        const yNow = new Date().getFullYear()
         setYear((prev) => {
-          if (prev !== null && ys.includes(prev)) return prev
-          return ys[0] ?? null
+          if (ys.length > 0) {
+            if (prev !== null && ys.includes(prev)) return prev
+            return ys[0] ?? yNow
+          }
+          return prev ?? yNow
         })
       } catch (e) {
         setAvailableYears([])
-        setYear(null)
+        setYear(new Date().getFullYear())
         const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
         void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
       } finally {
@@ -157,7 +190,7 @@ export function AdminSalesCharts() {
       } catch (e) {
         setStats(null)
         const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Verkoopcijfers laden mislukt', message: msg, variant: 'error' })
+        void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
       } finally {
         setStatsLoading(false)
       }
@@ -178,38 +211,46 @@ export function AdminSalesCharts() {
     return granularity === 'month' ? monthlyRows(stats.monthly) : quarterlyRows(stats.monthly)
   }, [stats, granularity])
 
+  const yearSelectOptions = useMemo(() => {
+    const yNow = new Date().getFullYear()
+    const base = availableYears.length > 0 ? [...availableYears] : year !== null ? [year] : [yNow]
+    const s = new Set(base)
+    s.add(yNow)
+    return Array.from(s).sort((a, b) => b - a)
+  }, [availableYears, year])
+
+  const hasFinanceData =
+    stats !== null && (stats.year_fulfilled_count > 0 || stats.year_expenses_eur > 0)
+
   return (
-    <section className="space-y-4" aria-label="Omzet grafieken geaccordeerde verkopen">
+    <section className="space-y-4" aria-label="Omzet en uitgaven grafieken">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Omzet (geaccordeerde verkopen)</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Omzet en boodschappen</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Omzet is de som van de prijs die bij accordering is opgeslagen (wijzigingen in{' '}
-            <code className="rounded bg-slate-100 px-1">PAYMENT_AMOUNT_EUR</code> beïnvloeden historische
-            cijfers niet). Huidige catalogusprijs voor nieuwe verkopen:{' '}
-            {stats ? `€${stats.payment_amount_eur}` : '…'}. Maanden volgens tijdzone{' '}
-            {stats?.timezone ?? 'Europe/Amsterdam'}.
+            Omzet is de som van de prijs die bij accordering is opgeslagen per kaart. Uitgaven zijn handmatig
+            geboekte boodschappen (zelfde kalenderjaar als de boekingsdatum). Verkopen: maanden volgens tijdzone{' '}
+            {stats?.timezone ?? 'Europe/Amsterdam'}. Huidige catalogusprijs voor nieuwe verkopen:{' '}
+            {stats ? `€${stats.payment_amount_eur}` : '…'}.
           </p>
         </div>
-        {availableYears.length > 0 ? (
+        {year !== null && yearSelectOptions.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            {year !== null ? (
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <span className="whitespace-nowrap font-medium">Jaar</span>
-                <select
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                  disabled={yearsLoading}
-                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 font-medium text-slate-900 shadow-sm disabled:opacity-60"
-                >
-                  {availableYears.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <span className="whitespace-nowrap font-medium">Jaar</span>
+              <select
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                disabled={yearsLoading}
+                className="select-control min-h-10"
+              >
+                {yearSelectOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </label>
             {statsLoading ? (
               <span className="text-xs font-medium text-slate-500">Bijwerken…</span>
             ) : null}
@@ -245,52 +286,79 @@ export function AdminSalesCharts() {
 
       {yearsLoading ? (
         <p className="text-sm text-slate-600">Beschikbare jaren laden…</p>
-      ) : availableYears.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
-          Er zijn nog geen geaccordeerde verkopen. Zodra je betalingen accordeert, verschijnen hier de jaren en
-          grafieken.
-        </p>
       ) : statsLoading && !stats ? (
         <p className="text-sm text-slate-600">Grafieken laden…</p>
       ) : stats ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Totaal {stats.year} (geaccordeerd)
+                Kaarten {stats.year}
               </p>
               <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
                 {stats.year_fulfilled_count}
               </p>
-              <p className="mt-1 text-sm text-slate-600">kaarten</p>
+              <p className="mt-1 text-sm text-slate-600">geaccordeerde verkopen</p>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
-                Omzet {stats.year}
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Omzet</p>
               <p className="mt-2 text-3xl font-bold tabular-nums text-emerald-950">
                 {formatEUR(stats.year_revenue_eur)}
               </p>
               <p className="mt-1 text-sm text-emerald-900/80">
                 {stats.year_fulfilled_count === 0
-                  ? 'Nog geen geaccordeerde verkopen in dit jaar.'
-                  : `Gemiddeld €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per geaccordeerde kaart (kan verschillen na tariefwijzigingen).`}
+                  ? 'Nog geen verkopen dit jaar.'
+                  : `Gem. €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per kaart (historisch tarief per transactie).`}
               </p>
+            </div>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-900">Uitgaven</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-rose-950">
+                {formatEUR(stats.year_expenses_eur)}
+              </p>
+              <p className="mt-1 text-sm text-rose-900/80">Geboekte boodschappen</p>
+            </div>
+            <div
+              className={`rounded-2xl border p-5 shadow-sm ${
+                stats.year_net_eur >= 0
+                  ? 'border-violet-200 bg-violet-50/80'
+                  : 'border-amber-200 bg-amber-50/80'
+              }`}
+            >
+              <p
+                className={`text-xs font-semibold uppercase tracking-wide ${
+                  stats.year_net_eur >= 0 ? 'text-violet-900' : 'text-amber-900'
+                }`}
+              >
+                Saldo
+              </p>
+              <p
+                className={`mt-2 text-3xl font-bold tabular-nums ${
+                  stats.year_net_eur >= 0 ? 'text-violet-950' : 'text-amber-950'
+                }`}
+              >
+                {formatEUR(stats.year_net_eur)}
+              </p>
+              <p className="mt-1 text-sm text-slate-700">Omzet min uitgaven</p>
             </div>
           </div>
 
-          {stats.year_fulfilled_count === 0 ? (
+          {!hasFinanceData ? (
             <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
-              Geen gegevens voor {stats.year}. Zodra je betalingen accordeert, verschijnen de staven hier.
+              Geen omzet of uitgaven voor {stats.year}. Accordeer betalingen of{' '}
+              <Link to="/admin/expenses" className="font-semibold text-brand-800 underline">
+                boek een boodschap
+              </Link>{' '}
+              om hier grafieken te zien.
             </p>
           ) : (
             <div className="grid gap-8 lg:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-1 px-1 text-sm font-semibold text-slate-800">Omzet per periode</h3>
-                <p className="mb-3 px-1 text-xs text-slate-500">Som van verkochte kaarten × tarief</p>
-                <div className="h-[280px] w-full">
+                <h3 className="mb-1 px-1 text-sm font-semibold text-slate-800">Omzet en uitgaven per periode</h3>
+                <p className="mb-3 px-1 text-xs text-slate-500">EUR per maand of kwartaal</p>
+                <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} className="fill-slate-600" />
                       <YAxis
@@ -299,18 +367,25 @@ export function AdminSalesCharts() {
                         tickFormatter={(v) => `€${v}`}
                         width={44}
                       />
-                      <Tooltip content={<OmzetTooltip />} cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }} />
-                      <Bar dataKey="omzet" name="Omzet" fill="#0f766e" radius={[6, 6, 0, 0]} />
+                      <Tooltip
+                        content={<PeriodFinanceTooltip />}
+                        cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="omzet" name="Omzet" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="uitgaven" name="Uitgaven" fill="#e11d48" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-1 px-1 text-sm font-semibold text-slate-800">Cumulatieve omzet</h3>
-                <p className="mb-3 px-1 text-xs text-slate-500">Lopend totaal over {stats.year}</p>
-                <div className="h-[280px] w-full">
+                <h3 className="mb-1 px-1 text-sm font-semibold text-slate-800">Cumulatief</h3>
+                <p className="mb-3 px-1 text-xs text-slate-500">
+                  Lopende omzet en saldo (omzet − uitgaven) over {stats.year}
+                </p>
+                <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} className="fill-slate-600" />
                       <YAxis
@@ -319,14 +394,24 @@ export function AdminSalesCharts() {
                         tickFormatter={(v) => `€${v}`}
                         width={44}
                       />
-                      <Tooltip content={<CumTooltip />} />
+                      <Tooltip content={<CumFinanceTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Line
                         type="monotone"
                         dataKey="cumulatief"
-                        name="Cumulatief"
+                        name="Cumulatieve omzet"
                         stroke="#334155"
                         strokeWidth={2}
                         dot={{ r: 3, fill: '#334155' }}
+                        activeDot={{ r: 5 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="cumulatiefNet"
+                        name="Cumulatief saldo"
+                        stroke="#6d28d9"
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: '#6d28d9' }}
                         activeDot={{ r: 5 }}
                       />
                     </LineChart>
@@ -337,8 +422,8 @@ export function AdminSalesCharts() {
           )}
 
           <p className="text-xs text-slate-500">
-            Historische omzet gebruikt het <strong>huidige</strong> tarief uit de configuratie (hetzelfde als op de
-            kooppagina), niet het tarief per transactie in de database.
+            Omzet per transactie komt uit de database (prijs bij accordering). Uitgaven vul je zelf in onder{' '}
+            <strong>Boodschappen</strong>.
           </p>
         </>
       ) : (

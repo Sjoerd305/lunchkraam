@@ -63,7 +63,7 @@ export function AdminSettingsPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="surface-card">
         <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
           <label className="block text-sm">
             <span className="font-medium text-slate-700">Tikkie-URL in database</span>
@@ -72,7 +72,7 @@ export function AdminSettingsPage() {
               value={tikkieUrl}
               onChange={(e) => setTikkieUrl(e.target.value)}
               placeholder="https://tikkie.me/pay/…"
-              className="mt-1 w-full max-w-2xl rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm"
+              className="input-control mt-1.5 max-w-2xl font-mono"
             />
             <span className="mt-1 block text-xs text-slate-500">
               Alleen <code>http(s)://</code> met host. Leeg = gebruik omgevingsvariabele als die gezet is.
@@ -103,11 +103,7 @@ export function AdminSettingsPage() {
             ) : null}
           </div>
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
-          >
+          <button type="submit" disabled={saving} className="btn-primary px-5">
             {saving ? 'Opslaan…' : 'Opslaan'}
           </button>
         </form>

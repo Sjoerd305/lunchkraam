@@ -7,6 +7,7 @@ import { AdminLayout } from './pages/admin/AdminLayout'
 import { AdminLocalUsersPage } from './pages/admin/AdminLocalUsersPage'
 import { AdminRequestsPage } from './pages/admin/AdminRequestsPage'
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage'
+import { AdminShopExpensesPage } from './pages/admin/AdminShopExpensesPage'
 import { BuyPage } from './pages/BuyPage'
 import { CardsPage } from './pages/CardsPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -47,6 +48,7 @@ export default function App() {
                 <Route path="requests" element={<AdminRequestsPage />} />
                 <Route path="accounts" element={<AdminLocalUsersPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
+                <Route path="expenses" element={<AdminShopExpensesPage />} />
               </Route>
             </Route>
           </Route>

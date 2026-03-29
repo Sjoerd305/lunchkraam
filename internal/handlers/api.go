@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -231,6 +232,10 @@ func (d *Deps) APIAdminDashboard(w http.ResponseWriter, r *http.Request) {
 		"fulfilled_knipjes_remaining":       st.FulfilledKnipjesRemaining,
 		"cancelled_requests":                st.CancelledRequests,
 		"payment_amount_eur":                d.Config.PaymentAmountEUR,
+		"finance_year":                      st.FinanceYear,
+		"year_revenue_eur":                  math.Round(st.YearRevenueEUR*100) / 100,
+		"year_expenses_eur":                 math.Round(st.YearExpensesEUR*100) / 100,
+		"year_net_eur":                      math.Round(st.YearNetEUR*100) / 100,
 	})
 }
 
@@ -263,22 +268,36 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
+	expenseBuckets, err := d.Store.AdminExpensesByMonth(r.Context(), year)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
 
 	monthly := make([]map[string]any, 0, 12)
 	var yearCount int64
 	var yearRevenue float64
+	var yearExpenses float64
 	for i := 0; i < 12; i++ {
 		b := buckets[i]
 		yearCount += b.FulfilledCount
 		rev := math.Round(b.RevenueEUR*100) / 100
+		exp := math.Round(expenseBuckets[i]*100) / 100
 		yearRevenue += rev
+		yearExpenses += exp
+		net := math.Round((rev-exp)*100) / 100
 		monthly = append(monthly, map[string]any{
 			"month":           i + 1,
 			"fulfilled_count": b.FulfilledCount,
 			"revenue_eur":     rev,
+			"expenses_eur":    exp,
+			"net_eur":         net,
 			"label_nl":        monthLabelNL(i + 1),
 		})
 	}
+	yearRevenue = math.Round(yearRevenue*100) / 100
+	yearExpenses = math.Round(yearExpenses*100) / 100
+	yearNet := math.Round((yearRevenue-yearExpenses)*100) / 100
 
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"year":                 year,
@@ -286,16 +305,40 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		"payment_amount_eur":   d.Config.PaymentAmountEUR,
 		"monthly":              monthly,
 		"year_fulfilled_count": yearCount,
-		"year_revenue_eur":     math.Round(yearRevenue*100) / 100,
+		"year_revenue_eur":     yearRevenue,
+		"year_expenses_eur":    yearExpenses,
+		"year_net_eur":         yearNet,
 	})
 }
 
+func mergeFinanceYears(fulfilled, expense []int) []int {
+	seen := make(map[int]struct{}, len(fulfilled)+len(expense))
+	for _, y := range fulfilled {
+		seen[y] = struct{}{}
+	}
+	for _, y := range expense {
+		seen[y] = struct{}{}
+	}
+	out := make([]int, 0, len(seen))
+	for y := range seen {
+		out = append(out, y)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] > out[j] })
+	return out
+}
+
 func (d *Deps) APIAdminSalesYears(w http.ResponseWriter, r *http.Request) {
-	years, err := d.Store.AdminFulfilledYears(r.Context())
+	fulfilled, err := d.Store.AdminFulfilledYears(r.Context())
 	if err != nil {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
+	expenseYears, err := d.Store.AdminExpenseYears(r.Context())
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+	years := mergeFinanceYears(fulfilled, expenseYears)
 	httpx.JSON(w, http.StatusOK, map[string]any{"years": years})
 }
 

@@ -601,6 +601,10 @@ type AdminDashboardStats struct {
 	FulfilledRequests         int64
 	FulfilledKnipjesRemaining int64
 	CancelledRequests         int64
+	FinanceYear               int
+	YearRevenueEUR            float64
+	YearExpensesEUR           float64
+	YearNetEUR                float64
 }
 
 func (s *Store) AdminDashboardStats(ctx context.Context) (*AdminDashboardStats, error) {
@@ -619,9 +623,18 @@ SELECT
   (SELECT COUNT(*)::bigint FROM card_requests WHERE status = 'fulfilled') AS fulfilled_req,
   (SELECT COALESCE(SUM(c.knipjes_remaining), 0)::bigint FROM card_requests cr
      INNER JOIN cards c ON c.id = cr.card_id WHERE cr.status = 'fulfilled') AS fulfilled_knip_rem,
-  (SELECT COUNT(*)::bigint FROM card_requests WHERE status = 'cancelled') AS cancelled_req`
+  (SELECT COUNT(*)::bigint FROM card_requests WHERE status = 'cancelled') AS cancelled_req,
+  (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int AS finance_y,
+  (SELECT COALESCE(SUM(sale_price_eur), 0)::float8 FROM card_requests cr
+     WHERE cr.status = 'fulfilled' AND cr.fulfilled_at IS NOT NULL
+       AND (EXTRACT(YEAR FROM cr.fulfilled_at AT TIME ZONE $1))::int =
+           (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int) AS year_rev,
+  (SELECT COALESCE(SUM(se.amount_eur), 0)::float8 FROM shop_expenses se
+     WHERE (EXTRACT(YEAR FROM se.spent_on))::int =
+           (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int) AS year_exp`
 	var st AdminDashboardStats
-	err := s.pool.QueryRow(ctx, q).Scan(
+	var yearRev, yearExp float64
+	err := s.pool.QueryRow(ctx, q, adminSalesTZ).Scan(
 		&st.ActiveCardsTotal,
 		&st.KnipjesRemainingTotal,
 		&st.PendingRequests,
@@ -631,10 +644,16 @@ SELECT
 		&st.FulfilledRequests,
 		&st.FulfilledKnipjesRemaining,
 		&st.CancelledRequests,
+		&st.FinanceYear,
+		&yearRev,
+		&yearExp,
 	)
 	if err != nil {
 		return nil, err
 	}
+	st.YearRevenueEUR = yearRev
+	st.YearExpensesEUR = yearExp
+	st.YearNetEUR = yearRev - yearExp
 	return &st, nil
 }
 

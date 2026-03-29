@@ -90,7 +90,7 @@ export function LoginPage() {
               autoComplete="username"
               value={localUser}
               onChange={(e) => setLocalUser(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+              className="input-control mt-1.5"
             />
           </label>
           <label className="block text-sm">
@@ -101,14 +101,10 @@ export function LoginPage() {
               autoComplete="current-password"
               value={localPass}
               onChange={(e) => setLocalPass(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+              className="input-control mt-1.5"
             />
           </label>
-          <button
-            type="submit"
-            disabled={localBusy}
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-          >
+          <button type="submit" disabled={localBusy} className="btn-secondary w-full py-3">
             {localBusy ? 'Bezig…' : 'Inloggen'}
           </button>
         </form>

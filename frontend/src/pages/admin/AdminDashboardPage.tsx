@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/AlertDialogProvider'
 const AdminSalesCharts = lazy(async () => {
@@ -98,6 +99,39 @@ export function AdminDashboardPage() {
         Stand van zorgplicht en voorraad aan knipjes. Cijfers komen rechtstreeks uit de database.
       </p>
 
+      <section>
+        <h2 className="mb-3 text-lg font-semibold text-slate-900">
+          Inkomsten vs. boodschappen ({stats.finance_year})
+        </h2>
+        <p className="mb-3 text-sm text-slate-600">
+          Omzet = som van prijzen bij geaccordeerde kaartverkopen in dit kalenderjaar (Amsterdam-tijd). Uitgaven =
+          handmatig geboekte boodschappen met diezelfde kalenderdatum.{' '}
+          <Link to="/admin/expenses" className="font-semibold text-brand-800 underline hover:text-brand-950">
+            Boodschappen beheren
+          </Link>
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Omzet dit jaar"
+            value={`€${stats.year_revenue_eur.toFixed(2)}`}
+            hint="Geaccordeerde verkopen, opgeslagen verkoopprijs per transactie."
+            tone="emerald"
+          />
+          <StatCard
+            label="Uitgaven dit jaar"
+            value={`€${stats.year_expenses_eur.toFixed(2)}`}
+            hint="Som van geboekte boodschappen."
+            tone="slate"
+          />
+          <StatCard
+            label="Saldo (omzet − uitgaven)"
+            value={`€${stats.year_net_eur.toFixed(2)}`}
+            hint="Eenvoudige kasruiting; geen voorraad- of BTW-administratie."
+            tone={stats.year_net_eur >= 0 ? 'emerald' : 'amber'}
+          />
+        </div>
+      </section>
+
       <Suspense
         fallback={<p className="text-sm text-slate-600">Grafieken laden…</p>}
       >
@@ -190,7 +224,6 @@ export function AdminDashboardPage() {
 
       <p className="text-xs text-slate-500">
         Schatting &quot;al gebruikt vóór accordering&quot; gaat uit van een startwaarde van 10 knipjes per kaart.
-        Kaarten die ooit met minder knipjes zijn aangemaakt (legacy) kunnen hier licht afwijken.
       </p>
     </div>
   )

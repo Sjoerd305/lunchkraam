@@ -179,7 +179,7 @@ export function AlertDialogProvider({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={() => finishConfirm(false)}
-                  className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 sm:w-auto"
+                  className="btn-secondary min-h-12 w-full rounded-xl py-3 sm:w-auto"
                 >
                   {panel.cancelLabel}
                 </button>
