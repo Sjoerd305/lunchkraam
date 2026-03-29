@@ -1,0 +1,5 @@
+.git
+.env
+*.md
+/tmp
+frontend/node_modules

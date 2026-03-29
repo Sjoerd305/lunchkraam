@@ -1,0 +1,159 @@
+import { useCallback, useEffect, useState } from 'react'
+import * as api from '../../api'
+import { useAuth } from '../../AuthContext'
+import { useAlertDialog } from '../../components/AlertDialogProvider'
+
+export function AdminRequestsPage() {
+  const { csrf } = useAuth()
+  const alert = useAlertDialog()
+  const [rows, setRows] = useState<api.AdminRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [busyId, setBusyId] = useState<number | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setLoadFailed(false)
+    try {
+      const list = await api.getAdminRequests()
+      setRows(list)
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
+      setLoadFailed(true)
+      setRows([])
+      void alert({ title: 'Laden mislukt', message: msg, variant: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }, [alert])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function onFulfill(id: number, knipjesRemaining: number) {
+    const ok = window.confirm(
+      knipjesRemaining === 10
+        ? 'Betalingscontrole afronden? Het lid heeft de kaart al met 10 knipjes; tijdens de verkoop hoef je nu niets extra’s te doen.'
+        : `Betalingscontrole afronden? Op de kaart staan nog ${knipjesRemaining} knipje(s); het lid kon die al gebruiken.`,
+    )
+    if (!ok) return
+    setBusyId(id)
+    try {
+      await api.fulfillRequest(csrf, id)
+      await load()
+      await alert({
+        title: 'Geaccordeerd',
+        message:
+          'De aanvraag is uit de wachtrij gehaald. De kaart bleef gewoon bruikbaar voor het lid.',
+        variant: 'success',
+      })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Toekennen mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (loading && !loadFailed) {
+    return <p className="text-slate-600">Laden…</p>
+  }
+
+  if (loadFailed && rows.length === 0) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-md">
+        <p className="text-slate-600">Aanvragen konden niet worden geladen.</p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="min-h-12 w-full max-w-xs rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
+        >
+          Opnieuw proberen
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-bold text-slate-900">Openstaande aanvragen</h2>
+      {rows.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
+          Geen openstaande aanvragen.
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-3 md:hidden">
+            {rows.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-md"
+              >
+                <div className="mb-3 flex items-start justify-between gap-2 text-xs text-slate-500">
+                  <span className="font-mono">#{r.id}</span>
+                  <span className="shrink-0 text-right">
+                    {new Date(r.created_at).toLocaleString('nl-NL')}
+                  </span>
+                </div>
+                <p className="font-medium text-slate-900">{r.user_name}</p>
+                <p className="mt-1 break-all text-sm text-slate-600">{r.user_email}</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Nog op de kaart: <strong>{r.knipjes_remaining ?? 10}</strong> / 10 knipjes
+                </p>
+                <button
+                  type="button"
+                  disabled={busyId !== null}
+                  onClick={() => void onFulfill(r.id, r.knipjes_remaining ?? 10)}
+                  className="mt-4 min-h-12 w-full rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
+                >
+                  {busyId === r.id ? '…' : 'Betaling accorderen'}
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-md md:block">
+            <table className="w-full min-w-[52rem] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">ID</th>
+                  <th className="px-4 py-3">Lid</th>
+                  <th className="px-4 py-3">E-mail</th>
+                  <th className="px-4 py-3">Aangevraagd</th>
+                  <th className="px-4 py-3">Knipjes resterend</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50/80">
+                    <td className="px-4 py-3 font-mono text-slate-600">{r.id}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{r.user_name}</td>
+                    <td className="px-4 py-3 text-slate-600">{r.user_email}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {new Date(r.created_at).toLocaleString('nl-NL')}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {r.knipjes_remaining ?? 10} / 10
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        disabled={busyId !== null}
+                        onClick={() => void onFulfill(r.id, r.knipjes_remaining ?? 10)}
+                        className="min-h-10 rounded-lg bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
+                      >
+                        {busyId === r.id ? '…' : 'Betaling accorderen'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

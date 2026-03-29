@@ -1,0 +1,30 @@
+# Secrets & local overrides — commit only .env.example
+.env
+.env.*
+!.env.example
+
+# Local scratch (repo root)
+/tmp/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+vendor/
+
+# If you build the binary in the repo root
+/server
+
+# Root-level JS (monorepo tooling)
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
