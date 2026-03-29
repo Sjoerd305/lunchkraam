@@ -133,6 +133,11 @@ func (d *Deps) APIBuy(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
+	dbTikkie, err := d.Store.GetAppSetting(r.Context(), store.SettingKeyTikkieURL)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
 	out := make([]myPendingRequestJSON, 0, len(list))
 	for _, row := range list {
 		out = append(out, myPendingRequestJSON{
@@ -143,7 +148,7 @@ func (d *Deps) APIBuy(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"payment_amount_eur":         d.Config.PaymentAmountEUR,
-		"tikkie_url":                 d.Config.TikkieURL,
+		"tikkie_url":                 store.EffectiveTikkieURL(dbTikkie, d.Config.TikkieURL),
 		"bank_transfer_instructions": d.Config.BankTransferInstructions,
 		"my_pending_requests":        out,
 	})
@@ -264,10 +269,10 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		rev := float64(c) * price
 		yearRevenue += rev
 		monthly = append(monthly, map[string]any{
-			"month":             i + 1,
-			"fulfilled_count":   c,
-			"revenue_eur":       math.Round(rev*100) / 100,
-			"label_nl":          monthLabelNL(i + 1),
+			"month":           i + 1,
+			"fulfilled_count": c,
+			"revenue_eur":     math.Round(rev*100) / 100,
+			"label_nl":        monthLabelNL(i + 1),
 		})
 	}
 

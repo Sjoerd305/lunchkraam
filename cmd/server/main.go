@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	csrf "filippo.io/csrf/gorilla"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
-	csrf "filippo.io/csrf/gorilla"
 	"github.com/gorilla/sessions"
 
 	"tostikaart/internal/auth"
@@ -140,6 +140,8 @@ func main() {
 					r.Get("/admin/users", h.APIAdminUsers)
 					r.Post("/admin/users/local", h.APIAdminCreateLocalUser)
 					r.Patch("/admin/users/{id}/local", h.APIAdminPatchLocalUser)
+					r.Get("/admin/settings", h.APIAdminSettingsGet)
+					r.Patch("/admin/settings", h.APIAdminSettingsPatch)
 				})
 			})
 		})

@@ -20,6 +20,7 @@ export function AdminLayout() {
           </AdminTab>
           <AdminTab to="/admin/requests">Betalingswachtrij</AdminTab>
           <AdminTab to="/admin/accounts">Accounts</AdminTab>
+          <AdminTab to="/admin/settings">Instellingen</AdminTab>
         </nav>
       </div>
       <Outlet />

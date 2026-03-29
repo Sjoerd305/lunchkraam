@@ -527,3 +527,39 @@ export async function rejectAdminRequest(csrf: string, id: number): Promise<void
   })
   if (!res.ok) throw await parseError(res)
 }
+
+export type AdminAppSettings = {
+  tikkie_url: string
+  tikkie_url_effective: string
+  tikkie_url_env_config: string
+}
+
+export async function getAdminSettings(): Promise<AdminAppSettings> {
+  const res = await fetch('/api/admin/settings', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as Record<string, unknown>
+  return {
+    tikkie_url: typeof j.tikkie_url === 'string' ? j.tikkie_url : '',
+    tikkie_url_effective: typeof j.tikkie_url_effective === 'string' ? j.tikkie_url_effective : '',
+    tikkie_url_env_config: typeof j.tikkie_url_env_config === 'string' ? j.tikkie_url_env_config : '',
+  }
+}
+
+export async function patchAdminSettings(csrf: string, tikkieUrl: string): Promise<AdminAppSettings> {
+  const res = await fetch('/api/admin/settings', {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ tikkie_url: tikkieUrl }),
+  })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as Record<string, unknown>
+  return {
+    tikkie_url: typeof j.tikkie_url === 'string' ? j.tikkie_url : '',
+    tikkie_url_effective: typeof j.tikkie_url_effective === 'string' ? j.tikkie_url_effective : '',
+    tikkie_url_env_config: typeof j.tikkie_url_env_config === 'string' ? j.tikkie_url_env_config : '',
+  }
+}

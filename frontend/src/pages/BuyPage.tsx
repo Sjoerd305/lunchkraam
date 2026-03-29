@@ -223,8 +223,8 @@ export function BuyPage() {
           </a>
         ) : (
           <p className="mt-3 text-sm text-slate-500">
-            Er is nog geen Tikkie-link geconfigureerd. Vraag de beheerder om <code>TIKKIE_URL</code> in
-            te stellen.
+            Er is nog geen Tikkie-link. De beheerder kan die zetten onder <strong>Admin → Instellingen</strong>{' '}
+            of via <code>TIKKIE_URL</code> op de server.
           </p>
         )}
       </section>
