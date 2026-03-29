@@ -108,6 +108,7 @@ func main() {
 				r.Get("/admin/dashboard", h.APIAdminDashboard)
 				r.Get("/admin/requests", h.APIAdminRequests)
 				r.Post("/admin/requests/{id}/fulfill", h.APIAdminFulfill)
+				r.Post("/admin/requests/{id}/reject", h.APIAdminReject)
 			})
 		})
 	})

@@ -37,7 +37,7 @@ function StatCard({
 }
 
 export function AdminDashboardPage() {
-  const alert = useAlertDialog()
+  const { alert } = useAlertDialog()
   const [stats, setStats] = useState<api.AdminDashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)

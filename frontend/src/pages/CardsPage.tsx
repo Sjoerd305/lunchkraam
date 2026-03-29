@@ -6,7 +6,7 @@ import { useAlertDialog } from '../components/AlertDialogProvider'
 
 export function CardsPage() {
   const { csrf, refresh } = useAuth()
-  const alert = useAlertDialog()
+  const { alert, confirm } = useAlertDialog()
   const [cards, setCards] = useState<api.Card[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -33,7 +33,14 @@ export function CardsPage() {
   }, [load])
 
   async function onUse(id: number) {
-    if (!window.confirm('1 knipje gebruiken voor een tosti?')) return
+    const ok = await confirm({
+      title: 'Knipje gebruiken?',
+      message: 'Wil je 1 knipje gebruiken voor een tosti?',
+      confirmLabel: 'Ja, gebruiken',
+      cancelLabel: 'Annuleren',
+      tone: 'brand',
+    })
+    if (!ok) return
     setBusyId(id)
     try {
       await api.useKnipje(csrf, id)

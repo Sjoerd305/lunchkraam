@@ -5,7 +5,7 @@ import { useAlertDialog } from '../components/AlertDialogProvider'
 
 export function BuyPage() {
   const { csrf, refresh } = useAuth()
-  const alert = useAlertDialog()
+  const { alert, confirm } = useAlertDialog()
   const [info, setInfo] = useState<api.BuyInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -65,7 +65,14 @@ export function BuyPage() {
   }
 
   async function onCancelOne(id: number) {
-    if (!window.confirm('Deze aanvraag annuleren?')) return
+    const ok = await confirm({
+      title: 'Aanvraag annuleren?',
+      message: 'Weet je zeker dat je deze aanvraag wilt annuleren?',
+      confirmLabel: 'Ja, annuleren',
+      cancelLabel: 'Terug',
+      tone: 'danger',
+    })
+    if (!ok) return
     setCancellingId(id)
     try {
       await api.cancelMyRequest(csrf, id)
@@ -81,13 +88,14 @@ export function BuyPage() {
   }
 
   async function onCancelAll() {
-    if (
-      !window.confirm(
-        `Alle ${pending.length} openstaande aanvragen annuleren? Dit kan niet ongedaan worden gemaakt.`,
-      )
-    ) {
-      return
-    }
+    const ok = await confirm({
+      title: 'Alle aanvragen annuleren?',
+      message: `Alle ${pending.length} openstaande aanvragen annuleren? Dit kan niet ongedaan worden gemaakt.`,
+      confirmLabel: 'Ja, alles annuleren',
+      cancelLabel: 'Terug',
+      tone: 'danger',
+    })
+    if (!ok) return
     setCancellingAll(true)
     try {
       const n = await api.cancelAllMyPendingRequests(csrf)

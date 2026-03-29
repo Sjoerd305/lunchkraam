@@ -5,7 +5,7 @@ import { useAlertDialog } from '../../components/AlertDialogProvider'
 
 export function AdminRequestsPage() {
   const { csrf } = useAuth()
-  const alert = useAlertDialog()
+  const { alert, confirm } = useAlertDialog()
   const [rows, setRows] = useState<api.AdminRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -32,11 +32,17 @@ export function AdminRequestsPage() {
   }, [load])
 
   async function onFulfill(id: number, knipjesRemaining: number) {
-    const ok = window.confirm(
+    const msg =
       knipjesRemaining === 10
         ? 'Betalingscontrole afronden? Het lid heeft de kaart al met 10 knipjes; tijdens de verkoop hoef je nu niets extra’s te doen.'
-        : `Betalingscontrole afronden? Op de kaart staan nog ${knipjesRemaining} knipje(s); het lid kon die al gebruiken.`,
-    )
+        : `Betalingscontrole afronden? Op de kaart staan nog ${knipjesRemaining} knipje(s); het lid kon die al gebruiken.`
+    const ok = await confirm({
+      title: 'Betaling accorderen?',
+      message: msg,
+      confirmLabel: 'Accorderen',
+      cancelLabel: 'Terug',
+      tone: 'brand',
+    })
     if (!ok) return
     setBusyId(id)
     try {
@@ -54,6 +60,37 @@ export function AdminRequestsPage() {
     } finally {
       setBusyId(null)
     }
+  }
+
+  async function onReject(id: number) {
+    const ok = await confirm({
+      title: 'Aanvraag weigeren?',
+      message:
+        'Geen betaling ontvangen? De voorlopige kaart wordt verwijderd. Het lid kan later opnieuw een kaart aanvragen.',
+      confirmLabel: 'Ja, weigeren',
+      cancelLabel: 'Terug',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setBusyId(id)
+    try {
+      await api.rejectAdminRequest(csrf, id)
+      await load()
+      await alert({
+        title: 'Afgewezen',
+        message: 'De aanvraag is geannuleerd en de kaart is verwijderd.',
+        variant: 'success',
+      })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Weigeren mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function canReject(knipjesRemaining: number) {
+    return knipjesRemaining === 10
   }
 
   if (loading && !loadFailed) {
@@ -78,6 +115,10 @@ export function AdminRequestsPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-slate-900">Openstaande aanvragen</h2>
+      <p className="max-w-3xl text-sm text-slate-600">
+        <strong>Weigeren</strong> is alleen mogelijk zolang er nog geen knipje is gebruikt (geen tosti geleverd).
+        Zodra het lid een knipje heeft gebruikt, moet je de betaling <strong>accorderen</strong> zodra die binnen is.
+      </p>
       {rows.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
           Geen openstaande aanvragen.
@@ -101,14 +142,29 @@ export function AdminRequestsPage() {
                 <p className="mt-2 text-sm text-slate-600">
                   Nog op de kaart: <strong>{r.knipjes_remaining ?? 10}</strong> / 10 knipjes
                 </p>
-                <button
-                  type="button"
-                  disabled={busyId !== null}
-                  onClick={() => void onFulfill(r.id, r.knipjes_remaining ?? 10)}
-                  className="mt-4 min-h-12 w-full rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
-                >
-                  {busyId === r.id ? '…' : 'Betaling accorderen'}
-                </button>
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={busyId !== null}
+                    onClick={() => void onFulfill(r.id, r.knipjes_remaining ?? 10)}
+                    className="min-h-12 w-full rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
+                  >
+                    {busyId === r.id ? '…' : 'Betaling accorderen'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId !== null || !canReject(r.knipjes_remaining ?? 10)}
+                    title={
+                      canReject(r.knipjes_remaining ?? 10)
+                        ? undefined
+                        : 'Niet weigeren: er is al minstens één knipje gebruikt. Accordeer de betaling.'
+                    }
+                    onClick={() => void onReject(r.id)}
+                    className="min-h-12 w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-800 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {busyId === r.id ? '…' : 'Weigeren (geen betaling)'}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -122,7 +178,7 @@ export function AdminRequestsPage() {
                   <th className="px-4 py-3">E-mail</th>
                   <th className="px-4 py-3">Aangevraagd</th>
                   <th className="px-4 py-3">Knipjes resterend</th>
-                  <th className="px-4 py-3" />
+                  <th className="px-4 py-3 text-right">Acties</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -138,14 +194,29 @@ export function AdminRequestsPage() {
                       {r.knipjes_remaining ?? 10} / 10
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        disabled={busyId !== null}
-                        onClick={() => void onFulfill(r.id, r.knipjes_remaining ?? 10)}
-                        className="min-h-10 rounded-lg bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
-                      >
-                        {busyId === r.id ? '…' : 'Betaling accorderen'}
-                      </button>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={busyId !== null}
+                          onClick={() => void onFulfill(r.id, r.knipjes_remaining ?? 10)}
+                          className="min-h-10 rounded-lg bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
+                        >
+                          {busyId === r.id ? '…' : 'Accorderen'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId !== null || !canReject(r.knipjes_remaining ?? 10)}
+                          title={
+                            canReject(r.knipjes_remaining ?? 10)
+                              ? undefined
+                              : 'Niet weigeren: er is al minstens één knipje gebruikt. Accordeer de betaling.'
+                          }
+                          onClick={() => void onReject(r.id)}
+                          className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Weigeren
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

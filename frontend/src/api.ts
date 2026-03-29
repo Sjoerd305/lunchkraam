@@ -193,3 +193,12 @@ export async function fulfillRequest(csrf: string, id: number): Promise<void> {
   })
   if (!res.ok) throw await parseError(res)
 }
+
+export async function rejectAdminRequest(csrf: string, id: number): Promise<void> {
+  const res = await fetch(`/api/admin/requests/${id}/reject`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
+}

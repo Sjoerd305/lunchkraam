@@ -252,3 +252,26 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
+
+func (d *Deps) APIAdminReject(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	reqID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige aanvraag.")
+		return
+	}
+	err = d.Store.AdminRejectCardRequest(r.Context(), reqID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden.")
+		case errors.Is(err, store.ErrCannotRejectKnipjesUsed):
+			httpx.JSONError(w, http.StatusConflict, "cannot_reject",
+				"Weigeren kan niet: er is al minstens één knipje gebruikt. Accordeer de betaling zodra die binnen is.")
+		default:
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kon aanvraag niet weigeren.")
+		}
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

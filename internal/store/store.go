@@ -15,6 +15,7 @@ var ErrNoKnipjes = errors.New("geen knipjes meer")
 var ErrForbidden = errors.New("verboden")
 var ErrAlreadyPending = errors.New("er is al een openstaande aanvraag")
 var ErrCannotCancelTrustUsed = errors.New("annuleren niet mogelijk: er zijn al knipjes gebruikt op deze kaart")
+var ErrCannotRejectKnipjesUsed = errors.New("weigeren niet mogelijk: er zijn al knipjes gebruikt; accordeer de betaling")
 
 type User struct {
 	ID        int64
@@ -425,6 +426,67 @@ WHERE id = $1 AND status = 'pending'`,
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrForbidden
+	}
+	return tx.Commit(ctx)
+}
+
+// AdminRejectCardRequest sets the request to cancelled and removes the provisional card when no knipjes
+// have been used (same rule as member self-cancel). If punches were used, the request must be fulfilled instead.
+func (s *Store) AdminRejectCardRequest(ctx context.Context, requestID int64) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var cardID *int64
+	err = tx.QueryRow(ctx, `
+SELECT card_id FROM card_requests
+WHERE id = $1 AND status = 'pending'
+FOR UPDATE`,
+		requestID,
+	).Scan(&cardID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if cardID != nil {
+		var remaining int
+		err = tx.QueryRow(ctx,
+			`SELECT knipjes_remaining FROM cards WHERE id = $1 FOR UPDATE`, *cardID,
+		).Scan(&remaining)
+		if err != nil {
+			return err
+		}
+		if remaining < 10 {
+			return ErrCannotRejectKnipjesUsed
+		}
+	} else {
+		var trustUsed int
+		err = tx.QueryRow(ctx,
+			`SELECT trust_knipjes_used FROM card_requests WHERE id = $1`, requestID,
+		).Scan(&trustUsed)
+		if err != nil {
+			return err
+		}
+		if trustUsed > 0 {
+			return ErrCannotRejectKnipjesUsed
+		}
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE card_requests SET status = 'cancelled' WHERE id = $1`,
+		requestID,
+	); err != nil {
+		return err
+	}
+	if cardID != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM cards WHERE id = $1`, *cardID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }
