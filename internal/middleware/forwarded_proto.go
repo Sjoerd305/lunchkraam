@@ -59,11 +59,11 @@ func forwardedRequestHost(r *http.Request) string {
 
 // TrustForwardedHTTPS should be used when the app sits behind a reverse proxy or tunnel
 // (e.g. cloudflared) that terminates TLS and forwards HTTP to the origin with
-// X-Forwarded-Proto: https. It sets r.URL.Scheme to "https" so libraries (e.g. gorilla/csrf)
-// treat the request as HTTPS, sets Secure cookies via config, and sends HSTS for browsers.
+// X-Forwarded-Proto: https. It sets r.URL.Scheme to "https" for a correct request URL behind
+// TLS termination, sets Secure cookies via config, and sends HSTS for browsers.
 //
 // It also sets r.URL.Host when empty. Go's server often leaves URL.Host unset (Request-URI is
-// only a path); gorilla/csrf then compares Referer against an empty host and rejects every POST.
+// only a path), which breaks checks that compare the request URL to Origin or Referer.
 func TrustForwardedHTTPS(enabled bool) func(http.Handler) http.Handler {
 	if !enabled {
 		return func(next http.Handler) http.Handler { return next }

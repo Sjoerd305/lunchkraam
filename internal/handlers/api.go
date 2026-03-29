@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gorilla/csrf"
 
 	"tostikaart/internal/auth"
 	"tostikaart/internal/httpx"
@@ -72,7 +71,7 @@ func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"user":                  user,
 		"pending_card_requests": pending,
-		"csrf_token":            csrf.Token(r),
+		"csrf_token":            "",
 		"payment_amount_eur":    d.Config.PaymentAmountEUR,
 	})
 }
@@ -292,11 +291,34 @@ func (d *Deps) APIAdminSalesYears(w http.ResponseWriter, r *http.Request) {
 }
 
 func monthLabelNL(m int) string {
-	names := []string{"jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"}
-	if m < 1 || m > 12 {
+	switch m {
+	case 1:
+		return "jan"
+	case 2:
+		return "feb"
+	case 3:
+		return "mrt"
+	case 4:
+		return "apr"
+	case 5:
+		return "mei"
+	case 6:
+		return "jun"
+	case 7:
+		return "jul"
+	case 8:
+		return "aug"
+	case 9:
+		return "sep"
+	case 10:
+		return "okt"
+	case 11:
+		return "nov"
+	case 12:
+		return "dec"
+	default:
 		return ""
 	}
-	return names[m-1]
 }
 
 func (d *Deps) APIAdminRequests(w http.ResponseWriter, r *http.Request) {

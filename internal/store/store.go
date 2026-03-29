@@ -823,8 +823,9 @@ ORDER BY 1`
 		if err := rows.Scan(&m, &n); err != nil {
 			return buckets, err
 		}
-		if m >= 1 && m <= 12 {
-			buckets[m-1] = n
+		idx := m - 1
+		if idx >= 0 && idx < len(buckets) {
+			buckets[idx] = n
 		}
 	}
 	return buckets, rows.Err()

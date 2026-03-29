@@ -14,7 +14,7 @@ const loginErrors: Record<string, string> = {
 }
 
 export function LoginPage() {
-  const { user, loading, csrf, refresh } = useAuth()
+  const { user, loading, refresh } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const errCode = params.get('error') ?? ''
@@ -33,13 +33,13 @@ export function LoginPage() {
   async function onLocalSubmit(e: FormEvent) {
     e.preventDefault()
     setLocalErr('')
-    if (!csrf) {
+    if (loading) {
       setLocalErr('Even wachten tot de pagina geladen is, en probeer opnieuw.')
       return
     }
     setLocalBusy(true)
     try {
-      await api.localLogin(csrf, localUser, localPass)
+      await api.localLogin('', localUser, localPass)
       await refresh()
       navigate('/', { replace: true })
     } catch (err) {

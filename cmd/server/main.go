@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
-	"github.com/gorilla/csrf"
+	csrf "filippo.io/csrf/gorilla"
 	"github.com/gorilla/sessions"
 
 	"tostikaart/internal/auth"
@@ -96,13 +96,8 @@ func main() {
 			})
 
 			r.Route("/api", func(r chi.Router) {
-				r.Use(csrf.Protect(
-					cfg.CsrfAuthKey[:],
-					csrf.Secure(cfg.SecureCookies),
-					csrf.Path("/"),
-					csrf.SameSite(csrf.SameSiteLaxMode),
-					csrf.RequestHeader("X-CSRF-Token"),
-				))
+				// CSRF via filippo.io/csrf/gorilla (Sec-Fetch-Site / Origin). Auth key is ignored.
+				r.Use(csrf.Protect(nil))
 				r.Get("/me", h.APIMe)
 				r.Post("/logout", h.APILogout)
 
