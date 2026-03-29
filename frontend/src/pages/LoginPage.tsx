@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import * as api from '../api'
 import { useAuth } from '../AuthContext'
 
 const loginErrors: Record<string, string> = {
@@ -13,17 +14,41 @@ const loginErrors: Record<string, string> = {
 }
 
 export function LoginPage() {
-  const { user, loading } = useAuth()
+  const { user, loading, csrf, refresh } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const errCode = params.get('error') ?? ''
   const errMsg = errCode ? loginErrors[errCode] ?? 'Inloggen mislukt.' : ''
+  const [localUser, setLocalUser] = useState('')
+  const [localPass, setLocalPass] = useState('')
+  const [localBusy, setLocalBusy] = useState(false)
+  const [localErr, setLocalErr] = useState('')
 
   useEffect(() => {
     if (!loading && user) {
       navigate('/', { replace: true })
     }
   }, [user, loading, navigate])
+
+  async function onLocalSubmit(e: FormEvent) {
+    e.preventDefault()
+    setLocalErr('')
+    if (!csrf) {
+      setLocalErr('Even wachten tot de pagina geladen is, en probeer opnieuw.')
+      return
+    }
+    setLocalBusy(true)
+    try {
+      await api.localLogin(csrf, localUser, localPass)
+      await refresh()
+      navigate('/', { replace: true })
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Inloggen mislukt.'
+      setLocalErr(msg)
+    } finally {
+      setLocalBusy(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -40,8 +65,8 @@ export function LoginPage() {
           Lunchkraam
         </div>
         <h1 className="mb-2 text-center text-2xl font-bold text-slate-900">Maasgroep 18</h1>
-        <p className="mb-8 text-center text-slate-600">
-          Log in met je Google account.
+        <p className="mb-6 text-center text-slate-600">
+          Log in met Google, of met een door de beheerder aangemaakt account (jeugd / zonder Google).
         </p>
         {errMsg ? (
           <div
@@ -51,6 +76,43 @@ export function LoginPage() {
             {errMsg}
           </div>
         ) : null}
+        <form onSubmit={(e) => void onLocalSubmit(e)} className="mb-8 space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-5">
+          <h2 className="text-sm font-semibold text-slate-800">Lokaal inloggen</h2>
+          {localErr ? (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {localErr}
+            </div>
+          ) : null}
+          <label className="block text-sm">
+            <span className="font-medium text-slate-700">Gebruikersnaam</span>
+            <input
+              required
+              autoComplete="username"
+              value={localUser}
+              onChange={(e) => setLocalUser(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-slate-700">Wachtwoord</span>
+            <input
+              required
+              type="password"
+              autoComplete="current-password"
+              value={localPass}
+              onChange={(e) => setLocalPass(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={localBusy}
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+          >
+            {localBusy ? 'Bezig…' : 'Inloggen'}
+          </button>
+        </form>
+        <p className="mb-4 text-center text-xs text-slate-500">of</p>
         <a
           href="/auth/google"
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-md shadow-brand-700/25 transition hover:bg-brand-800"

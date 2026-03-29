@@ -1,0 +1,209 @@
+package handlers
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+
+	"tostikaart/internal/auth"
+	"tostikaart/internal/httpx"
+	"tostikaart/internal/store"
+)
+
+type tostiOrderJSON struct {
+	ID                int64   `json:"id"`
+	UserID            int64   `json:"user_id"`
+	CardID            int64   `json:"card_id"`
+	Quantity          int     `json:"quantity"`
+	Bread             string  `json:"bread"`
+	Filling           string  `json:"filling"`
+	Status            string  `json:"status"`
+	CreatedAt         string  `json:"created_at"`
+	DeliveredAt       *string `json:"delivered_at,omitempty"`
+	DeliveredByUserID *int64  `json:"delivered_by_user_id,omitempty"`
+	CancelledAt       *string `json:"cancelled_at,omitempty"`
+	CancelledByUserID *int64  `json:"cancelled_by_user_id,omitempty"`
+}
+
+type tostiOrderOperatorJSON struct {
+	tostiOrderJSON
+	CustomerName  string `json:"customer_name"`
+	CustomerEmail string `json:"customer_email"`
+}
+
+func tostiOrderToJSON(o store.TostiOrder) tostiOrderJSON {
+	j := tostiOrderJSON{
+		ID:                o.ID,
+		UserID:            o.UserID,
+		CardID:            o.CardID,
+		Quantity:          o.Quantity,
+		Bread:             o.Bread,
+		Filling:           o.Filling,
+		Status:            o.Status,
+		CreatedAt:         o.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		DeliveredByUserID: o.DeliveredByUserID,
+		CancelledByUserID: o.CancelledByUserID,
+	}
+	if o.DeliveredAt != nil {
+		s := o.DeliveredAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+		j.DeliveredAt = &s
+	}
+	if o.CancelledAt != nil {
+		s := o.CancelledAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+		j.CancelledAt = &s
+	}
+	return j
+}
+
+func (d *Deps) APITostiOrdersMine(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	list, err := d.Store.ListTostiOrdersForUser(r.Context(), u.ID, 50)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestellingen laden mislukt.")
+		return
+	}
+	out := make([]tostiOrderJSON, 0, len(list))
+	for _, o := range list {
+		out = append(out, tostiOrderToJSON(o))
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"orders": out})
+}
+
+func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	var body struct {
+		CardID   int64  `json:"card_id"`
+		Quantity int    `json:"quantity"`
+		Bread    string `json:"bread"`
+		Filling  string `json:"filling"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
+	if err := dec.Decode(&body); err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return
+	}
+	if body.CardID <= 0 {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_card", "Kies een geldige kaart.")
+		return
+	}
+	qty := body.Quantity
+	if qty <= 0 {
+		qty = 1
+	}
+	o, err := d.Store.CreateTostiOrder(r.Context(), u.ID, body.CardID, body.Bread, body.Filling, qty)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.JSONError(w, http.StatusBadRequest, "no_card", "Kaart niet gevonden of niet van jou.")
+		case errors.Is(err, store.ErrNoKnipjes):
+			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes",
+				"Niet genoeg vrije knipjes op deze kaart (tel ook openstaande bestellingen op deze kaart mee).")
+		case errors.Is(err, store.ErrTostiInvalidQuantity):
+			httpx.JSONError(w, http.StatusBadRequest, "invalid_quantity", "Aantal moet tussen 1 en 10 zijn.")
+		case errors.Is(err, store.ErrTostiInvalidBread):
+			httpx.JSONError(w, http.StatusBadRequest, "invalid_bread", "Brood moet wit of bruin zijn.")
+		case errors.Is(err, store.ErrTostiInvalidFilling):
+			httpx.JSONError(w, http.StatusBadRequest, "invalid_filling", "Vulling moet ham, kaas of ham_kaas zijn.")
+		default:
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestellen mislukt.")
+		}
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"order": tostiOrderToJSON(*o)})
+}
+
+func (d *Deps) APITostiOrderCancel(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	idStr := chi.URLParam(r, "id")
+	oid, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige bestelling.")
+		return
+	}
+	err = d.Store.CancelTostiOrder(r.Context(), oid, u.ID, false)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
+		case errors.Is(err, store.ErrTostiOrderNotPending):
+			httpx.JSONError(w, http.StatusConflict, "not_pending", "Deze bestelling is al afgehandeld.")
+		case errors.Is(err, store.ErrTostiOrderWrongUser):
+			httpx.JSONError(w, http.StatusForbidden, "forbidden", "Geen toegang tot deze bestelling.")
+		default:
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
+		}
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (d *Deps) APIOperatorTostiOrders(w http.ResponseWriter, r *http.Request) {
+	list, err := d.Store.ListPendingTostiOrdersForOperator(r.Context(), 100)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Wachtrij laden mislukt.")
+		return
+	}
+	out := make([]tostiOrderOperatorJSON, 0, len(list))
+	for _, row := range list {
+		out = append(out, tostiOrderOperatorJSON{
+			tostiOrderJSON: tostiOrderToJSON(row.TostiOrder),
+			CustomerName:   row.CustomerName,
+			CustomerEmail:  row.CustomerEmail,
+		})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"orders": out})
+}
+
+func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	idStr := chi.URLParam(r, "id")
+	oid, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige bestelling.")
+		return
+	}
+	err = d.Store.DeliverTostiOrder(r.Context(), oid, u.ID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
+		case errors.Is(err, store.ErrTostiOrderNotPending):
+			httpx.JSONError(w, http.StatusConflict, "not_pending", "Deze bestelling is niet meer open.")
+		case errors.Is(err, store.ErrNoKnipjes):
+			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes",
+				"Niet genoeg knipjes meer op de kaart voor dit aantal. Annuleer de bestelling of vraag het lid.")
+		case errors.Is(err, store.ErrTostiInvalidQuantity):
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Ongeldige bestelregel.")
+		default:
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Leveren mislukt.")
+		}
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (d *Deps) APIOperatorTostiOrderCancel(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	idStr := chi.URLParam(r, "id")
+	oid, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige bestelling.")
+		return
+	}
+	err = d.Store.CancelTostiOrder(r.Context(), oid, u.ID, true)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
+		case errors.Is(err, store.ErrTostiOrderNotPending):
+			httpx.JSONError(w, http.StatusConflict, "not_pending", "Deze bestelling is al afgehandeld.")
+		default:
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
+		}
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

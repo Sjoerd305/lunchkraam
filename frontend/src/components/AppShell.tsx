@@ -30,6 +30,8 @@ export function AppShell() {
             <NavLink to="/">Dashboard</NavLink>
             <NavLink to="/cards">Mijn kaarten</NavLink>
             <NavLink to="/buy">Kaart kopen</NavLink>
+            <NavLink to="/tosti">Tosti bestellen</NavLink>
+            {user?.is_admin || user?.is_operator ? <NavLink to="/kraam">Kraam</NavLink> : null}
             {user?.is_admin ? <NavLink to="/admin">Admin</NavLink> : null}
             <button
               type="button"

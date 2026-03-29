@@ -18,10 +18,13 @@ import (
 )
 
 type userPublicJSON struct {
-	ID      int64  `json:"id"`
-	Email   string `json:"email"`
-	Name    string `json:"name"`
-	IsAdmin bool   `json:"is_admin"`
+	ID            int64   `json:"id"`
+	Email         string  `json:"email"`
+	Name          string  `json:"name"`
+	IsAdmin       bool    `json:"is_admin"`
+	IsOperator    bool    `json:"is_operator"`
+	AuthKind      string  `json:"auth_kind"`
+	LocalUsername *string `json:"local_username,omitempty"`
 }
 
 type cardJSON struct {
@@ -45,9 +48,17 @@ type myPendingRequestJSON struct {
 }
 
 func toUserPublic(u *store.User) userPublicJSON {
-	return userPublicJSON{
-		ID: u.ID, Email: u.Email, Name: u.Name, IsAdmin: u.IsAdmin,
+	j := userPublicJSON{
+		ID: u.ID, Email: u.Email, Name: u.Name, IsAdmin: u.IsAdmin, IsOperator: u.IsOperator,
 	}
+	if u.LoginUsername != nil && *u.LoginUsername != "" {
+		j.AuthKind = "local"
+		s := *u.LoginUsername
+		j.LocalUsername = &s
+	} else {
+		j.AuthKind = "google"
+	}
+	return j
 }
 
 func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +112,7 @@ func (d *Deps) APICardUse(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige kaart.")
 		return
 	}
-	err = d.Store.UseKnipje(r.Context(), cardID, u.ID)
+	err = d.Store.UseKnipje(r.Context(), cardID, u)
 	if err != nil {
 		switch err {
 		case store.ErrNoKnipjes:

@@ -3,6 +3,9 @@ export type User = {
   email: string
   name: string
   is_admin: boolean
+  is_operator: boolean
+  auth_kind: 'google' | 'local'
+  local_username?: string
 }
 
 export type MeResponse = {
@@ -102,10 +105,279 @@ async function parseError(res: Response): Promise<ApiError> {
   }
 }
 
+function normalizeUser(raw: unknown): User | null {
+  if (raw === null || typeof raw !== 'object') return null
+  const u = raw as Record<string, unknown>
+  return {
+    id: jsonInt(u.id, 0),
+    email: typeof u.email === 'string' ? u.email : '',
+    name: typeof u.name === 'string' ? u.name : '',
+    is_admin: Boolean(u.is_admin),
+    is_operator: Boolean(u.is_operator),
+    auth_kind: u.auth_kind === 'local' ? 'local' : 'google',
+    local_username: typeof u.local_username === 'string' ? u.local_username : undefined,
+  }
+}
+
 export async function getMe(): Promise<MeResponse> {
   const res = await fetch('/api/me', { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
-  return res.json() as Promise<MeResponse>
+  const j = (await res.json()) as Record<string, unknown>
+  return {
+    user: normalizeUser(j.user),
+    pending_card_requests: jsonInt(j.pending_card_requests),
+    csrf_token: typeof j.csrf_token === 'string' ? j.csrf_token : '',
+    payment_amount_eur: typeof j.payment_amount_eur === 'string' ? j.payment_amount_eur : '15',
+  }
+}
+
+export async function localLogin(csrf: string, username: string, password: string): Promise<void> {
+  const res = await fetch('/api/auth/local/login', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ username: username.trim(), password }),
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
+export type AdminUserRow = {
+  id: number
+  name: string
+  email: string
+  auth_kind: 'google' | 'local'
+  local_username?: string
+  is_admin: boolean
+  is_operator: boolean
+  created_at: string
+}
+
+export async function getAdminUsers(): Promise<AdminUserRow[]> {
+  const res = await fetch('/api/admin/users', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { users?: unknown }
+  const raw = j.users
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return {
+      id: jsonInt(r.id, 0),
+      name: typeof r.name === 'string' ? r.name : '',
+      email: typeof r.email === 'string' ? r.email : '',
+      auth_kind: r.auth_kind === 'local' ? 'local' : 'google',
+      local_username: typeof r.local_username === 'string' ? r.local_username : undefined,
+      is_admin: Boolean(r.is_admin),
+      is_operator: Boolean(r.is_operator),
+      created_at: typeof r.created_at === 'string' ? r.created_at : '',
+    }
+  })
+}
+
+export async function createLocalUser(
+  csrf: string,
+  body: {
+    username: string
+    name: string
+    password: string
+    is_admin: boolean
+    is_operator: boolean
+  },
+): Promise<User> {
+  const res = await fetch('/api/admin/users/local', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({
+      username: body.username.trim().toLowerCase(),
+      name: body.name.trim(),
+      password: body.password,
+      is_admin: body.is_admin,
+      is_operator: body.is_operator,
+    }),
+  })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { user?: unknown }
+  const u = normalizeUser(j.user)
+  if (!u) throw new ApiError(500, 'error', 'Ongeldig antwoord.')
+  return u
+}
+
+export async function patchLocalUser(
+  csrf: string,
+  id: number,
+  body: { password: string; is_admin: boolean; is_operator: boolean },
+): Promise<User | null> {
+  const res = await fetch(`/api/admin/users/${id}/local`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { user?: unknown }
+  return normalizeUser(j.user)
+}
+
+export type OperatorCardRow = {
+  id: number
+  knipjes_remaining: number
+  created_at: string
+  owner_name: string
+  owner_email: string
+  owner_user_id: number
+}
+
+export async function getOperatorCards(q: string): Promise<OperatorCardRow[]> {
+  const qs = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''
+  const res = await fetch(`/api/operator/cards${qs}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { cards?: unknown }
+  const raw = j.cards
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return {
+      id: jsonInt(r.id, 0),
+      knipjes_remaining: jsonInt(r.knipjes_remaining, 0),
+      created_at: typeof r.created_at === 'string' ? r.created_at : '',
+      owner_name: typeof r.owner_name === 'string' ? r.owner_name : '',
+      owner_email: typeof r.owner_email === 'string' ? r.owner_email : '',
+      owner_user_id: jsonInt(r.owner_user_id, 0),
+    }
+  })
+}
+
+export type TostiBread = 'wit' | 'bruin'
+export type TostiFilling = 'ham' | 'kaas' | 'ham_kaas'
+export type TostiOrderStatus = 'pending' | 'delivered' | 'cancelled'
+
+export type TostiOrder = {
+  id: number
+  user_id: number
+  card_id: number
+  quantity: number
+  bread: TostiBread
+  filling: TostiFilling
+  status: TostiOrderStatus
+  created_at: string
+  delivered_at?: string
+  delivered_by_user_id?: number
+  cancelled_at?: string
+  cancelled_by_user_id?: number
+}
+
+export type OperatorTostiOrderRow = TostiOrder & {
+  customer_name: string
+  customer_email: string
+}
+
+function parseTostiOrder(r: Record<string, unknown>): TostiOrder {
+  const bread = r.bread === 'bruin' ? 'bruin' : 'wit'
+  const fillingRaw = r.filling
+  const filling: TostiFilling =
+    fillingRaw === 'kaas' ? 'kaas' : fillingRaw === 'ham_kaas' ? 'ham_kaas' : 'ham'
+  const statusRaw = r.status
+  const status: TostiOrderStatus =
+    statusRaw === 'delivered' ? 'delivered' : statusRaw === 'cancelled' ? 'cancelled' : 'pending'
+  const q = jsonInt(r.quantity, 1)
+  return {
+    id: jsonInt(r.id, 0),
+    user_id: jsonInt(r.user_id, 0),
+    card_id: jsonInt(r.card_id, 0),
+    quantity: q >= 1 && q <= 10 ? q : 1,
+    bread,
+    filling,
+    status,
+    created_at: typeof r.created_at === 'string' ? r.created_at : '',
+    delivered_at: typeof r.delivered_at === 'string' ? r.delivered_at : undefined,
+    delivered_by_user_id:
+      typeof r.delivered_by_user_id === 'number' ? jsonInt(r.delivered_by_user_id) : undefined,
+    cancelled_at: typeof r.cancelled_at === 'string' ? r.cancelled_at : undefined,
+    cancelled_by_user_id:
+      typeof r.cancelled_by_user_id === 'number' ? jsonInt(r.cancelled_by_user_id) : undefined,
+  }
+}
+
+export async function getMyTostiOrders(): Promise<TostiOrder[]> {
+  const res = await fetch('/api/tosti-orders/mine', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { orders?: unknown }
+  const raw = j.orders
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => parseTostiOrder(row as Record<string, unknown>))
+}
+
+export async function createTostiOrder(
+  csrf: string,
+  body: { card_id: number; bread: TostiBread; filling: TostiFilling; quantity: number },
+): Promise<TostiOrder> {
+  const res = await fetch('/api/tosti-orders', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { order?: unknown }
+  const o = j.order
+  if (!o || typeof o !== 'object') throw new ApiError(500, 'error', 'Ongeldig antwoord.')
+  return parseTostiOrder(o as Record<string, unknown>)
+}
+
+export async function cancelMyTostiOrder(csrf: string, id: number): Promise<void> {
+  const res = await fetch(`/api/tosti-orders/${id}/cancel`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
+export async function getOperatorTostiOrders(): Promise<OperatorTostiOrderRow[]> {
+  const res = await fetch('/api/operator/tosti-orders', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { orders?: unknown }
+  const raw = j.orders
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    const base = parseTostiOrder(r)
+    return {
+      ...base,
+      customer_name: typeof r.customer_name === 'string' ? r.customer_name : '',
+      customer_email: typeof r.customer_email === 'string' ? r.customer_email : '',
+    }
+  })
+}
+
+export async function deliverOperatorTostiOrder(csrf: string, id: number): Promise<void> {
+  const res = await fetch(`/api/operator/tosti-orders/${id}/deliver`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
+export async function cancelOperatorTostiOrder(csrf: string, id: number): Promise<void> {
+  const res = await fetch(`/api/operator/tosti-orders/${id}/cancel`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
 }
 
 export async function logout(csrf: string): Promise<void> {

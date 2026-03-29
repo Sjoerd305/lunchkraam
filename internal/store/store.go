@@ -2,15 +2,23 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const adminSalesTZ = "Europe/Amsterdam"
+
+// bcrypt hash of "password" — used for constant-time path when user is unknown.
+const bcryptDummyHash = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
 var ErrNotFound = errors.New("not found")
 var ErrNoKnipjes = errors.New("geen knipjes meer")
@@ -18,14 +26,53 @@ var ErrForbidden = errors.New("verboden")
 var ErrAlreadyPending = errors.New("er is al een openstaande aanvraag")
 var ErrCannotCancelTrustUsed = errors.New("annuleren niet mogelijk: er zijn al knipjes gebruikt op deze kaart")
 var ErrCannotRejectKnipjesUsed = errors.New("weigeren niet mogelijk: er zijn al knipjes gebruikt; accordeer de betaling")
+var ErrInvalidCredentials = errors.New("ongeldige gebruikersnaam of wachtwoord")
+var ErrUsernameTaken = errors.New("gebruikersnaam bestaat al")
 
 type User struct {
-	ID        int64
-	GoogleSub string
-	Email     string
-	Name      string
-	IsAdmin   bool
-	CreatedAt time.Time
+	ID            int64
+	GoogleSub     *string
+	LoginUsername *string
+	Email         string
+	Name          string
+	IsAdmin       bool
+	IsOperator    bool
+	CreatedAt     time.Time
+}
+
+type CardWithOwner struct {
+	Card
+	OwnerName  string
+	OwnerEmail string
+}
+
+type AdminUserSummary struct {
+	ID            int64
+	GoogleSub     *string
+	LoginUsername *string
+	Email         string
+	Name          string
+	IsAdmin       bool
+	IsOperator    bool
+	CreatedAt     time.Time
+}
+
+func scanUser(scanner interface{ Scan(dest ...any) error }) (*User, error) {
+	var u User
+	var gsub, lun sql.NullString
+	err := scanner.Scan(&u.ID, &gsub, &lun, &u.Email, &u.Name, &u.IsAdmin, &u.IsOperator, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if gsub.Valid {
+		s := gsub.String
+		u.GoogleSub = &s
+	}
+	if lun.Valid {
+		s := lun.String
+		u.LoginUsername = &s
+	}
+	return &u, nil
 }
 
 type Card struct {
@@ -62,38 +109,50 @@ func New(pool *pgxpool.Pool) *Store {
 }
 
 func (s *Store) UpsertUser(ctx context.Context, googleSub, email, name string, bootstrapAdmin bool) (*User, error) {
-	const q = `
-WITH ins AS (
-  INSERT INTO users (google_sub, email, name, is_admin)
-  VALUES ($1, $2, $3, $4)
-  ON CONFLICT (google_sub) DO UPDATE SET
-    email = EXCLUDED.email,
-    name = EXCLUDED.name,
-    is_admin = users.is_admin OR EXCLUDED.is_admin
-  RETURNING id, google_sub, email, name, is_admin, created_at
-)
-SELECT id, google_sub, email, name, is_admin, created_at FROM ins`
-	var u User
-	err := s.pool.QueryRow(ctx, q, googleSub, email, name, bootstrapAdmin).Scan(
-		&u.ID, &u.GoogleSub, &u.Email, &u.Name, &u.IsAdmin, &u.CreatedAt,
-	)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("upsert user: %w", err)
+		return nil, err
 	}
-	return &u, nil
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx, `
+UPDATE users SET email = $1, name = $2, is_admin = users.is_admin OR $3
+WHERE google_sub = $4
+RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, created_at`,
+		email, name, bootstrapAdmin, googleSub,
+	)
+	u, err := scanUser(row)
+	if err == nil {
+		return u, tx.Commit(ctx)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("upsert user update: %w", err)
+	}
+
+	row = tx.QueryRow(ctx, `
+INSERT INTO users (google_sub, email, name, is_admin)
+VALUES ($1, $2, $3, $4)
+RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, created_at`,
+		googleSub, email, name, bootstrapAdmin,
+	)
+	u, err = scanUser(row)
+	if err != nil {
+		return nil, fmt.Errorf("upsert user insert: %w", err)
+	}
+	return u, tx.Commit(ctx)
 }
 
 func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
-	const q = `SELECT id, google_sub, email, name, is_admin, created_at FROM users WHERE id = $1`
-	var u User
-	err := s.pool.QueryRow(ctx, q, id).Scan(&u.ID, &u.GoogleSub, &u.Email, &u.Name, &u.IsAdmin, &u.CreatedAt)
+	row := s.pool.QueryRow(ctx, `
+SELECT id, google_sub, login_username, email, name, is_admin, is_operator, created_at FROM users WHERE id = $1`, id)
+	u, err := scanUser(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &u, nil
+	return u, nil
 }
 
 func (s *Store) CardsByUser(ctx context.Context, userID int64) ([]Card, error) {
@@ -116,11 +175,11 @@ FROM cards WHERE user_id = $1 ORDER BY created_at DESC`
 	return out, rows.Err()
 }
 
-func (s *Store) UseKnipje(ctx context.Context, cardID, userID int64) error {
+func (s *Store) useKnipjeOwnCard(ctx context.Context, cardID, ownerUserID int64) error {
 	const q = `
 UPDATE cards SET knipjes_remaining = knipjes_remaining - 1
 WHERE id = $1 AND user_id = $2 AND knipjes_remaining > 0`
-	tag, err := s.pool.Exec(ctx, q, cardID, userID)
+	tag, err := s.pool.Exec(ctx, q, cardID, ownerUserID)
 	if err != nil {
 		return err
 	}
@@ -128,7 +187,7 @@ WHERE id = $1 AND user_id = $2 AND knipjes_remaining > 0`
 		var rem int
 		err := s.pool.QueryRow(ctx,
 			`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2`,
-			cardID, userID,
+			cardID, ownerUserID,
 		).Scan(&rem)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -142,6 +201,39 @@ WHERE id = $1 AND user_id = $2 AND knipjes_remaining > 0`
 		return ErrForbidden
 	}
 	return nil
+}
+
+func (s *Store) useKnipjeAnyCard(ctx context.Context, cardID int64) error {
+	const q = `
+UPDATE cards SET knipjes_remaining = knipjes_remaining - 1
+WHERE id = $1 AND knipjes_remaining > 0`
+	tag, err := s.pool.Exec(ctx, q, cardID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		var rem int
+		err := s.pool.QueryRow(ctx, `SELECT knipjes_remaining FROM cards WHERE id = $1`, cardID).Scan(&rem)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if rem == 0 {
+			return ErrNoKnipjes
+		}
+		return ErrForbidden
+	}
+	return nil
+}
+
+// UseKnipje lets the card owner use a punch, or an admin/operator on any card.
+func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
+	if actor.IsAdmin || actor.IsOperator {
+		return s.useKnipjeAnyCard(ctx, cardID)
+	}
+	return s.useKnipjeOwnCard(ctx, cardID, actor.ID)
 }
 
 func (s *Store) CreateCardRequest(ctx context.Context, userID int64) (int64, error) {
@@ -538,6 +630,173 @@ SELECT
 		return nil, err
 	}
 	return &st, nil
+}
+
+// CreateLocalUser inserts a jeugd-/lokaal account (geen Google). Email is synthetisch uniek per gebruikersnaam.
+func (s *Store) CreateLocalUser(ctx context.Context, loginUsername, displayName string, passwordHash []byte, isAdmin, isOperator bool) (*User, error) {
+	loginUsername = strings.TrimSpace(strings.ToLower(loginUsername))
+	if loginUsername == "" {
+		return nil, fmt.Errorf("gebruikersnaam vereist")
+	}
+	syntheticEmail := loginUsername + "@local.tostikaart"
+	row := s.pool.QueryRow(ctx, `
+INSERT INTO users (login_username, password_hash, email, name, is_admin, is_operator)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, created_at`,
+		loginUsername, string(passwordHash), syntheticEmail, strings.TrimSpace(displayName), isAdmin, isOperator,
+	)
+	u, err := scanUser(row)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrUsernameTaken
+		}
+		return nil, err
+	}
+	return u, nil
+}
+
+// AuthenticateLocalUser validates username/password and returns the user row (no hash).
+func (s *Store) AuthenticateLocalUser(ctx context.Context, loginUsername, password string) (*User, error) {
+	loginUsername = strings.TrimSpace(strings.ToLower(loginUsername))
+	var hash string
+	var id int64
+	err := s.pool.QueryRow(ctx, `
+SELECT id, password_hash FROM users WHERE lower(login_username) = $1 AND password_hash IS NOT NULL`,
+		loginUsername,
+	).Scan(&id, &hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		_ = bcrypt.CompareHashAndPassword([]byte(bcryptDummyHash), []byte(password))
+		return nil, ErrInvalidCredentials
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+	return s.UserByID(ctx, id)
+}
+
+func (s *Store) ListAdminUsers(ctx context.Context) ([]AdminUserSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT id, google_sub, login_username, email, name, is_admin, is_operator, created_at
+FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AdminUserSummary
+	for rows.Next() {
+		var r AdminUserSummary
+		var gsub, lun sql.NullString
+		if err := rows.Scan(&r.ID, &gsub, &lun, &r.Email, &r.Name, &r.IsAdmin, &r.IsOperator, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		if gsub.Valid {
+			s := gsub.String
+			r.GoogleSub = &s
+		}
+		if lun.Valid {
+			s := lun.String
+			r.LoginUsername = &s
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// AdminUpdateLocalUser updates flags and optionally replaces the password (local accounts only).
+func (s *Store) AdminUpdateLocalUser(ctx context.Context, userID int64, newPassword *string, isAdmin, isOperator bool) error {
+	var ok bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND login_username IS NOT NULL)`, userID).Scan(&ok)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound
+	}
+	if newPassword != nil && strings.TrimSpace(*newPassword) != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(*newPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		_, err = s.pool.Exec(ctx, `
+UPDATE users SET password_hash = $2, is_admin = $3, is_operator = $4 WHERE id = $1 AND login_username IS NOT NULL`,
+			userID, string(hash), isAdmin, isOperator,
+		)
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+UPDATE users SET is_admin = $2, is_operator = $3 WHERE id = $1 AND login_username IS NOT NULL`,
+		userID, isAdmin, isOperator,
+	)
+	return err
+}
+
+func (s *Store) SearchCardsWithOwners(ctx context.Context, query string, limit int) ([]CardWithOwner, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 40
+	}
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return s.recentCardsWithOwners(ctx, limit)
+	}
+	if id, err := strconv.ParseInt(q, 10, 64); err == nil && id > 0 {
+		return s.cardsWithOwnersByCardID(ctx, id)
+	}
+	pat := "%" + q + "%"
+	rows, err := s.pool.Query(ctx, `
+SELECT c.id, c.user_id, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+FROM cards c
+JOIN users u ON u.id = c.user_id
+WHERE u.name ILIKE $1 OR u.email ILIKE $1
+ORDER BY c.created_at DESC
+LIMIT $2`, pat, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCardWithOwnerRows(rows)
+}
+
+func (s *Store) recentCardsWithOwners(ctx context.Context, limit int) ([]CardWithOwner, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT c.id, c.user_id, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+FROM cards c
+JOIN users u ON u.id = c.user_id
+ORDER BY c.created_at DESC
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCardWithOwnerRows(rows)
+}
+
+func (s *Store) cardsWithOwnersByCardID(ctx context.Context, cardID int64) ([]CardWithOwner, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT c.id, c.user_id, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+FROM cards c
+JOIN users u ON u.id = c.user_id
+WHERE c.id = $1`, cardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCardWithOwnerRows(rows)
+}
+
+func scanCardWithOwnerRows(rows pgx.Rows) ([]CardWithOwner, error) {
+	var out []CardWithOwner
+	for rows.Next() {
+		var r CardWithOwner
+		if err := rows.Scan(&r.ID, &r.UserID, &r.KnipjesRemaining, &r.Note, &r.CreatedAt, &r.OwnerName, &r.OwnerEmail); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // AdminSalesByMonth counts fulfilled card_requests per calendar month in Europe/Amsterdam.

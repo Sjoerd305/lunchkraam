@@ -4,11 +4,14 @@ import { AlertDialogProvider } from './components/AlertDialogProvider'
 import { AppShell } from './components/AppShell'
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
 import { AdminLayout } from './pages/admin/AdminLayout'
+import { AdminLocalUsersPage } from './pages/admin/AdminLocalUsersPage'
 import { AdminRequestsPage } from './pages/admin/AdminRequestsPage'
 import { BuyPage } from './pages/BuyPage'
 import { CardsPage } from './pages/CardsPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { KraamPage } from './pages/KraamPage'
 import { LoginPage } from './pages/LoginPage'
+import { OrderTostiPage } from './pages/OrderTostiPage'
 
 function RequireAuth() {
   const { user, loading } = useAuth()
@@ -36,9 +39,12 @@ export default function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/cards" element={<CardsPage />} />
               <Route path="/buy" element={<BuyPage />} />
+              <Route path="/tosti" element={<OrderTostiPage />} />
+              <Route path="/kraam" element={<KraamPage />} />
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminDashboardPage />} />
                 <Route path="requests" element={<AdminRequestsPage />} />
+                <Route path="accounts" element={<AdminLocalUsersPage />} />
               </Route>
             </Route>
           </Route>

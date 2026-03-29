@@ -19,6 +19,7 @@ export function AdminLayout() {
             Overzicht
           </AdminTab>
           <AdminTab to="/admin/requests">Betalingswachtrij</AdminTab>
+          <AdminTab to="/admin/accounts">Accounts</AdminTab>
         </nav>
       </div>
       <Outlet />

@@ -93,7 +93,24 @@ func main() {
 			r.Post("/logout", h.APILogout)
 
 			r.Group(func(r chi.Router) {
+				r.Use(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP)))
+				r.Post("/auth/local/login", h.APILocalLogin)
+			})
+
+			r.Group(func(r chi.Router) {
 				r.Use(apimw.RequireUserAPI(st))
+				r.Use(apimw.RequireOperatorOrAdminAPI())
+				r.Get("/operator/cards", h.APIOperatorCards)
+				r.Get("/operator/tosti-orders", h.APIOperatorTostiOrders)
+				r.Post("/operator/tosti-orders/{id}/deliver", h.APIOperatorTostiOrderDeliver)
+				r.Post("/operator/tosti-orders/{id}/cancel", h.APIOperatorTostiOrderCancel)
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(apimw.RequireUserAPI(st))
+				r.Get("/tosti-orders/mine", h.APITostiOrdersMine)
+				r.With(httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/tosti-orders", h.APITostiOrderCreate)
+				r.Post("/tosti-orders/{id}/cancel", h.APITostiOrderCancel)
 				r.Get("/cards", h.APICards)
 				r.Post("/cards/{id}/use", h.APICardUse)
 				r.Get("/buy", h.APIBuy)
@@ -111,6 +128,9 @@ func main() {
 				r.Get("/admin/requests", h.APIAdminRequests)
 				r.Post("/admin/requests/{id}/fulfill", h.APIAdminFulfill)
 				r.Post("/admin/requests/{id}/reject", h.APIAdminReject)
+				r.Get("/admin/users", h.APIAdminUsers)
+				r.Post("/admin/users/local", h.APIAdminCreateLocalUser)
+				r.Patch("/admin/users/{id}/local", h.APIAdminPatchLocalUser)
 			})
 		})
 	})
