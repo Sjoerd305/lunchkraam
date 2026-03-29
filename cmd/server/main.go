@@ -69,6 +69,7 @@ func main() {
 	r.Use(apimw.TrustForwardedHTTPS(cfg.TrustProxyHeaders))
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
+	r.Use(apimw.AllowOnlyKnownPublicPaths)
 
 	r.Group(func(r chi.Router) {
 		r.Use(apimw.Session(sessionStore))
@@ -83,6 +84,11 @@ func main() {
 		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			_, _ = w.Write([]byte("ok"))
+		})
+
+		r.Get("/robots.txt", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
 		})
 
 		r.Group(func(r chi.Router) {
@@ -121,6 +127,7 @@ func main() {
 				r.Group(func(r chi.Router) {
 					r.Use(apimw.RequireUserAPI(st))
 					r.Get("/tosti-orders/mine", h.APITostiOrdersMine)
+					r.Get("/tosti-orders/queue", h.APITostiOrdersQueue)
 					r.With(httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/tosti-orders", h.APITostiOrderCreate)
 					r.Post("/tosti-orders/{id}/cancel", h.APITostiOrderCancel)
 					r.Get("/cards", h.APICards)

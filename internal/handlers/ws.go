@@ -74,12 +74,13 @@ func (d *Deps) WSMijnTosti(w http.ResponseWriter, r *http.Request) {
 	d.Hub.ServeMijnTosti(conn, u.ID)
 }
 
-// notifyTostiMutation broadcasts kraam refresh and notifies the order owner (if non-zero).
+// notifyTostiMutation broadcasts kraam refresh, member queue refresh, and notifies the order owner (if non-zero).
 func (d *Deps) notifyTostiMutation(ownerUserID int64) {
 	if d.Hub == nil {
 		return
 	}
 	d.Hub.BroadcastKraam()
+	d.Hub.BroadcastMemberTostiQueue()
 	d.Hub.NotifyUserTostiOrders(ownerUserID)
 }
 

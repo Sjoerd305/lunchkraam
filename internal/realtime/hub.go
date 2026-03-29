@@ -10,6 +10,7 @@ import (
 var (
 	msgTostiQueue       = []byte(`{"t":"tosti_queue"}`)
 	msgMyTostiOrders    = []byte(`{"t":"my_tosti_orders"}`)
+	msgTostiPublicQueue = []byte(`{"t":"tosti_public_queue"}`)
 	msgPaymentRequests  = []byte(`{"t":"payment_requests"}`)
 )
 
@@ -22,13 +23,14 @@ const (
 
 // Hub fans out lightweight JSON events to WebSocket clients.
 type Hub struct {
-	registerKraam   chan *Client
-	unregisterKraam chan *Client
-	registerUser    chan userClientReg
-	unregisterUser  chan userClientReg
-	broadcastKraam           chan struct{}
-	broadcastPaymentRequests chan struct{}
-	notifyUserTosti          chan int64
+	registerKraam             chan *Client
+	unregisterKraam           chan *Client
+	registerUser              chan userClientReg
+	unregisterUser            chan userClientReg
+	broadcastKraam            chan struct{}
+	broadcastPaymentRequests  chan struct{}
+	broadcastMemberTostiQueue chan struct{}
+	notifyUserTosti           chan int64
 
 	mu    sync.Mutex
 	kraam map[*Client]struct{}
@@ -51,15 +53,16 @@ type Client struct {
 // NewHub starts the run loop in a goroutine.
 func NewHub() *Hub {
 	h := &Hub{
-		registerKraam:   make(chan *Client),
-		unregisterKraam: make(chan *Client),
-		registerUser:    make(chan userClientReg),
-		unregisterUser:  make(chan userClientReg),
-		broadcastKraam:           make(chan struct{}, 64),
-		broadcastPaymentRequests: make(chan struct{}, 64),
-		notifyUserTosti:          make(chan int64, 256),
-		kraam:                    make(map[*Client]struct{}),
-		users:                    make(map[int64]map[*Client]struct{}),
+		registerKraam:             make(chan *Client),
+		unregisterKraam:           make(chan *Client),
+		registerUser:              make(chan userClientReg),
+		unregisterUser:            make(chan userClientReg),
+		broadcastKraam:            make(chan struct{}, 64),
+		broadcastPaymentRequests:  make(chan struct{}, 64),
+		broadcastMemberTostiQueue: make(chan struct{}, 64),
+		notifyUserTosti:           make(chan int64, 256),
+		kraam:                     make(map[*Client]struct{}),
+		users:                     make(map[int64]map[*Client]struct{}),
 	}
 	go h.run()
 	return h
@@ -134,6 +137,18 @@ func (h *Hub) run() {
 				}
 			}
 			h.mu.Unlock()
+
+		case <-h.broadcastMemberTostiQueue:
+			h.mu.Lock()
+			for _, m := range h.users {
+				for c := range m {
+					select {
+					case c.send <- msgTostiPublicQueue:
+					default:
+					}
+				}
+			}
+			h.mu.Unlock()
 		}
 	}
 }
@@ -150,6 +165,14 @@ func (h *Hub) BroadcastKraam() {
 func (h *Hub) BroadcastKraamPaymentRequests() {
 	select {
 	case h.broadcastPaymentRequests <- struct{}{}:
+	default:
+	}
+}
+
+// BroadcastMemberTostiQueue signals all member WebSocket clients to refetch the public queue (non-blocking).
+func (h *Hub) BroadcastMemberTostiQueue() {
+	select {
+	case h.broadcastMemberTostiQueue <- struct{}{}:
 	default:
 	}
 }

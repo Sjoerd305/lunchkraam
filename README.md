@@ -9,7 +9,7 @@ Webapp voor tostikaarten (10 knipjes per kaart, 1 tosti = 1 knipje): leden logge
 ## Vereisten
 
 - **Go 1.25+** (in `go.mod` staat `toolchain go1.25.8`; oudere installs halen die toolchain zo nodig binnen)
-- **Node.js 20+** (frontend bouwen of `npm run dev`)
+- **Node.js 20+** (frontend bouwen of `npm run dev`; de Docker-build gebruikt **Node 22**, zie `Dockerfile`)
 - **Docker** (optioneel: Postgres of volledige stack)
 
 ## Lokaal (alleen Postgres in Docker)
@@ -29,7 +29,7 @@ Open `http://localhost:8080`. In Google Cloud Console moet de redirect-URI exact
 cd frontend && npm ci && npm run dev
 ```
 
-De dev-server proxy’t API en WebSockets naar de Go-backend (standaard `http://localhost:8080`); draai tegelijk `go run ./cmd/server`.
+De dev-server proxy’t `/api` en `/ws` naar de Go-backend op poort **8080** (`vite.config.ts` gebruikt `127.0.0.1`); draai tegelijk `go run ./cmd/server`.
 
 ## Alles in Docker
 
@@ -52,7 +52,7 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 ## Rollen
 
 - **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, betalingswachtrij).
-- **Operator (matroos)**: kraampagina (tosti-wachtrij, kaarten zoeken), betalingswachtrij accorderen/weigeren, en het menu **Betalingen** naar dezelfde wachtrij.
+- **Operator (matroos)**: kraampagina (tosti-wachtrij, kaarten zoeken), betalingswachtrij accorderen/weigeren, en het menu **Betalingen** naar dezelfde wachtrij. Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
 
 ## Milieuvariabelen
 

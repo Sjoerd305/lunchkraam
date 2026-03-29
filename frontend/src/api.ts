@@ -280,6 +280,19 @@ export type OperatorTostiOrderRow = TostiOrder & {
   customer_email: string
 }
 
+/** Pending order in global FIFO queue (member view; no e-mail). */
+export type TostiQueueEntry = {
+  place: number
+  id: number
+  card_id: number
+  quantity: number
+  bread: TostiBread
+  filling: TostiFilling
+  created_at: string
+  customer_name: string
+  is_mine: boolean
+}
+
 function parseTostiOrder(r: Record<string, unknown>): TostiOrder {
   const bread = r.bread === 'bruin' ? 'bruin' : 'wit'
   const fillingRaw = r.filling
@@ -305,6 +318,34 @@ function parseTostiOrder(r: Record<string, unknown>): TostiOrder {
     cancelled_by_user_id:
       typeof r.cancelled_by_user_id === 'number' ? jsonInt(r.cancelled_by_user_id) : undefined,
   }
+}
+
+function parseTostiQueueEntry(r: Record<string, unknown>): TostiQueueEntry {
+  const bread = r.bread === 'bruin' ? 'bruin' : 'wit'
+  const fillingRaw = r.filling
+  const filling: TostiFilling =
+    fillingRaw === 'kaas' ? 'kaas' : fillingRaw === 'ham_kaas' ? 'ham_kaas' : 'ham'
+  const q = jsonInt(r.quantity, 1)
+  return {
+    place: jsonInt(r.place, 0),
+    id: jsonInt(r.id, 0),
+    card_id: jsonInt(r.card_id, 0),
+    quantity: q >= 1 && q <= 10 ? q : 1,
+    bread,
+    filling,
+    created_at: typeof r.created_at === 'string' ? r.created_at : '',
+    customer_name: typeof r.customer_name === 'string' ? r.customer_name : '',
+    is_mine: Boolean(r.is_mine),
+  }
+}
+
+export async function getTostiQueue(): Promise<TostiQueueEntry[]> {
+  const res = await fetch('/api/tosti-orders/queue', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { orders?: unknown }
+  const raw = j.orders
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => parseTostiQueueEntry(row as Record<string, unknown>))
 }
 
 export async function getMyTostiOrders(): Promise<TostiOrder[]> {

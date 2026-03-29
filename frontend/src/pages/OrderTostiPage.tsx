@@ -29,6 +29,8 @@ export function OrderTostiPage() {
   const { alert, confirm } = useAlertDialog()
   const [cards, setCards] = useState<api.Card[]>([])
   const [orders, setOrders] = useState<api.TostiOrder[]>([])
+  const [queue, setQueue] = useState<api.TostiQueueEntry[]>([])
+  const [queueLoadError, setQueueLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [cardId, setCardId] = useState<number | ''>('')
@@ -42,6 +44,13 @@ export function OrderTostiPage() {
       const [cList, oList] = await Promise.all([api.getCards(), api.getMyTostiOrders()])
       setCards(cList)
       setOrders(oList)
+      try {
+        setQueue(await api.getTostiQueue())
+        setQueueLoadError(false)
+      } catch {
+        setQueue([])
+        setQueueLoadError(true)
+      }
       const usable = cList.filter((c) => freeKnipjesForCard(c, oList) > 0)
       setCardId((prev) => {
         if (prev !== '' && usable.some((c) => c.id === prev)) return prev
@@ -61,7 +70,11 @@ export function OrderTostiPage() {
 
   const onMineRealtime = useCallback(
     (reason: string) => {
-      if (reason === 'open' || reason === 'my_tosti_orders') {
+      if (
+        reason === 'open' ||
+        reason === 'my_tosti_orders' ||
+        reason === 'tosti_public_queue'
+      ) {
         void load()
         void refresh()
       }
@@ -69,7 +82,10 @@ export function OrderTostiPage() {
     [load, refresh],
   )
 
-  useTostiRealtime('/ws/mijn-tosti', !!user, onMineRealtime, ['my_tosti_orders'])
+  useTostiRealtime('/ws/mijn-tosti', !!user, onMineRealtime, [
+    'my_tosti_orders',
+    'tosti_public_queue',
+  ])
 
   const usableCards = useMemo(
     () => cards.filter((c) => freeKnipjesForCard(c, orders) > 0),
@@ -87,14 +103,16 @@ export function OrderTostiPage() {
     setQuantity((q) => Math.min(Math.max(1, q), maxQuantity))
   }, [maxQuantity, cardId])
 
-  const pendingOrders = useMemo(
-    () =>
-      orders
-        .filter((o) => o.status === 'pending')
-        .slice()
-        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [orders],
-  )
+  const queueHint = useMemo(() => {
+    const mine = queue.filter((e) => e.is_mine)
+    if (mine.length === 0 || queue.length === 0) return null
+    const places = mine.map((e) => e.place).sort((a, b) => a - b)
+    const total = queue.length
+    if (places.length === 1) {
+      return `Jouw bestelling staat op plek ${places[0]} van ${total}.`
+    }
+    return `Jouw ${places.length} bestellingen staan op plek ${places.join(', ')} (totaal ${total} in de wachtrij).`
+  }, [queue])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -171,36 +189,72 @@ export function OrderTostiPage() {
         </p>
       </div>
 
-      {pendingOrders.length > 0 ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50/90 p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-amber-950">Openstaande bestellingen</h2>
-          <ul className="mt-4 space-y-4">
-            {pendingOrders.map((p) => (
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Wachtrij</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Alle openstaande bestellingen, in dezelfde volgorde als op de kraam (oudste eerst). Het nummer is je plek in
+          de rij.
+        </p>
+        {queueHint ? (
+          <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-900">{queueHint}</p>
+        ) : null}
+        {queueLoadError ? (
+          <p className="mt-4 text-amber-800">
+            De wachtrij kon niet worden geladen. Vernieuw de pagina of probeer het later opnieuw.
+          </p>
+        ) : queue.length === 0 ? (
+          <p className="mt-4 text-slate-600">Er staan nu geen bestellingen in de wachtrij.</p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {queue.map((row) => (
               <li
-                key={p.id}
-                className="flex flex-col gap-2 border-b border-amber-200/80 pb-4 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                key={row.id}
+                className={`flex flex-col gap-2 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
+                  row.is_mine
+                    ? 'border-brand-300 bg-brand-50/60'
+                    : 'border-slate-200 bg-slate-50/80'
+                }`}
               >
-                <div>
-                  <p className="text-amber-950">
-                    {p.quantity > 1 ? `${p.quantity}× ` : ''}
-                    {breadLabel(p.bread)}, {fillingLabel(p.filling)} — kaart #{p.card_id}
-                  </p>
-                  <p className="text-sm text-amber-800/90">
-                    Geplaatst {new Date(p.created_at).toLocaleString('nl-NL')}
-                  </p>
+                <div className="flex min-w-0 flex-1 gap-3 sm:items-center">
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-800"
+                    title="Plek in de wachtrij"
+                  >
+                    {row.place}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-900">
+                      <span className="text-slate-600">{row.customer_name}</span>
+                      {row.is_mine ? (
+                        <span className="ml-2 rounded-md bg-brand-700 px-1.5 py-0.5 text-xs font-semibold text-white">
+                          Jij
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-sm text-slate-700">
+                      {row.quantity > 1 ? `${row.quantity}× ` : ''}
+                      {breadLabel(row.bread)}, {fillingLabel(row.filling)}
+                      <span className="text-slate-500"> · kaart #{row.card_id}</span>
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Geplaatst {new Date(row.created_at).toLocaleString('nl-NL')}
+                    </p>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void onCancelPending(p.id)}
-                  className="shrink-0 rounded-xl border border-amber-700/40 bg-white px-4 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100/80"
-                >
-                  Annuleren
-                </button>
+                {row.is_mine ? (
+                  <button
+                    type="button"
+                    onClick={() => void onCancelPending(row.id)}
+                    className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+                  >
+                    Annuleren
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
-        </section>
-      ) : null}
+        )}
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-md">
         <h2 className="text-lg font-semibold text-slate-900">Nieuwe bestelling</h2>
@@ -230,27 +284,48 @@ export function OrderTostiPage() {
                 })}
               </select>
             </label>
-            <label className="block text-sm">
-              <span className="font-medium text-slate-700">Aantal tosti&apos;s</span>
-              <input
-                type="number"
-                min={maxQuantity > 0 ? 1 : 0}
-                max={maxQuantity > 0 ? maxQuantity : 0}
-                value={quantity}
-                disabled={maxQuantity < 1}
-                onChange={(e) => {
-                  const n = Number(e.target.value)
-                  if (!Number.isFinite(n)) return
-                  setQuantity(Math.min(Math.max(1, Math.trunc(n)), Math.max(1, maxQuantity)))
-                }}
-                className="mt-1 w-full max-w-[8rem] rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:opacity-50"
-              />
-              <span className="mt-1 block text-xs text-slate-500">
+            <div className="block text-sm">
+              <span className="font-medium text-slate-700" id="tosti-qty-label">
+                Aantal tosti&apos;s
+              </span>
+              <div
+                className="mt-2 flex max-w-xs items-center gap-2"
+                role="group"
+                aria-labelledby="tosti-qty-label"
+              >
+                <button
+                  type="button"
+                  className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Eén tosti minder"
+                  disabled={maxQuantity < 1 || quantity <= 1}
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                >
+                  −
+                </button>
+                <div
+                  className="min-w-[3rem] flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-center text-lg font-semibold tabular-nums text-slate-900"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {maxQuantity < 1 ? '—' : quantity}
+                </div>
+                <button
+                  type="button"
+                  className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Eén tosti meer"
+                  disabled={maxQuantity < 1 || quantity >= maxQuantity}
+                  onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+                >
+                  +
+                </button>
+              </div>
+              <span className="mt-2 block text-xs text-slate-500">
                 {maxQuantity < 1
                   ? 'Geen vrije knipjes op deze kaart.'
-                  : `Maximaal ${maxQuantity} (vrije knipjes op deze kaart).`}
+                  : `Gebruik de knoppen om het aantal te kiezen (max. ${maxQuantity}, vrije knipjes op deze kaart).`}
               </span>
-            </label>
+            </div>
             <fieldset>
               <legend className="text-sm font-medium text-slate-700">Brood</legend>
               <div className="mt-2 flex flex-wrap gap-4">

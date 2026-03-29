@@ -34,6 +34,19 @@ type tostiOrderOperatorJSON struct {
 	CustomerEmail string `json:"customer_email"`
 }
 
+// tostiQueueEntryJSON is a pending order in FIFO order for members (no e-mail).
+type tostiQueueEntryJSON struct {
+	Place        int    `json:"place"`
+	ID           int64  `json:"id"`
+	CardID       int64  `json:"card_id"`
+	Quantity     int    `json:"quantity"`
+	Bread        string `json:"bread"`
+	Filling      string `json:"filling"`
+	CreatedAt    string `json:"created_at"`
+	CustomerName string `json:"customer_name"`
+	IsMine       bool   `json:"is_mine"`
+}
+
 func tostiOrderToJSON(o store.TostiOrder) tostiOrderJSON {
 	j := tostiOrderJSON{
 		ID:                o.ID,
@@ -56,6 +69,30 @@ func tostiOrderToJSON(o store.TostiOrder) tostiOrderJSON {
 		j.CancelledAt = &s
 	}
 	return j
+}
+
+func (d *Deps) APITostiOrdersQueue(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	list, err := d.Store.ListPendingTostiOrdersForOperator(r.Context(), 200)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Wachtrij laden mislukt.")
+		return
+	}
+	out := make([]tostiQueueEntryJSON, 0, len(list))
+	for i, row := range list {
+		out = append(out, tostiQueueEntryJSON{
+			Place:        i + 1,
+			ID:           row.ID,
+			CardID:       row.CardID,
+			Quantity:     row.Quantity,
+			Bread:        row.Bread,
+			Filling:      row.Filling,
+			CreatedAt:    row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			CustomerName: row.CustomerName,
+			IsMine:       row.UserID == u.ID,
+		})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"orders": out})
 }
 
 func (d *Deps) APITostiOrdersMine(w http.ResponseWriter, r *http.Request) {
