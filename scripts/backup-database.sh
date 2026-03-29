@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Maakt een gecomprimeerde SQL-dump van de Postgres-database uit docker-compose.
+# Terugzetten: scripts/restore-database.sh backups/tostikaart-....sql.gz
 # Vereist: draaiende stack (minstens postgres).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
