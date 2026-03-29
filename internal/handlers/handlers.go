@@ -13,6 +13,7 @@ import (
 	"tostikaart/internal/auth"
 	"tostikaart/internal/config"
 	"tostikaart/internal/middleware"
+	"tostikaart/internal/realtime"
 	"tostikaart/internal/store"
 )
 
@@ -20,6 +21,7 @@ type Deps struct {
 	Config *config.Config
 	Store  *store.Store
 	OAuth  *oauth2.Config
+	Hub    *realtime.Hub
 }
 
 func (d *Deps) GoogleStart(w http.ResponseWriter, r *http.Request) {

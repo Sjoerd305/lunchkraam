@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import * as api from '../api'
 import { useAuth } from '../AuthContext'
 import { useAlertDialog } from '../components/AlertDialogProvider'
+import { useTostiRealtime } from '../useTostiRealtime'
 
 function breadLabel(b: api.TostiBread): string {
   return b === 'bruin' ? 'Bruin brood' : 'Wit brood'
@@ -24,7 +25,7 @@ function freeKnipjesForCard(card: api.Card, orders: api.TostiOrder[]): number {
 }
 
 export function OrderTostiPage() {
-  const { csrf, refresh } = useAuth()
+  const { csrf, refresh, user } = useAuth()
   const { alert, confirm } = useAlertDialog()
   const [cards, setCards] = useState<api.Card[]>([])
   const [orders, setOrders] = useState<api.TostiOrder[]>([])
@@ -57,6 +58,13 @@ export function OrderTostiPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  const onMineRealtime = useCallback(() => {
+    void load()
+    void refresh()
+  }, [load, refresh])
+
+  useTostiRealtime('/ws/mijn-tosti', !!user, onMineRealtime, ['my_tosti_orders'])
 
   const usableCards = useMemo(
     () => cards.filter((c) => freeKnipjesForCard(c, orders) > 0),

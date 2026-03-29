@@ -112,6 +112,7 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	d.notifyTostiMutation(o.UserID)
 	httpx.JSON(w, http.StatusOK, map[string]any{"order": tostiOrderToJSON(*o)})
 }
 
@@ -137,6 +138,7 @@ func (d *Deps) APITostiOrderCancel(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	d.notifyTostiMutation(u.ID)
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -165,6 +167,15 @@ func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Reque
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige bestelling.")
 		return
 	}
+	ownerID, err := d.Store.TostiOrderOwnerID(r.Context(), oid)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
+			return
+		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestelling laden mislukt.")
+		return
+	}
 	err = d.Store.DeliverTostiOrder(r.Context(), oid, u.ID)
 	if err != nil {
 		switch {
@@ -182,6 +193,7 @@ func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Reque
 		}
 		return
 	}
+	d.notifyTostiMutation(ownerID)
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -191,6 +203,15 @@ func (d *Deps) APIOperatorTostiOrderCancel(w http.ResponseWriter, r *http.Reques
 	oid, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige bestelling.")
+		return
+	}
+	ownerID, err := d.Store.TostiOrderOwnerID(r.Context(), oid)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
+			return
+		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestelling laden mislukt.")
 		return
 	}
 	err = d.Store.CancelTostiOrder(r.Context(), oid, u.ID, true)
@@ -205,5 +226,6 @@ func (d *Deps) APIOperatorTostiOrderCancel(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
+	d.notifyTostiMutation(ownerID)
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

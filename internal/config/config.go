@@ -22,8 +22,11 @@ type Config struct {
 	BankTransferInstructions string
 	BootstrapAdminEmails     map[string]struct{}
 	SecureCookies            bool
-	CsrfAuthKey              [32]byte
-	FrontendDist             string
+	// TrustProxyHeaders: trust X-Forwarded-Proto from the edge (cloudflared, etc.).
+	// Enables Secure cookies and forwarded-HTTPS handling even when the origin listens on HTTP.
+	TrustProxyHeaders bool
+	CsrfAuthKey       [32]byte
+	FrontendDist      string
 }
 
 func Load() (*Config, error) {
@@ -52,6 +55,13 @@ func Load() (*Config, error) {
 
 	secure := false
 	if v := strings.TrimSpace(strings.ToLower(os.Getenv("COOKIE_SECURE"))); v == "1" || v == "true" || v == "yes" {
+		secure = true
+	}
+	trustProxy := false
+	if v := strings.TrimSpace(strings.ToLower(os.Getenv("TRUST_PROXY_HEADERS"))); v == "1" || v == "true" || v == "yes" {
+		trustProxy = true
+	}
+	if trustProxy {
 		secure = true
 	}
 
@@ -90,6 +100,7 @@ func Load() (*Config, error) {
 		BankTransferInstructions: os.Getenv("BANK_TRANSFER_INSTRUCTIONS"),
 		BootstrapAdminEmails:     parseEmailSet(os.Getenv("BOOTSTRAP_ADMIN_EMAILS")),
 		SecureCookies:            secure,
+		TrustProxyHeaders:        trustProxy,
 		CsrfAuthKey:              csrfKey,
 		FrontendDist:             frontendDist,
 	}

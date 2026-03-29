@@ -126,6 +126,16 @@ RETURNING id, user_id, card_id, bread::text, filling::text, status::text, create
 	return &o, nil
 }
 
+// TostiOrderOwnerID returns the member user_id for an order row (any status).
+func (s *Store) TostiOrderOwnerID(ctx context.Context, orderID int64) (int64, error) {
+	var uid int64
+	err := s.pool.QueryRow(ctx, `SELECT user_id FROM tosti_orders WHERE id = $1`, orderID).Scan(&uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return uid, err
+}
+
 // ListTostiOrdersForUser returns recent orders for the user (newest first), capped at limit.
 func (s *Store) ListTostiOrdersForUser(ctx context.Context, userID int64, limit int) ([]TostiOrder, error) {
 	if limit <= 0 {

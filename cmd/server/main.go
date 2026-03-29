@@ -22,6 +22,7 @@ import (
 	"tostikaart/internal/db"
 	"tostikaart/internal/handlers"
 	apimw "tostikaart/internal/middleware"
+	"tostikaart/internal/realtime"
 	"tostikaart/internal/store"
 )
 
@@ -53,106 +54,120 @@ func main() {
 
 	st := store.New(pool)
 	oauthCfg := auth.NewGoogleOAuth(cfg)
+	hub := realtime.NewHub()
 	h := &handlers.Deps{
 		Config: cfg,
 		Store:  st,
 		OAuth:  oauthCfg,
+		Hub:    hub,
 	}
 
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
+	r.Use(apimw.RedirectHTTPToHTTPS(cfg.TrustProxyHeaders, cfg.PublicBaseURL))
+	r.Use(apimw.TrustForwardedHTTPS(cfg.TrustProxyHeaders))
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
-	r.Use(chimw.Timeout(60 * time.Second))
-
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("ok"))
-	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(apimw.Session(sessionStore))
 		r.Use(apimw.OptionalUser(st))
-
-		r.Group(func(r chi.Router) {
-			r.Use(httprate.Limit(60, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP)))
-			r.Get("/auth/google", h.GoogleStart)
-			r.Get("/auth/google/callback", h.GoogleCallback)
-		})
-
-		r.Route("/api", func(r chi.Router) {
-			r.Use(csrf.Protect(
-				cfg.CsrfAuthKey[:],
-				csrf.Secure(cfg.SecureCookies),
-				csrf.Path("/"),
-				csrf.SameSite(csrf.SameSiteLaxMode),
-				csrf.RequestHeader("X-CSRF-Token"),
-			))
-			r.Get("/me", h.APIMe)
-			r.Post("/logout", h.APILogout)
-
-			r.Group(func(r chi.Router) {
-				r.Use(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP)))
-				r.Post("/auth/local/login", h.APILocalLogin)
-			})
-
-			r.Group(func(r chi.Router) {
-				r.Use(apimw.RequireUserAPI(st))
-				r.Use(apimw.RequireOperatorOrAdminAPI())
-				r.Get("/operator/cards", h.APIOperatorCards)
-				r.Get("/operator/tosti-orders", h.APIOperatorTostiOrders)
-				r.Post("/operator/tosti-orders/{id}/deliver", h.APIOperatorTostiOrderDeliver)
-				r.Post("/operator/tosti-orders/{id}/cancel", h.APIOperatorTostiOrderCancel)
-			})
-
-			r.Group(func(r chi.Router) {
-				r.Use(apimw.RequireUserAPI(st))
-				r.Get("/tosti-orders/mine", h.APITostiOrdersMine)
-				r.With(httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/tosti-orders", h.APITostiOrderCreate)
-				r.Post("/tosti-orders/{id}/cancel", h.APITostiOrderCancel)
-				r.Get("/cards", h.APICards)
-				r.Post("/cards/{id}/use", h.APICardUse)
-				r.Get("/buy", h.APIBuy)
-				r.With(httprate.Limit(5, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/buy/request", h.APIBuyRequest)
-				r.Post("/buy/requests/{id}/cancel", h.APICancelMyRequest)
-				r.Post("/buy/cancel-all-pending", h.APICancelAllMyPending)
-			})
-
-			r.Group(func(r chi.Router) {
-				r.Use(apimw.RequireUserAPI(st))
-				r.Use(apimw.RequireAdminAPI())
-				r.Get("/admin/dashboard", h.APIAdminDashboard)
-				r.Get("/admin/sales-years", h.APIAdminSalesYears)
-				r.Get("/admin/sales-stats", h.APIAdminSalesStats)
-				r.Get("/admin/requests", h.APIAdminRequests)
-				r.Post("/admin/requests/{id}/fulfill", h.APIAdminFulfill)
-				r.Post("/admin/requests/{id}/reject", h.APIAdminReject)
-				r.Get("/admin/users", h.APIAdminUsers)
-				r.Post("/admin/users/local", h.APIAdminCreateLocalUser)
-				r.Patch("/admin/users/{id}/local", h.APIAdminPatchLocalUser)
-			})
-		})
+		r.Get("/ws/kraam", h.WSKraam)
+		r.Get("/ws/mijn-tosti", h.WSMijnTosti)
 	})
 
-	dist := cfg.FrontendDist
-	if fi, err := os.Stat(dist); err == nil && fi.IsDir() {
-		assetsDir := filepath.Join(dist, "assets")
-		if _, err := os.Stat(assetsDir); err == nil {
-			r.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir(assetsDir))))
+	r.Group(func(r chi.Router) {
+		r.Use(chimw.Timeout(60 * time.Second))
+
+		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("ok"))
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(apimw.Session(sessionStore))
+			r.Use(apimw.OptionalUser(st))
+
+			r.Group(func(r chi.Router) {
+				r.Use(httprate.Limit(60, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP)))
+				r.Get("/auth/google", h.GoogleStart)
+				r.Get("/auth/google/callback", h.GoogleCallback)
+			})
+
+			r.Route("/api", func(r chi.Router) {
+				r.Use(csrf.Protect(
+					cfg.CsrfAuthKey[:],
+					csrf.Secure(cfg.SecureCookies),
+					csrf.Path("/"),
+					csrf.SameSite(csrf.SameSiteLaxMode),
+					csrf.RequestHeader("X-CSRF-Token"),
+				))
+				r.Get("/me", h.APIMe)
+				r.Post("/logout", h.APILogout)
+
+				r.Group(func(r chi.Router) {
+					r.Use(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP)))
+					r.Post("/auth/local/login", h.APILocalLogin)
+				})
+
+				r.Group(func(r chi.Router) {
+					r.Use(apimw.RequireUserAPI(st))
+					r.Use(apimw.RequireOperatorOrAdminAPI())
+					r.Get("/operator/cards", h.APIOperatorCards)
+					r.Get("/operator/tosti-orders", h.APIOperatorTostiOrders)
+					r.Post("/operator/tosti-orders/{id}/deliver", h.APIOperatorTostiOrderDeliver)
+					r.Post("/operator/tosti-orders/{id}/cancel", h.APIOperatorTostiOrderCancel)
+				})
+
+				r.Group(func(r chi.Router) {
+					r.Use(apimw.RequireUserAPI(st))
+					r.Get("/tosti-orders/mine", h.APITostiOrdersMine)
+					r.With(httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/tosti-orders", h.APITostiOrderCreate)
+					r.Post("/tosti-orders/{id}/cancel", h.APITostiOrderCancel)
+					r.Get("/cards", h.APICards)
+					r.Post("/cards/{id}/use", h.APICardUse)
+					r.Get("/buy", h.APIBuy)
+					r.With(httprate.Limit(5, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/buy/request", h.APIBuyRequest)
+					r.Post("/buy/requests/{id}/cancel", h.APICancelMyRequest)
+					r.Post("/buy/cancel-all-pending", h.APICancelAllMyPending)
+				})
+
+				r.Group(func(r chi.Router) {
+					r.Use(apimw.RequireUserAPI(st))
+					r.Use(apimw.RequireAdminAPI())
+					r.Get("/admin/dashboard", h.APIAdminDashboard)
+					r.Get("/admin/sales-years", h.APIAdminSalesYears)
+					r.Get("/admin/sales-stats", h.APIAdminSalesStats)
+					r.Get("/admin/requests", h.APIAdminRequests)
+					r.Post("/admin/requests/{id}/fulfill", h.APIAdminFulfill)
+					r.Post("/admin/requests/{id}/reject", h.APIAdminReject)
+					r.Get("/admin/users", h.APIAdminUsers)
+					r.Post("/admin/users/local", h.APIAdminCreateLocalUser)
+					r.Patch("/admin/users/{id}/local", h.APIAdminPatchLocalUser)
+				})
+			})
+		})
+
+		dist := cfg.FrontendDist
+		if fi, err := os.Stat(dist); err == nil && fi.IsDir() {
+			assetsDir := filepath.Join(dist, "assets")
+			if _, err := os.Stat(assetsDir); err == nil {
+				r.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir(assetsDir))))
+			}
+			r.Get("/*", spaFallback(dist))
+			log.Printf("serving SPA from %s", dist)
+		} else {
+			log.Printf("warning: frontend dist not found at %s (use Vite dev server + proxy, or run npm run build)", dist)
 		}
-		r.Get("/*", spaFallback(dist))
-		log.Printf("serving SPA from %s", dist)
-	} else {
-		log.Printf("warning: frontend dist not found at %s (use Vite dev server + proxy, or run npm run build)", dist)
-	}
+	})
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		ReadTimeout:       0,
+		WriteTimeout:      0,
 		IdleTimeout:       120 * time.Second,
 	}
 

@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../AuthContext'
 import { useAlertDialog } from '../components/AlertDialogProvider'
+import { useTostiRealtime } from '../useTostiRealtime'
 
 function breadLabel(b: api.TostiBread): string {
   return b === 'bruin' ? 'Bruin' : 'Wit'
@@ -61,6 +62,18 @@ export function KraamPage() {
     const t = window.setTimeout(() => void load(), 300)
     return () => window.clearTimeout(t)
   }, [load])
+
+  const onKraamRealtime = useCallback(() => {
+    void loadOrders()
+    void load()
+  }, [loadOrders, load])
+
+  useTostiRealtime(
+    '/ws/kraam',
+    Boolean(user && (user.is_admin || user.is_operator)),
+    onKraamRealtime,
+    ['tosti_queue'],
+  )
 
   if (!user) {
     return <Navigate to="/login" replace />
