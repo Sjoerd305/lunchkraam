@@ -8,10 +8,11 @@
 # Voorbeeld cron (één regel vervangt aparte backup + upload):
 #   15 3 * * * /home/sjoerd/lunchkraam/scripts/upload-backups-to-drive.sh
 #
-# Omgeving (optioneel):
-#   RCLONE_DEST=maasgroep18:lunchkraam-backups
-#   REMOTE_BACKUP_KEEP=30
-#   RCLONE_EXTRA_FLAGS='--bwlimit 10M'
+# Configuratie in repo-root .env ($ROOT/.env), o.a. RCLONE_DEST (verplicht).
+# Waarden met spaties horen tussen enkele aanhalingstekens, bv.:
+#   RCLONE_EXTRA_FLAGS='--transfers=1 --checkers=1 --stats=1s --log-level INFO'
+# Retentie: REMOTE_BACKUP_KEEP of RCLONE_BACKUP_KEEP (default 30).
+# Al geëxporteerde RCLONE_DEST vóór aanroep gaat vóór .env.
 #
 # Alleen een lokale dump (geen upload): scripts/backup-database.sh
 set -euo pipefail
@@ -19,11 +20,28 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-RCLONE_DEST="${RCLONE_DEST:-maasgroep18:lunchkraam-backups}"
-REMOTE_BACKUP_KEEP="${REMOTE_BACKUP_KEEP:-30}"
+ENV_FILE="$ROOT/.env"
+if [ -n "${RCLONE_DEST+x}" ]; then
+  _rclone_from_env=1
+  _rclone_override="$RCLONE_DEST"
+else
+  _rclone_from_env=0
+fi
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$ENV_FILE"
+  set +a
+fi
+if [ "$_rclone_from_env" = 1 ]; then
+  RCLONE_DEST="$_rclone_override"
+fi
+unset _rclone_from_env _rclone_override
 
-if [[ -z "$RCLONE_DEST" ]]; then
-  echo "Zet RCLONE_DEST (bijv. maasgroep18:lunchkraam-backups)." >&2
+REMOTE_BACKUP_KEEP="${REMOTE_BACKUP_KEEP:-${RCLONE_BACKUP_KEEP:-30}}"
+
+if [[ -z "${RCLONE_DEST:-}" ]]; then
+  echo "Zet RCLONE_DEST in ${ENV_FILE} of exporteer het vóór dit script." >&2
   exit 1
 fi
 
