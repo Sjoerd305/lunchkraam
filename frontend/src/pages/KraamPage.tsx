@@ -23,6 +23,22 @@ function localISODate(d: Date = new Date()): string {
   return `${y}-${m}-${day}`
 }
 
+function isPhysicalTostiOrder(o: api.OperatorTostiOrderRow): boolean {
+  return o.card_id === null
+}
+
+function formatAmsterdamDateLong(yyyyMMdd: string): string {
+  const p = yyyyMMdd.split('-').map(Number)
+  if (p.length !== 3 || p.some((n) => !Number.isFinite(n))) return yyyyMMdd
+  const [y, m, d] = p
+  return new Date(y, m - 1, d).toLocaleDateString('nl-NL', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 export function KraamPage() {
   const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
@@ -42,6 +58,8 @@ export function KraamPage() {
   const [avondetenLoading, setAvondetenLoading] = useState(true)
   const [avondetenPicked, setAvondetenPicked] = useState<number[]>([])
   const [avondetenSubmitting, setAvondetenSubmitting] = useState(false)
+  const [soldToday, setSoldToday] = useState<api.OperatorTostiSoldToday | null>(null)
+  const [soldTodayLoading, setSoldTodayLoading] = useState(true)
 
   const loadPayments = useCallback(async () => {
     setPaymentLoading(true)
@@ -72,6 +90,18 @@ export function KraamPage() {
       setLoadingOrders(false)
     }
   }, [alert])
+
+  const loadSoldToday = useCallback(async () => {
+    setSoldTodayLoading(true)
+    try {
+      const r = await api.getOperatorTostiSoldToday()
+      setSoldToday(r)
+    } catch {
+      setSoldToday(null)
+    } finally {
+      setSoldTodayLoading(false)
+    }
+  }, [])
 
   const loadAvondeten = useCallback(async () => {
     setAvondetenLoading(true)
@@ -111,6 +141,10 @@ export function KraamPage() {
   }, [loadOrders])
 
   useEffect(() => {
+    void loadSoldToday()
+  }, [loadSoldToday])
+
+  useEffect(() => {
     void loadPayments()
   }, [loadPayments])
 
@@ -123,6 +157,7 @@ export function KraamPage() {
     (reason: string) => {
       if (reason === 'open') {
         void loadOrders()
+        void loadSoldToday()
         void load()
         void loadPayments()
         void loadAvondeten()
@@ -130,6 +165,7 @@ export function KraamPage() {
       }
       if (reason === 'tosti_queue') {
         void loadOrders()
+        void loadSoldToday()
         void load()
         void loadAvondeten()
         return
@@ -138,7 +174,7 @@ export function KraamPage() {
         void loadPayments()
       }
     },
-    [loadOrders, load, loadPayments, loadAvondeten],
+    [loadOrders, loadSoldToday, load, loadPayments, loadAvondeten],
   )
 
   useTostiRealtime(
@@ -156,7 +192,7 @@ export function KraamPage() {
   }
 
   async function refreshAll() {
-    await Promise.all([loadOrders(), loadPayments(), load(), loadAvondeten()])
+    await Promise.all([loadOrders(), loadSoldToday(), loadPayments(), load(), loadAvondeten()])
   }
 
   function toggleAvondetenPick(cardId: number) {
@@ -203,8 +239,8 @@ export function KraamPage() {
   async function onPaymentFulfill(id: number, knipjesRemaining: number) {
     const msg =
       knipjesRemaining === 10
-        ? 'Betalingscontrole afronden? Het lid heeft de kaart al met 10 knipjes; tijdens de verkoop hoef je nu niets extra’s te doen.'
-        : `Betalingscontrole afronden? Op de kaart staan nog ${knipjesRemaining} knipje(s); het lid kon die al gebruiken.`
+        ? 'Accorderen? Op de kaart staan nog 10 knipjes.'
+        : `Accorderen? Op de kaart staan nog ${knipjesRemaining} knipje(s).`
     const ok = await confirm({
       title: 'Betaling accorderen?',
       message: msg,
@@ -234,8 +270,7 @@ export function KraamPage() {
   async function onPaymentReject(id: number) {
     const ok = await confirm({
       title: 'Aanvraag weigeren?',
-      message:
-        'Geen betaling ontvangen? De voorlopige kaart wordt verwijderd. Het lid kan later opnieuw een kaart aanvragen.',
+      message: 'De voorlopige kaart wordt verwijderd.',
       confirmLabel: 'Ja, weigeren',
       cancelLabel: 'Terug',
       tone: 'danger',
@@ -286,10 +321,14 @@ export function KraamPage() {
   async function onDeliverOrder(o: api.OperatorTostiOrderRow) {
     const q = o.quantity
     const qtyPrefix = q > 1 ? `${q}× ` : ''
+    const physical = isPhysicalTostiOrder(o)
     const knipjeTxt = q === 1 ? '1 knipje wordt' : `${q} knipjes worden`
+    const confirmMessage = physical
+      ? `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${q === 1 ? '1 streepje' : `${q} streepjes`} op de kaart.`
+      : `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — ${knipjeTxt} afgetrokken van kaart #${o.card_id}.`
     const ok = await confirm({
       title: 'Als geleverd markeren?',
-      message: `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — ${knipjeTxt} afgetrokken van kaart #${o.card_id}.`,
+      message: confirmMessage,
       confirmLabel: 'Ja, geleverd',
       cancelLabel: 'Annuleren',
       tone: 'brand',
@@ -302,7 +341,13 @@ export function KraamPage() {
       await refresh()
       await alert({
         title: 'Geleverd',
-        message: q === 1 ? 'Het knipje is afgetrokken.' : `De ${q} knipjes zijn afgetrokken.`,
+        message: physical
+          ? q === 1
+            ? 'Knip 1 streepje op de fysieke kaart.'
+            : `Knip ${q} streepjes op de fysieke kaart.`
+          : q === 1
+            ? 'Het knipje is afgetrokken.'
+            : `De ${q} knipjes zijn afgetrokken.`,
         variant: 'success',
       })
     } catch (e) {
@@ -316,7 +361,7 @@ export function KraamPage() {
   async function onCancelOrder(o: api.OperatorTostiOrderRow) {
     const ok = await confirm({
       title: 'Bestelling annuleren?',
-      message: `Bestelling van ${o.customer_name} wordt geannuleerd (geen knipjes kwijt).`,
+      message: `Bestelling van ${o.customer_name} annuleren?`,
       confirmLabel: 'Annuleren',
       cancelLabel: 'Terug',
       tone: 'brand',
@@ -340,19 +385,38 @@ export function KraamPage() {
 
   return (
     <div className="space-y-10">
-      <h1 className="text-2xl font-bold text-slate-900">Lunchkraam</h1>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
+        <h1 className="text-2xl font-bold text-slate-900 lg:shrink-0">Lunchkraam</h1>
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm lg:max-w-md lg:shrink-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Verkocht vandaag</p>
+          {soldTodayLoading ? (
+            <p className="mt-2 text-sm text-slate-600">Laden…</p>
+          ) : soldToday ? (
+            <>
+              <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">{soldToday.quantity}</p>
+              <p className="mt-1 text-sm text-slate-700">
+                {soldToday.quantity === 1 ? 'tosti geleverd' : 'tosti’s geleverd'}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">{formatAmsterdamDateLong(soldToday.amsterdam_date)}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-amber-800">Kon het totaal niet laden. Vernieuw de pagina.</p>
+          )}
+        </div>
+      </div>
 
       <section className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Tosti-bestellingen</h2>
             <p className="text-sm text-slate-600">
-              Markeer als geleverd om het aantal knipjes (1 per tosti) automatisch af te boeken op de gekozen kaart.
+              Bij een digitale kaart worden knipjes bij leveren afgeboekt. Bij een fysieke kaart streepjes knippen op de
+              kaart.
             </p>
           </div>
           <button
             type="button"
-            onClick={() => void loadOrders()}
+            onClick={() => void Promise.all([loadOrders(), loadSoldToday()])}
             className="min-h-10 shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
           >
             Wachtrij vernieuwen
@@ -366,13 +430,26 @@ export function KraamPage() {
           </p>
         ) : (
           <ul className="space-y-3">
-            {orders.map((o) => (
+            {orders.map((o) => {
+              const physical = isPhysicalTostiOrder(o)
+              return (
               <li
                 key={o.id}
-                className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-md sm:flex-row sm:items-center sm:justify-between"
+                className={`flex flex-col gap-3 rounded-2xl border p-4 shadow-md sm:flex-row sm:items-center sm:justify-between ${
+                  physical
+                    ? 'border-amber-300/90 bg-amber-50/50'
+                    : 'border-slate-200 bg-white'
+                }`}
               >
                 <div>
-                  <p className="font-semibold text-slate-900">{o.customer_name}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
+                    {o.customer_name}
+                    {physical ? (
+                      <span className="rounded-md bg-amber-700 px-2 py-0.5 text-xs font-semibold text-white">
+                        Fysieke kaart
+                      </span>
+                    ) : null}
+                  </p>
                   <p className="text-sm text-slate-600">{o.customer_email}</p>
                   <p className="mt-1 text-slate-800">
                     <strong>
@@ -386,7 +463,9 @@ export function KraamPage() {
                     ) : null}
                   </p>
                   <p className="text-xs text-slate-500">
-                    Kaart #{o.card_id} · {new Date(o.created_at).toLocaleString('nl-NL')}
+                    {physical
+                      ? new Date(o.created_at).toLocaleString('nl-NL')
+                      : `Kaart #${o.card_id} · ${new Date(o.created_at).toLocaleString('nl-NL')}`}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -408,7 +487,8 @@ export function KraamPage() {
                   </button>
                 </div>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
       </section>
@@ -418,8 +498,7 @@ export function KraamPage() {
           <div>
             <h2 className="text-lg font-semibold text-amber-950">Betalingen in de wachtrij</h2>
             <p className="text-sm text-amber-900/85">
-              Openstaande betalingen voor nieuwe kaarten. Accordeer zodra het geld binnen is. Weiger alleen als er
-              nog geen knipje van die kaart is gebruikt.
+              Accordeer als betaald. Weigeren kan alleen zolang er nog geen knipje is gebruikt.
             </p>
           </div>
           <button
@@ -456,10 +535,7 @@ export function KraamPage() {
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Kaarten & handmatig knipje</h2>
-        <p className="text-slate-600">
-          Zoek op <strong>kaartnummer</strong>, <strong>naam</strong> of <strong>e-mail</strong>. Handmatig knipje
-          alleen voor tostikaarten.
-        </p>
+        <p className="text-slate-600">Zoek op kaartnummer, naam of e-mail. Alleen tostikaarten: handmatig knipje.</p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <input
             type="search"

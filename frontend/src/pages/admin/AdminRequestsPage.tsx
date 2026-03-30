@@ -52,8 +52,8 @@ export function AdminRequestsPage() {
   async function onFulfill(id: number, knipjesRemaining: number) {
     const msg =
       knipjesRemaining === 10
-        ? 'Betalingscontrole afronden? Het lid heeft de kaart al met 10 knipjes; tijdens de verkoop hoef je nu niets extra’s te doen.'
-        : `Betalingscontrole afronden? Op de kaart staan nog ${knipjesRemaining} knipje(s); het lid kon die al gebruiken.`
+        ? 'Accorderen? Op de kaart staan nog 10 knipjes.'
+        : `Accorderen? Op de kaart staan nog ${knipjesRemaining} knipje(s).`
     const ok = await confirm({
       title: 'Betaling accorderen?',
       message: msg,
@@ -68,8 +68,7 @@ export function AdminRequestsPage() {
       await load()
       await alert({
         title: 'Geaccordeerd',
-        message:
-          'De aanvraag is uit de wachtrij gehaald. De kaart bleef gewoon bruikbaar voor het lid.',
+        message: 'De aanvraag is uit de wachtrij gehaald.',
         variant: 'success',
       })
     } catch (e) {
@@ -83,8 +82,7 @@ export function AdminRequestsPage() {
   async function onReject(id: number) {
     const ok = await confirm({
       title: 'Aanvraag weigeren?',
-      message:
-        'Geen betaling ontvangen? De voorlopige kaart wordt verwijderd. Het lid kan later opnieuw een kaart aanvragen.',
+      message: 'De voorlopige kaart wordt verwijderd.',
       confirmLabel: 'Ja, weigeren',
       cancelLabel: 'Terug',
       tone: 'danger',
@@ -132,9 +130,7 @@ export function AdminRequestsPage() {
         title="Openstaande aanvragen"
         intro={
           <p>
-            <strong>Weigeren</strong> is alleen mogelijk zolang er nog geen knipje is gebruikt (geen tosti
-            geleverd). Zodra het lid een knipje heeft gebruikt, moet je de betaling <strong>accorderen</strong>{' '}
-            zodra die binnen is.
+            <strong>Weigeren</strong> alleen zonder knipjegebruik. Daarna: <strong>accorderen</strong> zodra betaald.
           </p>
         }
         rows={rows}

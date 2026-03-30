@@ -85,8 +85,8 @@ export function CardsPage() {
           Je hebt nog geen kaarten.{' '}
           <Link to="/buy" className="font-semibold text-brand-700 underline">
             Vraag een kaart aan
-          </Link>{' '}
-          na betaling — je kunt meteen alle knipjes gebruiken, ook vóór accordering door de beheerder.
+          </Link>
+          — knipjes zijn meteen bruikbaar.
         </p>
       </div>
     )

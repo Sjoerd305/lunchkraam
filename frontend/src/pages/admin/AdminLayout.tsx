@@ -10,7 +10,9 @@ export function AdminLayout() {
   }
 
   const operatorOnly = Boolean(user.is_operator && !user.is_admin)
-  if (operatorOnly && !loc.pathname.startsWith('/admin/requests')) {
+  const operatorPathAllowed =
+    loc.pathname.startsWith('/admin/requests') || loc.pathname === '/admin/expenses'
+  if (operatorOnly && !operatorPathAllowed) {
     return <Navigate to="/admin/requests" replace />
   }
 
@@ -38,6 +40,8 @@ export function AdminLayout() {
               <AdminTab to="/admin/expenses">Boodschappen</AdminTab>
               <AdminTab to="/admin/settings">Instellingen</AdminTab>
             </>
+          ) : user.is_operator ? (
+            <AdminTab to="/admin/expenses">Boodschappen</AdminTab>
           ) : null}
         </nav>
       </div>

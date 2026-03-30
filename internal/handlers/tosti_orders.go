@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -16,7 +17,7 @@ import (
 type tostiOrderJSON struct {
 	ID                int64   `json:"id"`
 	UserID            int64   `json:"user_id"`
-	CardID            int64   `json:"card_id"`
+	CardID            *int64  `json:"card_id"`
 	Quantity          int     `json:"quantity"`
 	Bread             string  `json:"bread"`
 	Filling           string  `json:"filling"`
@@ -34,11 +35,11 @@ type tostiOrderOperatorJSON struct {
 	CustomerEmail string `json:"customer_email"`
 }
 
-// tostiQueueEntryJSON is a pending order in FIFO order for members (no e-mail).
+// tostiQueueEntryJSON is a public queue row (FIFO); omits email.
 type tostiQueueEntryJSON struct {
 	Place        int    `json:"place"`
 	ID           int64  `json:"id"`
-	CardID       int64  `json:"card_id"`
+	CardID       *int64 `json:"card_id"`
 	Quantity     int    `json:"quantity"`
 	Bread        string `json:"bread"`
 	Filling      string `json:"filling"`
@@ -112,32 +113,39 @@ func (d *Deps) APITostiOrdersMine(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.UserFromContext(r.Context())
 	var body struct {
-		CardID   int64  `json:"card_id"`
-		Quantity int    `json:"quantity"`
-		Bread    string `json:"bread"`
-		Filling  string `json:"filling"`
+		CardID       int64  `json:"card_id"`
+		PhysicalCard bool   `json:"physical_card"`
+		Quantity     int    `json:"quantity"`
+		Bread        string `json:"bread"`
+		Filling      string `json:"filling"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
 	if err := dec.Decode(&body); err != nil {
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
 		return
 	}
-	if body.CardID <= 0 {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_card", "Kies een geldige kaart.")
-		return
+	var cardID *int64
+	if body.PhysicalCard {
+		cardID = nil
+	} else {
+		if body.CardID <= 0 {
+			httpx.JSONError(w, http.StatusBadRequest, "invalid_card", "Kies een geldige kaart of kies fysieke tostikaart.")
+			return
+		}
+		c := body.CardID
+		cardID = &c
 	}
 	qty := body.Quantity
 	if qty <= 0 {
 		qty = 1
 	}
-	o, err := d.Store.CreateTostiOrder(r.Context(), u.ID, body.CardID, body.Bread, body.Filling, qty)
+	o, err := d.Store.CreateTostiOrder(r.Context(), u.ID, cardID, body.Bread, body.Filling, qty)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			httpx.JSONError(w, http.StatusBadRequest, "no_card", "Kaart niet gevonden of niet van jou.")
 		case errors.Is(err, store.ErrNoKnipjes):
-			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes",
-				"Niet genoeg vrije knipjes op deze kaart (tel ook openstaande bestellingen op deze kaart mee).")
+			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Niet genoeg vrije knipjes op deze kaart.")
 		case errors.Is(err, store.ErrTostiInvalidQuantity):
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_quantity", "Aantal moet tussen 1 en 10 zijn.")
 		case errors.Is(err, store.ErrTostiInvalidBread):
@@ -223,8 +231,7 @@ func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Reque
 		case errors.Is(err, store.ErrTostiOrderNotPending):
 			httpx.JSONError(w, http.StatusConflict, "not_pending", "Deze bestelling is niet meer open.")
 		case errors.Is(err, store.ErrNoKnipjes):
-			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes",
-				"Niet genoeg knipjes meer op de kaart voor dit aantal. Annuleer de bestelling of vraag het lid.")
+			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Niet genoeg knipjes op de kaart voor dit aantal.")
 		case errors.Is(err, store.ErrTostiInvalidQuantity):
 			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Ongeldige bestelregel.")
 		default:
@@ -267,4 +274,24 @@ func (d *Deps) APIOperatorTostiOrderCancel(w http.ResponseWriter, r *http.Reques
 	}
 	d.notifyTostiMutation(ownerID)
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// APIOperatorTostiSoldToday returns delivered tosti count for today’s Amsterdam calendar date.
+func (d *Deps) APIOperatorTostiSoldToday(w http.ResponseWriter, r *http.Request) {
+	loc, err := time.LoadLocation("Europe/Amsterdam")
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Tijdzone niet beschikbaar.")
+		return
+	}
+	dateStr := time.Now().In(loc).Format("2006-01-02")
+	qty, err := d.Store.TostiDeliveredQuantityOnAmsterdamCalendarDate(r.Context(), dateStr)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"quantity":       qty,
+		"amsterdam_date": dateStr,
+		"timezone":       "Europe/Amsterdam",
+	})
 }

@@ -77,6 +77,18 @@ export type AdminSalesMonthBucket = {
   label_nl: string
 }
 
+export type AdminTostiMonthBucket = {
+  month: number
+  quantity: number
+  label_nl: string
+}
+
+export type AdminTostiKindBucket = {
+  bread: string
+  filling: string
+  quantity: number
+}
+
 export type AdminSalesStats = {
   year: number
   timezone: string
@@ -86,6 +98,9 @@ export type AdminSalesStats = {
   year_revenue_eur: number
   year_expenses_eur: number
   year_net_eur: number
+  year_tosti_quantity: number
+  tosti_monthly: AdminTostiMonthBucket[]
+  tosti_by_kind: AdminTostiKindBucket[]
 }
 
 export type AdminShopExpense = {
@@ -365,7 +380,7 @@ export type TostiOrderStatus = 'pending' | 'delivered' | 'cancelled'
 export type TostiOrder = {
   id: number
   user_id: number
-  card_id: number
+  card_id: number | null
   quantity: number
   bread: TostiBread
   filling: TostiFilling
@@ -386,13 +401,19 @@ export type OperatorTostiOrderRow = TostiOrder & {
 export type TostiQueueEntry = {
   place: number
   id: number
-  card_id: number
+  card_id: number | null
   quantity: number
   bread: TostiBread
   filling: TostiFilling
   created_at: string
   customer_name: string
   is_mine: boolean
+}
+
+function parseOptionalCardId(v: unknown): number | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  return null
 }
 
 function parseTostiOrder(r: Record<string, unknown>): TostiOrder {
@@ -407,7 +428,7 @@ function parseTostiOrder(r: Record<string, unknown>): TostiOrder {
   return {
     id: jsonInt(r.id, 0),
     user_id: jsonInt(r.user_id, 0),
-    card_id: jsonInt(r.card_id, 0),
+    card_id: parseOptionalCardId(r.card_id),
     quantity: q >= 1 && q <= 10 ? q : 1,
     bread,
     filling,
@@ -431,7 +452,7 @@ function parseTostiQueueEntry(r: Record<string, unknown>): TostiQueueEntry {
   return {
     place: jsonInt(r.place, 0),
     id: jsonInt(r.id, 0),
-    card_id: jsonInt(r.card_id, 0),
+    card_id: parseOptionalCardId(r.card_id),
     quantity: q >= 1 && q <= 10 ? q : 1,
     bread,
     filling,
@@ -459,10 +480,36 @@ export async function getMyTostiOrders(): Promise<TostiOrder[]> {
   return raw.map((row) => parseTostiOrder(row as Record<string, unknown>))
 }
 
-export async function createTostiOrder(
-  csrf: string,
-  body: { card_id: number; bread: TostiBread; filling: TostiFilling; quantity: number },
-): Promise<TostiOrder> {
+export type CreateTostiOrderBody =
+  | {
+      physical_card: true
+      bread: TostiBread
+      filling: TostiFilling
+      quantity: number
+    }
+  | {
+      physical_card?: false
+      card_id: number
+      bread: TostiBread
+      filling: TostiFilling
+      quantity: number
+    }
+
+export async function createTostiOrder(csrf: string, body: CreateTostiOrderBody): Promise<TostiOrder> {
+  const payload =
+    body.physical_card === true
+      ? {
+          physical_card: true,
+          bread: body.bread,
+          filling: body.filling,
+          quantity: body.quantity,
+        }
+      : {
+          card_id: body.card_id,
+          bread: body.bread,
+          filling: body.filling,
+          quantity: body.quantity,
+        }
   const res = await fetch('/api/tosti-orders', {
     method: 'POST',
     credentials: 'include',
@@ -470,7 +517,7 @@ export async function createTostiOrder(
       'Content-Type': 'application/json',
       'X-CSRF-Token': csrf,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   })
   if (!res.ok) throw await parseError(res)
   const j = (await res.json()) as { order?: unknown }
@@ -503,6 +550,23 @@ export async function getOperatorTostiOrders(): Promise<OperatorTostiOrderRow[]>
       customer_email: typeof r.customer_email === 'string' ? r.customer_email : '',
     }
   })
+}
+
+export type OperatorTostiSoldToday = {
+  quantity: number
+  amsterdam_date: string
+  timezone: string
+}
+
+export async function getOperatorTostiSoldToday(): Promise<OperatorTostiSoldToday> {
+  const res = await fetch('/api/operator/tosti-sold-today', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as Record<string, unknown>
+  return {
+    quantity: jsonInt(j.quantity, 0),
+    amsterdam_date: typeof j.amsterdam_date === 'string' ? j.amsterdam_date : '',
+    timezone: typeof j.timezone === 'string' ? j.timezone : 'Europe/Amsterdam',
+  }
 }
 
 export async function deliverOperatorTostiOrder(csrf: string, id: number): Promise<void> {
@@ -626,10 +690,7 @@ export async function getAdminSalesYears(): Promise<number[]> {
   return raw.map((y) => jsonInt(y, 0)).filter((y) => y > 0)
 }
 
-export async function getAdminSalesStats(year: number): Promise<AdminSalesStats> {
-  const res = await fetch(`/api/admin/sales-stats?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const j = (await res.json()) as Record<string, unknown>
+function parseAdminSalesStats(j: Record<string, unknown>, fallbackYear: number): AdminSalesStats {
   const rawMonthly = (j.monthly ?? []) as Record<string, unknown>[]
   const monthly: AdminSalesMonthBucket[] = rawMonthly.map((row) => ({
     month: jsonInt(row.month, 0),
@@ -639,8 +700,20 @@ export async function getAdminSalesStats(year: number): Promise<AdminSalesStats>
     net_eur: jsonFloat(row.net_eur, 0),
     label_nl: typeof row.label_nl === 'string' ? row.label_nl : '',
   }))
+  const rawTostiMonthly = (j.tosti_monthly ?? []) as Record<string, unknown>[]
+  const tosti_monthly: AdminTostiMonthBucket[] = rawTostiMonthly.map((row) => ({
+    month: jsonInt(row.month, 0),
+    quantity: jsonInt(row.quantity, 0),
+    label_nl: typeof row.label_nl === 'string' ? row.label_nl : '',
+  }))
+  const rawKind = (j.tosti_by_kind ?? []) as Record<string, unknown>[]
+  const tosti_by_kind: AdminTostiKindBucket[] = rawKind.map((row) => ({
+    bread: typeof row.bread === 'string' ? row.bread : '',
+    filling: typeof row.filling === 'string' ? row.filling : '',
+    quantity: jsonInt(row.quantity, 0),
+  }))
   return {
-    year: jsonInt(j.year, year),
+    year: jsonInt(j.year, fallbackYear),
     timezone: typeof j.timezone === 'string' ? j.timezone : 'Europe/Amsterdam',
     payment_amount_eur: typeof j.payment_amount_eur === 'string' ? j.payment_amount_eur : '',
     monthly,
@@ -648,6 +721,74 @@ export async function getAdminSalesStats(year: number): Promise<AdminSalesStats>
     year_revenue_eur: jsonFloat(j.year_revenue_eur, 0),
     year_expenses_eur: jsonFloat(j.year_expenses_eur, 0),
     year_net_eur: jsonFloat(j.year_net_eur, 0),
+    year_tosti_quantity: jsonInt(j.year_tosti_quantity, 0),
+    tosti_monthly,
+    tosti_by_kind,
+  }
+}
+
+export async function getAdminSalesStats(year: number): Promise<AdminSalesStats> {
+  const res = await fetch(`/api/admin/sales-stats?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as Record<string, unknown>
+  return parseAdminSalesStats(j, year)
+}
+
+export async function getOperatorSalesYears(): Promise<number[]> {
+  const res = await fetch('/api/operator/sales-years', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { years?: unknown }
+  const raw = j.years
+  if (!Array.isArray(raw)) return []
+  return raw.map((y) => jsonInt(y, 0)).filter((y) => y > 0)
+}
+
+export async function getOperatorSalesStats(year: number): Promise<AdminSalesStats> {
+  const res = await fetch(`/api/operator/sales-stats?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as Record<string, unknown>
+  return parseAdminSalesStats(j, year)
+}
+
+export async function getOperatorShopExpenses(year: number): Promise<AdminShopExpense[]> {
+  const res = await fetch(`/api/operator/shop-expenses?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { expenses?: unknown }
+  const raw = j.expenses
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return {
+      id: jsonInt(r.id, 0),
+      amount_eur: jsonFloat(r.amount_eur, 0),
+      spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
+      description: typeof r.description === 'string' ? r.description : '',
+      created_at: typeof r.created_at === 'string' ? r.created_at : '',
+    }
+  })
+}
+
+export async function createOperatorShopExpense(
+  csrf: string,
+  body: { amount_eur: number; spent_on: string; description: string },
+): Promise<AdminShopExpense> {
+  const res = await fetch('/api/operator/shop-expenses', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw await parseError(res)
+  const r = (await res.json()) as Record<string, unknown>
+  return {
+    id: jsonInt(r.id, 0),
+    amount_eur: jsonFloat(r.amount_eur, 0),
+    spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
+    description: typeof r.description === 'string' ? r.description : '',
+    created_at: typeof r.created_at === 'string' ? r.created_at : '',
   }
 }
 

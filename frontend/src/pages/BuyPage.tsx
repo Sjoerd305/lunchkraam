@@ -60,7 +60,7 @@ export function BuyPage() {
         title: 'Aanvraag ontvangen',
         message: isAvondeten
           ? 'Je kaart staat op Mijn kaarten. De beheerder accordeert later.'
-          : 'Je tostikaart met 10 knipjes staat nu op Mijn kaarten — je kunt meteen bestellen. De beheerder accordeert de betaling later voor de administratie.',
+          : 'Je tostikaart met 10 knipjes staat op Mijn kaarten; je kunt meteen bestellen. Beheerder accordeert later.',
         variant: 'success',
       })
     } catch (e) {
@@ -157,9 +157,8 @@ export function BuyPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
           <h2 className="text-lg font-semibold text-slate-900">Tostikaart (lunchkraam)</h2>
           <p className="mt-2 text-slate-700">
-            Nieuwe kaart: <strong className="text-brand-800">€{info.payment_amount_eur}</strong>. Na je
-            aanvraag krijg je meteen <strong>10 knipjes</strong> op <strong>Mijn kaarten</strong> om tosti’s te
-            bestellen. De beheerder accordeert de betaling later voor de administratie.
+            Nieuwe kaart: <strong className="text-brand-800">€{info.payment_amount_eur}</strong>. Meteen{' '}
+            <strong>10 knipjes</strong> op <strong>Mijn kaarten</strong>. Beheerder accordeert de betaling later.
           </p>
         </div>
         {showAvondeten ? (
@@ -189,9 +188,7 @@ export function BuyPage() {
             ) : null}
           </div>
           <p className="mt-2 text-sm text-amber-900/90">
-            Je kunt per kaarttype maximaal één openstaande aanvraag hebben. Annuleer foutieve dubbelingen hier
-            als je nog <strong>geen knipjes</strong> hebt gebruikt op die aanvraag. Na knipjegebruik kun je niet
-            meer annuleren — neem dan contact op met de beheerder.
+            Max. één open aanvraag per kaarttype. Annuleren alleen zonder knipjegebruik; daarna contact beheerder.
           </p>
           <ul className="mt-4 space-y-2">
             {pending.map((r) => (
@@ -290,14 +287,12 @@ export function BuyPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md">
         <h2 className="text-lg font-semibold text-slate-900">Aanvragen</h2>
         <p className="mt-2 text-slate-600">
-          Na betaling registreer je hier je aanvraag: je krijgt meteen een kaart op Mijn kaarten. De
-          beheerder ziet de aanvraag nog in de wachtrij voor betalingscontrole. Maximaal{' '}
-          <strong>één openstaande aanvraag per kaarttype</strong>.
+          Na betaling hier aanvragen — meteen een kaart op Mijn kaarten; beheerder ziet de wachtrij nog. Max.{' '}
+          <strong>één open aanvraag per kaarttype</strong>.
         </p>
         {hasPendingTosti ? (
           <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            Je hebt al een openstaande <strong>tosti</strong>-aanvraag — zie hierboven. Annuleren kan alleen
-            zolang je nog geen knipjes hebt gebruikt.
+            Je hebt al een open <strong>tosti</strong>-aanvraag. Annuleren alleen zonder knipjegebruik.
           </p>
         ) : null}
         <button

@@ -96,17 +96,11 @@ export function AdminDashboardPage() {
 
   return (
     <div className="space-y-8">
-      <p className="text-slate-600">
-        Stand van zorgplicht en voorraad aan knipjes. Onderstaande cijfers zijn actueel volgens het systeem.
-      </p>
-
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-900">
           Inkomsten vs. boodschappen ({stats.finance_year})
         </h2>
         <p className="mb-3 text-sm text-slate-600">
-          Omzet = som van prijzen bij geaccordeerde kaartverkopen in dit kalenderjaar (Amsterdam-tijd). Uitgaven =
-          handmatig geboekte boodschappen met diezelfde kalenderdatum.{' '}
           <Link to="/admin/expenses" className="font-semibold text-brand-800 underline hover:text-brand-950">
             Boodschappen beheren
           </Link>
@@ -115,19 +109,16 @@ export function AdminDashboardPage() {
           <StatCard
             label="Omzet dit jaar"
             value={`€${stats.year_revenue_eur.toFixed(2)}`}
-            hint="Geaccordeerde verkopen, opgeslagen verkoopprijs per transactie."
             tone="emerald"
           />
           <StatCard
             label="Uitgaven dit jaar"
             value={`€${stats.year_expenses_eur.toFixed(2)}`}
-            hint="Som van geboekte boodschappen."
             tone="slate"
           />
           <StatCard
             label="Saldo (omzet − uitgaven)"
             value={`€${stats.year_net_eur.toFixed(2)}`}
-            hint="Eenvoudige kasruiting; geen voorraad- of BTW-administratie."
             tone={stats.year_net_eur >= 0 ? 'emerald' : 'amber'}
           />
         </div>
@@ -142,15 +133,10 @@ export function AdminDashboardPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-900">Kaarten &amp; knipjes (totaal)</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <StatCard
-            label="Kaarten actief in omloop"
-            value={stats.active_cards_total}
-            hint="Fysiek/logische kaarten met een saldo in het systeem."
-          />
+          <StatCard label="Kaarten actief in omloop" value={stats.active_cards_total} />
           <StatCard
             label="Totaal knipjes nog open"
             value={stats.knipjes_remaining_total}
-            hint="Som van alle resterende knipjes op alle actieve kaarten (nog te verzilveren tosti’s)."
             tone="emerald"
           />
         </div>
@@ -161,8 +147,7 @@ export function AdminDashboardPage() {
           Nog niet geaccordeerd (wachtrij betaling)
         </h2>
         <p className="mb-3 text-sm text-slate-600">
-          Leden kunnen al knipjes gebruiken vóór jij de betaling hebt geaccordeerd. Hier zie je het risico:
-          tosti&apos;s die al zijn verbruikt terwijl de betaling nog in de wachtrij staat.
+          Knipjes kunnen al gebruikt zijn vóór accordering van de betaling.
         </p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
@@ -170,29 +155,28 @@ export function AdminDashboardPage() {
             value={stats.pending_requests}
             hint={
               eur > 0
-                ? `Indicatie openstaand bedrag: ca. €${openstaandEur.toFixed(2)} (à €${stats.payment_amount_eur} per kaart).`
-                : 'Zonder ingestelde kaartprijs is er geen euro-indicatie bij openstaande aanvragen.'
+                ? `Ca. €${openstaandEur.toFixed(2)} open (à €${stats.payment_amount_eur} per kaart).`
+                : 'Geen kaartprijs ingesteld — geen euro-indicatie.'
             }
             tone="amber"
           />
           <StatCard
             label="Knipjes nog op niet-geaccordeerde kaarten"
             value={stats.pending_knipjes_remaining}
-            hint="Nog te gebruiken knipjes op kaarten die aan een openstaande aanvraag hangen."
             tone="amber"
           />
           <StatCard
             label="Knipjes al gebruikt vóór accordering (schatting)"
             value={stats.pending_knipjes_consumed_estimate}
-            hint="Schatting van verbruikte knipjes op kaarten in de wachtrij, uitgaande van 10 knipjes per kaart bij afgifte."
+            hint="Schatting; uitgaande van 10 knipjes per kaart bij afgifte."
             tone="amber"
           />
         </div>
         {orphanRequestCount !== 0 ? (
           <p className="mt-3 text-sm text-amber-900/90">
-            Let op: {orphanRequestCount}{' '}
-            {orphanRequestCount === 1 ? 'aanvraag heeft' : 'aanvragen hebben'} geen gekoppelde kaart in het
-            systeem en {orphanRequestCount === 1 ? 'valt' : 'vallen'} buiten de knipjestellers hierboven.
+            {orphanRequestCount}{' '}
+            {orphanRequestCount === 1 ? 'aanvraag zonder' : 'aanvragen zonder'} gekoppelde kaart (niet in de tellers
+            hierboven).
           </p>
         ) : null}
       </section>
@@ -203,13 +187,11 @@ export function AdminDashboardPage() {
           <StatCard
             label="Aantal geaccordeerde verkopen"
             value={stats.fulfilled_requests}
-            hint="Historisch aantal aanvragen dat je als betaald hebt gemarkeerd."
             tone="slate"
           />
           <StatCard
             label="Knipjes nog open op geaccordeerde kaarten"
             value={stats.fulfilled_knipjes_remaining}
-            hint="Huidige resterende capaciteit op kaarten die al door de wachtrij zijn."
             tone="emerald"
           />
         </div>
@@ -217,16 +199,8 @@ export function AdminDashboardPage() {
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-900">Overig</h2>
-        <StatCard
-          label="Geannuleerde aanvragen (historisch)"
-          value={stats.cancelled_requests}
-          hint="Historische teller voor geannuleerde aanvragen. De bijbehorende kaarten verdwijnen uit het actieve overzicht."
-        />
+        <StatCard label="Geannuleerde aanvragen (historisch)" value={stats.cancelled_requests} />
       </section>
-
-      <p className="text-xs text-slate-500">
-        Schatting &quot;al gebruikt vóór accordering&quot; gaat uit van een startwaarde van 10 knipjes per kaart.
-      </p>
     </div>
   )
 }

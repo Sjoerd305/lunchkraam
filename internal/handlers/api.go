@@ -20,14 +20,14 @@ import (
 )
 
 type userPublicJSON struct {
-	ID               int64   `json:"id"`
-	Email            string  `json:"email"`
-	Name             string  `json:"name"`
-	IsAdmin          bool    `json:"is_admin"`
-	IsOperator       bool    `json:"is_operator"`
-	IsMatroosJeugd   bool    `json:"is_matroos_jeugd"`
-	AuthKind         string  `json:"auth_kind"`
-	LocalUsername    *string `json:"local_username,omitempty"`
+	ID             int64   `json:"id"`
+	Email          string  `json:"email"`
+	Name           string  `json:"name"`
+	IsAdmin        bool    `json:"is_admin"`
+	IsOperator     bool    `json:"is_operator"`
+	IsMatroosJeugd bool    `json:"is_matroos_jeugd"`
+	AuthKind       string  `json:"auth_kind"`
+	LocalUsername  *string `json:"local_username,omitempty"`
 }
 
 type cardJSON struct {
@@ -77,10 +77,10 @@ func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
 		pending = n
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"user":                          user,
-		"pending_card_requests":         pending,
-		"csrf_token":                    "",
-		"payment_amount_eur":            d.Config.PaymentAmountEUR,
+		"user":                         user,
+		"pending_card_requests":        pending,
+		"csrf_token":                   "",
+		"payment_amount_eur":           d.Config.PaymentAmountEUR,
 		"payment_amount_avondeten_eur": d.Config.AvondetenPaymentAmountEUR,
 	})
 }
@@ -165,12 +165,12 @@ func (d *Deps) APIBuy(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"payment_amount_eur":            d.Config.PaymentAmountEUR,
-		"payment_amount_avondeten_eur":   d.Config.AvondetenPaymentAmountEUR,
-		"tikkie_url":                    store.EffectiveTikkieURL(dbTikkie, d.Config.TikkieURL),
-		"tikkie_url_avondeten":          store.EffectiveTikkieURL(dbTikkieAvondeten, d.Config.TikkieURLAvondeten),
-		"bank_transfer_instructions": d.Config.BankTransferInstructions,
-		"my_pending_requests":        out,
+		"payment_amount_eur":           d.Config.PaymentAmountEUR,
+		"payment_amount_avondeten_eur": d.Config.AvondetenPaymentAmountEUR,
+		"tikkie_url":                   store.EffectiveTikkieURL(dbTikkie, d.Config.TikkieURL),
+		"tikkie_url_avondeten":         store.EffectiveTikkieURL(dbTikkieAvondeten, d.Config.TikkieURLAvondeten),
+		"bank_transfer_instructions":   d.Config.BankTransferInstructions,
+		"my_pending_requests":          out,
 	})
 }
 
@@ -191,13 +191,11 @@ func (d *Deps) APIBuyRequest(w http.ResponseWriter, r *http.Request) {
 	_, err := d.Store.CreateCardRequest(r.Context(), u.ID, body.Kind)
 	if err != nil {
 		if errors.Is(err, store.ErrAlreadyPending) {
-			httpx.JSONError(w, http.StatusConflict, "already_pending",
-				"Je hebt al een openstaande aanvraag voor dit kaarttype. Annuleer die eerst of wacht tot de beheerder de betaling heeft geaccordeerd.")
+			httpx.JSONError(w, http.StatusConflict, "already_pending", "Er is al een open aanvraag voor dit kaarttype.")
 			return
 		}
 		if errors.Is(err, store.ErrForbidden) {
-			httpx.JSONError(w, http.StatusForbidden, "not_matroos_jeugd",
-				"De avondetenkaart is alleen voor matroos-jeugdleden. Neem contact op met de beheerder.")
+			httpx.JSONError(w, http.StatusForbidden, "not_matroos_jeugd", "Avondetenkaart alleen voor matroos-jeugd.")
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Aanvraag opslaan mislukt.")
@@ -222,8 +220,7 @@ func (d *Deps) APICancelMyRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, store.ErrCannotCancelTrustUsed) {
-			httpx.JSONError(w, http.StatusConflict, "knipjes_used",
-				"Annuleren kan niet: je hebt al knipjes gebruikt op deze kaart. Neem contact op met de beheerder.")
+			httpx.JSONError(w, http.StatusConflict, "knipjes_used", "Annuleren niet mogelijk na knipjegebruik.")
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
@@ -238,8 +235,7 @@ func (d *Deps) APICancelAllMyPending(w http.ResponseWriter, r *http.Request) {
 	n, err := d.Store.CancelAllPendingCardRequestsForUser(r.Context(), u.ID)
 	if err != nil {
 		if errors.Is(err, store.ErrCannotCancelTrustUsed) {
-			httpx.JSONError(w, http.StatusConflict, "knipjes_used",
-				"Annuleren kan niet: je hebt al knipjes gebruikt op een openstaande kaart.")
+			httpx.JSONError(w, http.StatusConflict, "knipjes_used", "Annuleren niet mogelijk na knipjegebruik.")
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
@@ -335,6 +331,39 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 	yearExpenses = math.Round(yearExpenses*100) / 100
 	yearNet := math.Round((yearRevenue-yearExpenses)*100) / 100
 
+	tostiMonthly, err := d.Store.AdminTostiDeliveredQuantitiesByMonth(r.Context(), year)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+	tostiByKind, err := d.Store.AdminTostiDeliveredByKind(r.Context(), year)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+	yearTostiQty, err := d.Store.AdminTostiDeliveredYearQuantity(r.Context(), year)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+
+	tostiMonthlyJSON := make([]map[string]any, 0, 12)
+	for i := 0; i < 12; i++ {
+		tostiMonthlyJSON = append(tostiMonthlyJSON, map[string]any{
+			"month":    i + 1,
+			"quantity": tostiMonthly[i],
+			"label_nl": monthLabelNL(i + 1),
+		})
+	}
+	tostiByKindJSON := make([]map[string]any, 0, len(tostiByKind))
+	for _, row := range tostiByKind {
+		tostiByKindJSON = append(tostiByKindJSON, map[string]any{
+			"bread":    row.Bread,
+			"filling":  row.Filling,
+			"quantity": row.Quantity,
+		})
+	}
+
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"year":                 year,
 		"timezone":             "Europe/Amsterdam",
@@ -344,6 +373,9 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		"year_revenue_eur":     yearRevenue,
 		"year_expenses_eur":    yearExpenses,
 		"year_net_eur":         yearNet,
+		"year_tosti_quantity":  yearTostiQty,
+		"tosti_monthly":        tostiMonthlyJSON,
+		"tosti_by_kind":        tostiByKindJSON,
 	})
 }
 
@@ -479,8 +511,7 @@ func (d *Deps) APIAdminReject(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, store.ErrNotFound):
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden.")
 		case errors.Is(err, store.ErrCannotRejectKnipjesUsed):
-			httpx.JSONError(w, http.StatusConflict, "cannot_reject",
-				"Weigeren kan niet: er is al minstens één knipje gebruikt. Accordeer de betaling zodra die binnen is.")
+			httpx.JSONError(w, http.StatusConflict, "cannot_reject", "Weigeren niet mogelijk na knipjegebruik.")
 		default:
 			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kon aanvraag niet weigeren.")
 		}

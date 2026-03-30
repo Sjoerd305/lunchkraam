@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import * as api from '../api'
 import { useAuth } from '../AuthContext'
 import { useAlertDialog } from '../components/AlertDialogProvider'
@@ -16,7 +23,7 @@ function fillingLabel(f: api.TostiFilling): string {
 
 function pendingReservedOnCard(orders: api.TostiOrder[], cardId: number): number {
   return orders
-    .filter((o) => o.status === 'pending' && o.card_id === cardId)
+    .filter((o) => o.status === 'pending' && o.card_id !== null && o.card_id === cardId)
     .reduce((sum, o) => sum + o.quantity, 0)
 }
 
@@ -34,6 +41,8 @@ export function OrderTostiPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [cardId, setCardId] = useState<number | ''>('')
+  const [paymentMode, setPaymentMode] = useState<'digital' | 'physical'>('digital')
+  const prevUsableCardsCountRef = useRef<number | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [bread, setBread] = useState<api.TostiBread>('wit')
   const [filling, setFilling] = useState<api.TostiFilling>('ham')
@@ -97,12 +106,23 @@ export function OrderTostiPage() {
     [cards, cardId],
   )
   const freeOnCard = selectedCard ? freeKnipjesForCard(selectedCard, orders) : 0
-  const maxQuantity = Math.min(10, Math.max(0, freeOnCard))
+  const maxDigitalQty = Math.min(10, Math.max(0, freeOnCard))
+  const effectiveMaxQty = paymentMode === 'physical' ? 10 : maxDigitalQty
 
   useEffect(() => {
-    if (maxQuantity <= 0) return
-    setQuantity((q) => Math.min(Math.max(1, q), maxQuantity))
-  }, [maxQuantity, cardId])
+    const n = usableCards.length
+    if (n === 0) {
+      setPaymentMode('physical')
+    } else if (prevUsableCardsCountRef.current === 0) {
+      setPaymentMode('digital')
+    }
+    prevUsableCardsCountRef.current = n
+  }, [usableCards.length])
+
+  useEffect(() => {
+    if (effectiveMaxQty <= 0) return
+    setQuantity((q) => Math.min(Math.max(1, q), effectiveMaxQty))
+  }, [effectiveMaxQty, cardId, paymentMode])
 
   const queueHint = useMemo(() => {
     const mine = queue.filter((e) => e.is_mine)
@@ -117,36 +137,60 @@ export function OrderTostiPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    if (cardId === '' || typeof cardId !== 'number') {
-      void alert({
-        title: 'Geen kaart',
-        message: 'Je hebt geen kaart met vrije knipjes voor een nieuwe bestelling.',
-        variant: 'error',
-      })
-      return
-    }
-    if (maxQuantity < 1 || quantity < 1 || quantity > maxQuantity) {
-      void alert({
-        title: 'Aantal',
-        message:
-          maxQuantity < 1
-            ? 'Op deze kaart zijn geen knipjes meer vrij (alles zit in openstaande bestellingen).'
-            : `Kies een aantal tussen 1 en ${maxQuantity}.`,
-        variant: 'error',
-      })
-      return
+    if (paymentMode === 'physical') {
+      if (quantity < 1 || quantity > 10) {
+        void alert({
+          title: 'Aantal',
+          message: 'Kies een aantal tussen 1 en 10.',
+          variant: 'error',
+        })
+        return
+      }
+    } else {
+      if (cardId === '' || typeof cardId !== 'number') {
+        void alert({
+          title: 'Geen kaart',
+          message: 'Geen digitale kaart met vrije knipjes, of kies fysieke kaart.',
+          variant: 'error',
+        })
+        return
+      }
+      if (maxDigitalQty < 1 || quantity < 1 || quantity > maxDigitalQty) {
+        void alert({
+          title: 'Aantal',
+          message:
+            maxDigitalQty < 1
+              ? 'Geen vrije knipjes meer op deze kaart.'
+              : `Kies een aantal tussen 1 en ${maxDigitalQty}.`,
+          variant: 'error',
+        })
+        return
+      }
     }
     setSubmitting(true)
     try {
-      await api.createTostiOrder(csrf, { card_id: cardId, bread, filling, quantity })
+      if (paymentMode === 'physical') {
+        await api.createTostiOrder(csrf, { physical_card: true, bread, filling, quantity })
+      } else {
+        await api.createTostiOrder(csrf, { card_id: cardId as number, bread, filling, quantity })
+      }
       await load()
       await refresh()
-      const knipWord = quantity === 1 ? 'knipje' : 'knipjes'
-      await alert({
-        title: 'Bestelling geplaatst',
-        message: `De matroos ziet je bestelling in de kraam-app. Er ${quantity === 1 ? 'wordt 1' : `worden ${quantity}`} ${knipWord} afgetrokken zodra hij geleverd is.`,
-        variant: 'success',
-      })
+      if (paymentMode === 'physical') {
+        const knipWord = quantity === 1 ? 'knipje' : 'knipjes'
+        await alert({
+          title: 'Bestelling geplaatst',
+          message: `Neem je fysieke tostikaart mee; bij leveren knipt de kraam ${quantity === 1 ? '1' : String(quantity)} ${knipWord} op de kaart.`,
+          variant: 'success',
+        })
+      } else {
+        const knipWord = quantity === 1 ? 'knipje' : 'knipjes'
+        await alert({
+          title: 'Bestelling geplaatst',
+          message: `Knipjes worden afgetrokken zodra de kraam levert (${quantity === 1 ? '1' : String(quantity)} ${knipWord}).`,
+          variant: 'success',
+        })
+      }
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Bestellen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -158,7 +202,7 @@ export function OrderTostiPage() {
   async function onCancelPending(orderId: number) {
     const ok = await confirm({
       title: 'Bestelling annuleren?',
-      message: 'Deze openstaande bestelling wordt geannuleerd (je verliest geen knipjes).',
+      message: 'Deze openstaande bestelling annuleren?',
       confirmLabel: 'Ja, annuleren',
       cancelLabel: 'Terug',
       tone: 'brand',
@@ -184,18 +228,14 @@ export function OrderTostiPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Tosti bestellen</h1>
         <p className="mt-2 text-slate-600">
-          Elke tosti = 1 knipje. Je mag meerdere bestellingen tegelijk open hebben, zolang het totaal niet meer is
-          dan je <strong>vrije</strong> knipjes per kaart (saldo min openstaande bestellingen op die kaart). Knipjes
-          worden pas afgeboekt als de matroos <strong>geleverd</strong> markeert.
+          1 tosti = 1 knipje. Digitale kaart: meerdere open bestellingen mogen, tot je vrije knipjes op; afschrijving bij
+          leveren. Fysieke kaart: knippen bij de kraam, niet in de app.
         </p>
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Wachtrij</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Alle openstaande bestellingen, in dezelfde volgorde als op de kraam (oudste eerst). Het nummer is je plek in
-          de rij.
-        </p>
+        <p className="mt-2 text-sm text-slate-600">Oudste eerst; het nummer is je plek in de rij.</p>
         {queueHint ? (
           <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-900">{queueHint}</p>
         ) : null}
@@ -235,7 +275,11 @@ export function OrderTostiPage() {
                     <p className="text-sm text-slate-700">
                       {row.quantity > 1 ? `${row.quantity}× ` : ''}
                       {breadLabel(row.bread)}, {fillingLabel(row.filling)}
-                      <span className="text-slate-500"> · kaart #{row.card_id}</span>
+                      <span className="text-slate-500">
+                        {' '}
+                        ·{' '}
+                        {row.card_id === null ? 'fysieke kaart' : `kaart #${row.card_id}`}
+                      </span>
                     </p>
                     <p className="text-xs text-slate-500">
                       Geplaatst {new Date(row.created_at).toLocaleString('nl-NL')}
@@ -260,17 +304,63 @@ export function OrderTostiPage() {
       <section className="surface-card">
         <h2 className="text-lg font-semibold text-slate-900">Nieuwe bestelling</h2>
         {usableCards.length === 0 ? (
-          <p className="mt-4 text-slate-600">
-            Je hebt geen vrije knipjes om te bestellen (alle knipjes zitten in openstaande bestellingen, of je hebt
-            geen saldo). Ga naar <strong>Kaart kopen</strong> of <strong>Mijn kaarten</strong>, of annuleer een
-            openstaande bestelling.
+          <p className="mt-3 text-sm text-slate-600">
+            Geen vrije digitale knipjes. Je kunt met een fysieke tostikaart bestellen, of kaart kopen / open bestelling
+            annuleren.
           </p>
-        ) : (
-          <form
-            onSubmit={(e) => void onSubmit(e)}
-            className="mt-6 grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 md:gap-y-4"
-          >
-            <div className="flex flex-col gap-4">
+        ) : null}
+        <form
+          onSubmit={(e) => void onSubmit(e)}
+          className="mt-6 grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 md:gap-y-4"
+        >
+          {usableCards.length > 0 ? (
+            <fieldset className="md:col-span-2">
+              <legend className="text-sm font-medium text-slate-700">Hoe betaal je?</legend>
+              <p className="mt-1 text-xs text-slate-600">Digitale kaart heeft de voorkeur als die vrije knipjes heeft.</p>
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50/50">
+                  <input
+                    type="radio"
+                    name="paymentMode"
+                    checked={paymentMode === 'digital'}
+                    onChange={() => setPaymentMode('digital')}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-slate-900">
+                      Digitale kaart in de app
+                      <span className="ml-1.5 font-normal text-brand-800">(aanbevolen)</span>
+                    </span>
+                    <span className="mt-0.5 block text-slate-600">
+                      Knipjes worden bij leveren afgetrokken van je gekozen kaart.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50/50">
+                  <input
+                    type="radio"
+                    name="paymentMode"
+                    checked={paymentMode === 'physical'}
+                    onChange={() => setPaymentMode('physical')}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-slate-900">Fysieke tostikaart</span>
+                    <span className="mt-0.5 block text-slate-600">Kraam knipt op je kaart bij levering.</span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+          ) : null}
+
+          {paymentMode === 'physical' ? (
+            <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2.5 text-sm text-amber-950 md:col-span-2">
+              Neem je tostikaart mee; knippen gebeurt bij de kraam (niet in de app).
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-4">
+            {paymentMode === 'digital' && usableCards.length > 0 ? (
               <label className="block text-sm">
                 <span className="font-medium text-slate-700">Kaart (knipjes)</span>
                 <select
@@ -289,100 +379,107 @@ export function OrderTostiPage() {
                   })}
                 </select>
               </label>
-              <div className="block text-sm">
-                <span className="font-medium text-slate-700" id="tosti-qty-label">
-                  Aantal tosti&apos;s
-                </span>
-                <div
-                  className="mt-2 flex max-w-xs items-center gap-2"
-                  role="group"
-                  aria-labelledby="tosti-qty-label"
+            ) : null}
+            <div className="block text-sm">
+              <span className="font-medium text-slate-700" id="tosti-qty-label">
+                Aantal tosti&apos;s
+              </span>
+              <div
+                className="mt-2 flex max-w-xs items-center gap-2"
+                role="group"
+                aria-labelledby="tosti-qty-label"
+              >
+                <button
+                  type="button"
+                  className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Eén tosti minder"
+                  disabled={effectiveMaxQty < 1 || quantity <= 1}
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                 >
-                  <button
-                    type="button"
-                    className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
-                    aria-label="Eén tosti minder"
-                    disabled={maxQuantity < 1 || quantity <= 1}
-                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  >
-                    −
-                  </button>
-                  <div
-                    className="min-w-[3rem] flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-center text-lg font-semibold tabular-nums text-slate-900"
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
-                  >
-                    {maxQuantity < 1 ? '—' : quantity}
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
-                    aria-label="Eén tosti meer"
-                    disabled={maxQuantity < 1 || quantity >= maxQuantity}
-                    onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
-                  >
-                    +
-                  </button>
+                  −
+                </button>
+                <div
+                  className="min-w-[3rem] flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-center text-lg font-semibold tabular-nums text-slate-900"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {effectiveMaxQty < 1 ? '—' : quantity}
                 </div>
-                <span className="mt-2 block text-xs text-slate-500">
-                  {maxQuantity < 1
-                    ? 'Geen vrije knipjes op deze kaart.'
-                    : `Gebruik de knoppen om het aantal te kiezen (max. ${maxQuantity}, vrije knipjes op deze kaart).`}
-                </span>
+                <button
+                  type="button"
+                  className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Eén tosti meer"
+                  disabled={effectiveMaxQty < 1 || quantity >= effectiveMaxQty}
+                  onClick={() => setQuantity((q) => Math.min(effectiveMaxQty, q + 1))}
+                >
+                  +
+                </button>
               </div>
+              <span className="mt-2 block text-xs text-slate-500">
+                {paymentMode === 'physical'
+                  ? 'Maximaal 10 tosti’s per bestelling.'
+                  : effectiveMaxQty < 1
+                    ? 'Geen vrije knipjes — kies fysieke kaart of andere kaart.'
+                    : `Max. ${effectiveMaxQty} op deze kaart.`}
+              </span>
             </div>
-            <div className="flex flex-col gap-4">
-              <fieldset>
-                <legend className="text-sm font-medium text-slate-700">Brood</legend>
-                <div className="mt-2 flex flex-wrap gap-4">
-                  {(['wit', 'bruin'] as const).map((b) => (
-                    <label key={b} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name="bread"
-                        value={b}
-                        checked={bread === b}
-                        onChange={() => setBread(b)}
-                      />
-                      {breadLabel(b)}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend className="text-sm font-medium text-slate-700">Vulling</legend>
-                <div className="mt-2 flex flex-wrap gap-4">
-                  {(
-                    [
-                      ['ham', 'Ham'],
-                      ['kaas', 'Kaas'],
-                      ['ham_kaas', 'Ham & kaas'],
-                    ] as const
-                  ).map(([v, label]) => (
-                    <label key={v} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name="filling"
-                        value={v}
-                        checked={filling === v}
-                        onChange={() => setFilling(v)}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            </div>
-            <button
-              type="submit"
-              disabled={submitting || maxQuantity < 1 || usableCards.length === 0}
-              className="btn-primary px-5 md:col-span-2"
-            >
-              {submitting ? 'Bezig…' : 'Bestelling plaatsen'}
-            </button>
-          </form>
-        )}
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <fieldset>
+              <legend className="text-sm font-medium text-slate-700">Brood</legend>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(['wit', 'bruin'] as const).map((b) => (
+                  <label key={b} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="bread"
+                      value={b}
+                      checked={bread === b}
+                      onChange={() => setBread(b)}
+                    />
+                    {breadLabel(b)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="text-sm font-medium text-slate-700">Vulling</legend>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(
+                  [
+                    ['ham', 'Ham'],
+                    ['kaas', 'Kaas'],
+                    ['ham_kaas', 'Ham & kaas'],
+                  ] as const
+                ).map(([v, label]) => (
+                  <label key={v} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="filling"
+                      value={v}
+                      checked={filling === v}
+                      onChange={() => setFilling(v)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+
+          <button
+            type="submit"
+            disabled={
+              submitting ||
+              (paymentMode === 'digital' && (usableCards.length === 0 || maxDigitalQty < 1 || cardId === ''))
+            }
+            className="btn-primary px-5 md:col-span-2"
+          >
+            {submitting ? 'Bezig…' : 'Bestelling plaatsen'}
+          </button>
+        </form>
       </section>
 
       {orders.some((o) => o.status !== 'pending') ? (
@@ -404,7 +501,11 @@ export function OrderTostiPage() {
                   ) : (
                     <span className="text-slate-500">geannuleerd</span>
                   )}
-                  <span className="text-slate-400"> · {new Date(o.created_at).toLocaleString('nl-NL')}</span>
+                  <span className="text-slate-400">
+                    {' '}
+                    · {new Date(o.created_at).toLocaleString('nl-NL')}
+                    {o.card_id === null ? ' · fysieke kaart' : ''}
+                  </span>
                 </li>
               ))}
           </ul>

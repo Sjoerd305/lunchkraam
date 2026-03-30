@@ -227,12 +227,11 @@ export function AdminSalesCharts() {
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Omzet en boodschappen</h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Omzet is de som van de prijs die bij accordering is opgeslagen per kaart. Uitgaven zijn handmatig
-            geboekte boodschappen (zelfde kalenderjaar als de boekingsdatum). Verkopen: maanden volgens tijdzone{' '}
-            {stats?.timezone ?? 'Europe/Amsterdam'}. Huidige catalogusprijs voor nieuwe verkopen:{' '}
-            {stats ? `€${stats.payment_amount_eur}` : '…'}.
-          </p>
+          {stats ? (
+            <p className="mt-1 text-sm text-slate-600">
+              Tijdzone {stats.timezone}. Catalogusprijs nieuwe kaarten: €{stats.payment_amount_eur}.
+            </p>
+          ) : null}
         </div>
         {year !== null && yearSelectOptions.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -298,7 +297,7 @@ export function AdminSalesCharts() {
               <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
                 {stats.year_fulfilled_count}
               </p>
-              <p className="mt-1 text-sm text-slate-600">geaccordeerde verkopen</p>
+              <p className="mt-1 text-sm text-slate-600">geaccordeerd</p>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Omzet</p>
@@ -308,7 +307,7 @@ export function AdminSalesCharts() {
               <p className="mt-1 text-sm text-emerald-900/80">
                 {stats.year_fulfilled_count === 0
                   ? 'Nog geen verkopen dit jaar.'
-                  : `Gem. €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per kaart (historisch tarief per transactie).`}
+                  : `Gem. €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per kaart.`}
               </p>
             </div>
             <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-5 shadow-sm">
@@ -339,17 +338,16 @@ export function AdminSalesCharts() {
               >
                 {formatEUR(stats.year_net_eur)}
               </p>
-              <p className="mt-1 text-sm text-slate-700">Omzet min uitgaven</p>
+              <p className="mt-1 text-sm text-slate-700">Omzet − uitgaven</p>
             </div>
           </div>
 
           {!hasFinanceData ? (
             <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
-              Geen omzet of uitgaven voor {stats.year}. Accordeer betalingen of{' '}
+              Geen data voor {stats.year}.{' '}
               <Link to="/admin/expenses" className="font-semibold text-brand-800 underline">
-                boek een boodschap
-              </Link>{' '}
-              om hier grafieken te zien.
+                Boodschappen
+              </Link>
             </p>
           ) : (
             <div className="grid gap-8 lg:grid-cols-2">
@@ -380,9 +378,7 @@ export function AdminSalesCharts() {
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 className="mb-1 px-1 text-sm font-semibold text-slate-800">Cumulatief</h3>
-                <p className="mb-3 px-1 text-xs text-slate-500">
-                  Lopende omzet en saldo (omzet − uitgaven) over {stats.year}
-                </p>
+                <p className="mb-3 px-1 text-xs text-slate-500">Lopend over {stats.year}</p>
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
@@ -422,8 +418,7 @@ export function AdminSalesCharts() {
           )}
 
           <p className="text-xs text-slate-500">
-            Omzet per periode is de som van de prijzen die bij accordering zijn vastgelegd. Uitgaven boek je onder{' '}
-            <strong>Boodschappen</strong>.
+            Uitgaven: <Link to="/admin/expenses">Boodschappen</Link>.
           </p>
         </>
       ) : (

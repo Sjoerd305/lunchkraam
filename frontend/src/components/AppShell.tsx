@@ -51,7 +51,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 text-center text-sm text-slate-500 sm:px-5 sm:pb-10">
-        Elke lunchkraam kaart heeft 10 knipjes — 1 tosti = 1 knipje.
+        10 knipjes per kaart · 1 tosti = 1 knipje
       </footer>
     </div>
   )

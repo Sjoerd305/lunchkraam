@@ -120,10 +120,15 @@ func main() {
 					r.Post("/admin/requests/{id}/reject", h.APIAdminReject)
 					r.Get("/operator/cards", h.APIOperatorCards)
 					r.Get("/operator/tosti-orders", h.APIOperatorTostiOrders)
+					r.Get("/operator/tosti-sold-today", h.APIOperatorTostiSoldToday)
 					r.Post("/operator/tosti-orders/{id}/deliver", h.APIOperatorTostiOrderDeliver)
 					r.Post("/operator/tosti-orders/{id}/cancel", h.APIOperatorTostiOrderCancel)
 					r.Get("/operator/avondeten/registrations", h.APIOperatorAvondetenList)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/avondeten/register", h.APIOperatorAvondetenRegister)
+					r.Get("/operator/sales-years", h.APIAdminSalesYears)
+					r.Get("/operator/sales-stats", h.APIAdminSalesStats)
+					r.Get("/operator/shop-expenses", h.APIAdminShopExpensesList)
+					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/shop-expenses", h.APIAdminShopExpenseCreate)
 				})
 
 				r.Group(func(r chi.Router) {

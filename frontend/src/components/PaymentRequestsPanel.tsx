@@ -76,7 +76,7 @@ export function PaymentRequestsPanel({
                     title={
                       canRejectPaymentRequest(r.knipjes_remaining ?? 10)
                         ? undefined
-                        : 'Niet weigeren: er is al minstens één knipje gebruikt. Accordeer de betaling.'
+                        : 'Niet weigeren na knipjegebruik — accorderen.'
                     }
                     onClick={() => onReject(r.id)}
                     className="min-h-12 w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-800 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -131,7 +131,7 @@ export function PaymentRequestsPanel({
                             title={
                               canRejectPaymentRequest(r.knipjes_remaining ?? 10)
                                 ? undefined
-                                : 'Niet weigeren: er is al minstens één knipje gebruikt. Accordeer de betaling.'
+                                : 'Niet weigeren na knipjegebruik — accorderen.'
                             }
                             onClick={() => onReject(r.id)}
                             className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"

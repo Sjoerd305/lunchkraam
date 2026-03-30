@@ -15,24 +15,73 @@ function todayISO(): string {
   return `${y}-${m}-${day}`
 }
 
+function breadLabel(b: string): string {
+  return b === 'bruin' ? 'Bruin brood' : 'Wit brood'
+}
+
+function fillingLabel(f: string): string {
+  if (f === 'kaas') return 'Kaas'
+  if (f === 'ham_kaas') return 'Ham & kaas'
+  return 'Ham'
+}
+
+function FinanceStatCard({
+  label,
+  value,
+  hint,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  hint?: string
+  tone?: 'default' | 'amber' | 'emerald' | 'slate'
+}) {
+  const ring =
+    tone === 'amber'
+      ? 'border-amber-200 bg-amber-50/80'
+      : tone === 'emerald'
+        ? 'border-emerald-200 bg-emerald-50/80'
+        : tone === 'slate'
+          ? 'border-slate-200 bg-slate-50/80'
+          : 'border-slate-200 bg-white'
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${ring}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1.5 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
+      {hint ? <p className="mt-1.5 text-sm text-slate-600">{hint}</p> : null}
+    </div>
+  )
+}
+
 export function AdminShopExpensesPage() {
-  const { csrf } = useAuth()
+  const { csrf, user } = useAuth()
   const { alert, confirm } = useAlertDialog()
+  const isOperatorOnly = useMemo(
+    () => Boolean(user?.is_operator && !user?.is_admin),
+    [user?.is_admin, user?.is_operator],
+  )
+
   const [years, setYears] = useState<number[]>([])
   const [year, setYear] = useState<number | null>(null)
   const [yearsLoading, setYearsLoading] = useState(true)
   const [rows, setRows] = useState<api.AdminShopExpense[]>([])
   const [listLoading, setListLoading] = useState(false)
+  const [salesStats, setSalesStats] = useState<api.AdminSalesStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(false)
   const [amount, setAmount] = useState('')
   const [spentOn, setSpentOn] = useState(todayISO)
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
+    if (!user) return
     void (async () => {
       setYearsLoading(true)
       try {
-        const ys = await api.getAdminSalesYears()
+        const ys = isOperatorOnly
+          ? await api.getOperatorSalesYears()
+          : await api.getAdminSalesYears()
         setYears(ys)
         setYear((prev) => {
           if (prev !== null && ys.includes(prev)) return prev
@@ -47,13 +96,15 @@ export function AdminShopExpensesPage() {
         setYearsLoading(false)
       }
     })()
-  }, [alert])
+  }, [user, isOperatorOnly, alert])
 
   const loadList = useCallback(
     async (y: number) => {
       setListLoading(true)
       try {
-        const list = await api.getAdminShopExpenses(y)
+        const list = isOperatorOnly
+          ? await api.getOperatorShopExpenses(y)
+          : await api.getAdminShopExpenses(y)
         setRows(list)
       } catch (e) {
         setRows([])
@@ -63,13 +114,43 @@ export function AdminShopExpensesPage() {
         setListLoading(false)
       }
     },
-    [alert],
+    [alert, isOperatorOnly],
+  )
+
+  const loadStats = useCallback(
+    async (y: number) => {
+      setStatsLoading(true)
+      try {
+        const s = isOperatorOnly
+          ? await api.getOperatorSalesStats(y)
+          : await api.getAdminSalesStats(y)
+        setSalesStats(s)
+      } catch (e) {
+        setSalesStats(null)
+        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
+        void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
+      } finally {
+        setStatsLoading(false)
+      }
+    },
+    [alert, isOperatorOnly],
   )
 
   useEffect(() => {
     if (year === null) return
     void loadList(year)
-  }, [year, loadList])
+    void loadStats(year)
+  }, [year, loadList, loadStats])
+
+  const tostiRowsByMonth = useMemo(() => {
+    if (!salesStats) return []
+    const qtyByMonth = new Map(salesStats.tosti_monthly.map((t) => [t.month, t.quantity]))
+    return salesStats.monthly.map((fin) => ({
+      label: fin.label_nl,
+      month: fin.month,
+      quantity: qtyByMonth.get(fin.month) ?? 0,
+    }))
+  }, [salesStats])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -81,19 +162,21 @@ export function AdminShopExpensesPage() {
     }
     setSubmitting(true)
     try {
-      await api.createShopExpense(csrf, {
-        amount_eur: n,
-        spent_on: spentOn,
-        description: description.trim(),
-      })
+      const body = { amount_eur: n, spent_on: spentOn, description: description.trim() }
+      if (isOperatorOnly) {
+        await api.createOperatorShopExpense(csrf, body)
+      } else {
+        await api.createShopExpense(csrf, body)
+      }
       setAmount('')
       setDescription('')
       setSpentOn(todayISO())
       await loadList(year)
+      await loadStats(year)
       void alert({ title: 'Opgeslagen', message: 'Uitgave is toegevoegd.', variant: 'success' })
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Opslaan mislukt.'
-      void alert({ title: 'Mislukt', message: msg, variant: 'error' })
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
     } finally {
       setSubmitting(false)
     }
@@ -118,9 +201,10 @@ export function AdminShopExpensesPage() {
     try {
       await api.deleteShopExpense(csrf, id)
       await loadList(year)
+      await loadStats(year)
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Verwijderen mislukt.'
-      void alert({ title: 'Mislukt', message: msg, variant: 'error' })
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
     }
   }
 
@@ -129,10 +213,139 @@ export function AdminShopExpensesPage() {
       <div>
         <h2 className="text-xl font-semibold text-slate-900">Boodschappen &amp; uitgaven</h2>
         <p className="mt-2 text-slate-600">
-          Boek hier inkopen voor de lunch. In het admin-overzicht en bij de grafieken worden ze afgezet tegen de
-          omzet uit geaccordeerde kaartverkopen (zelfde kalenderjaar als de boekingsdatum).
+          Boek inkopen voor de lunch. Omzet = geaccordeerde kaartverkopen dit jaar; uitgaven = geboekte boodschappen
+          dit jaar.
+          {isOperatorOnly ? ' Verkochte tosti’s op basis van levermoment.' : ''}
         </p>
       </div>
+
+      {year !== null && (statsLoading || salesStats) ? (
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-slate-800">Financieel overzicht ({year})</h3>
+          {statsLoading && !salesStats ? (
+            <p className="text-sm text-slate-600">Cijfers laden…</p>
+          ) : salesStats ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <FinanceStatCard
+                  label="Omzet dit jaar"
+                  value={formatEUR(salesStats.year_revenue_eur)}
+                  tone="emerald"
+                />
+                <FinanceStatCard
+                  label="Uitgaven dit jaar"
+                  value={formatEUR(salesStats.year_expenses_eur)}
+                  tone="slate"
+                />
+                <FinanceStatCard
+                  label="Saldo (omzet − uitgaven)"
+                  value={formatEUR(salesStats.year_net_eur)}
+                  tone={salesStats.year_net_eur >= 0 ? 'emerald' : 'amber'}
+                />
+              </div>
+              <div className="surface-card overflow-x-auto">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Per maand</h4>
+                <table className="mt-3 w-full min-w-[24rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="py-2 pr-4">Maand</th>
+                      <th className="py-2 pr-4">Omzet</th>
+                      <th className="py-2 pr-4">Uitgaven</th>
+                      <th className="py-2">Netto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesStats.monthly.map((m) => (
+                      <tr key={m.month} className="border-b border-slate-100">
+                        <td className="py-2.5 pr-4 text-slate-800">{m.label_nl}</td>
+                        <td className="py-2.5 pr-4 tabular-nums text-slate-900">{formatEUR(m.revenue_eur)}</td>
+                        <td className="py-2.5 pr-4 tabular-nums text-slate-700">{formatEUR(m.expenses_eur)}</td>
+                        <td className="py-2.5 tabular-nums text-slate-900">{formatEUR(m.net_eur)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+
+      {year !== null && (statsLoading || salesStats) ? (
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-slate-800">Verkochte tosti’s ({year})</h3>
+          <p className="text-sm text-slate-600">Geteld op levermoment (kalenderjaar Amsterdam).</p>
+          {statsLoading && !salesStats ? (
+            <p className="text-sm text-slate-600">Laden…</p>
+          ) : salesStats ? (
+            <>
+              <p className="text-lg font-semibold tabular-nums text-slate-900">
+                Totaal dit jaar: {salesStats.year_tosti_quantity}{' '}
+                {salesStats.year_tosti_quantity === 1 ? 'tosti' : 'tosti’s'}
+              </p>
+              <div className="surface-card overflow-x-auto">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Per maand</h4>
+                <table className="mt-3 w-full min-w-[16rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="py-2 pr-4">Maand</th>
+                      <th className="py-2">Aantal tosti’s</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tostiRowsByMonth.map((row) => (
+                      <tr key={row.month} className="border-b border-slate-100">
+                        <td className="py-2.5 pr-4 text-slate-800">{row.label}</td>
+                        <td className="py-2.5 tabular-nums text-slate-900">{row.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="surface-card overflow-x-auto">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Per soort</h4>
+                <table className="mt-3 w-full min-w-[20rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="py-2 pr-4">Brood</th>
+                      <th className="py-2 pr-4">Vulling</th>
+                      <th className="py-2">Aantal</th>
+                      {salesStats.year_tosti_quantity > 0 ? (
+                        <th className="py-2 text-right">%</th>
+                      ) : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesStats.tosti_by_kind.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={salesStats.year_tosti_quantity > 0 ? 4 : 3}
+                          className="py-6 text-center text-slate-600"
+                        >
+                          Geen geleverde tosti’s in dit jaar.
+                        </td>
+                      </tr>
+                    ) : (
+                      salesStats.tosti_by_kind.map((row, idx) => (
+                        <tr key={`${row.bread}-${row.filling}-${idx}`} className="border-b border-slate-100">
+                          <td className="py-2.5 pr-4 text-slate-800">{breadLabel(row.bread)}</td>
+                          <td className="py-2.5 pr-4 text-slate-800">{fillingLabel(row.filling)}</td>
+                          <td className="py-2.5 tabular-nums text-slate-900">{row.quantity}</td>
+                          {salesStats.year_tosti_quantity > 0 ? (
+                            <td className="py-2.5 text-right tabular-nums text-slate-600">
+                              {((100 * row.quantity) / salesStats.year_tosti_quantity).toFixed(1)}%
+                            </td>
+                          ) : null}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="surface-card">
         <h3 className="text-sm font-semibold text-slate-800">Nieuwe uitgave</h3>
@@ -214,7 +427,7 @@ export function AdminShopExpensesPage() {
                   <th className="py-2 pr-4">Datum</th>
                   <th className="py-2 pr-4">Bedrag</th>
                   <th className="py-2 pr-4">Omschrijving</th>
-                  <th className="py-2 text-right">Actie</th>
+                  {user?.is_admin ? <th className="py-2 text-right">Actie</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -225,15 +438,17 @@ export function AdminShopExpensesPage() {
                       {formatEUR(r.amount_eur)}
                     </td>
                     <td className="py-3 pr-4 text-slate-700">{r.description || '—'}</td>
-                    <td className="py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => void onDelete(r.id)}
-                        className="text-sm font-semibold text-red-700 hover:text-red-900"
-                      >
-                        Verwijderen
-                      </button>
-                    </td>
+                    {user?.is_admin ? (
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => void onDelete(r.id)}
+                          className="text-sm font-semibold text-red-700 hover:text-red-900"
+                        >
+                          Verwijderen
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

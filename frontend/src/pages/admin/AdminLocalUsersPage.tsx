@@ -117,10 +117,8 @@ export function AdminLocalUsersPage() {
           Nieuw lokaal account (jeugd / zonder Google)
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-          Gebruikersnaam alleen kleine letters, cijfers en . _ — minimaal 8 tekens wachtwoord. Vink{' '}
-          <strong className="font-semibold text-slate-800">Matroos</strong> aan om knipjes aan de kraam af te
-          mogen nemen. <strong className="font-semibold text-slate-800">Beheerder</strong> geeft toegang tot dit
-          admin-gedeelte.
+          Gebruikersnaam: kleine letters, cijfers, . _ · wachtwoord min. 8 tekens. <strong>Matroos</strong>: kraam /
+          knipjes. <strong>Beheerder</strong>: admin.
         </p>
         <form onSubmit={(e) => void onCreate(e)} className="mt-6 grid gap-5 sm:grid-cols-2">
           <label className="block text-sm">
@@ -164,7 +162,7 @@ export function AdminLocalUsersPage() {
                   checked={newIsOperator}
                   onChange={(e) => setNewIsOperator(e.target.checked)}
                 />
-                <span>Matroos (knipjes afnemen aan kraam)</span>
+                <span>Matroos (kraam)</span>
               </label>
               <label className="flex cursor-pointer items-start gap-2.5 text-sm text-slate-700">
                 <input
