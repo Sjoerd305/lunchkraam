@@ -1,4 +1,4 @@
-module tostikaart
+module lunchkraam
 
 go 1.25
 

@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/httprate"
 
-	"tostikaart/internal/auth"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/auth"
+	"lunchkraam/internal/store"
 )
 
 func writeAPIUnauthorized(w http.ResponseWriter, msg string) {

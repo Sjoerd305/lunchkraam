@@ -10,11 +10,11 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"tostikaart/internal/auth"
-	"tostikaart/internal/config"
-	"tostikaart/internal/middleware"
-	"tostikaart/internal/realtime"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/auth"
+	"lunchkraam/internal/config"
+	"lunchkraam/internal/middleware"
+	"lunchkraam/internal/realtime"
+	"lunchkraam/internal/store"
 )
 
 type Deps struct {

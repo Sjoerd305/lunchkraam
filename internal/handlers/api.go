@@ -13,10 +13,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tostikaart/internal/auth"
-	"tostikaart/internal/httpx"
-	"tostikaart/internal/middleware"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/auth"
+	"lunchkraam/internal/httpx"
+	"lunchkraam/internal/middleware"
+	"lunchkraam/internal/store"
 )
 
 type userPublicJSON struct {

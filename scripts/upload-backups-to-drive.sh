@@ -37,11 +37,11 @@ if [ -z "$(docker compose ps -q postgres 2>/dev/null)" ]; then
   exit 1
 fi
 
-TMP_WORK="$(mktemp -d "${TMPDIR:-/tmp}/tostikaart-backup.XXXXXX")"
+TMP_WORK="$(mktemp -d "${TMPDIR:-/tmp}/lunchkraam-backup.XXXXXX")"
 trap 'rm -rf "${TMP_WORK}"' EXIT
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-OUT="${TMP_WORK}/tostikaart-${STAMP}.sql"
+OUT="${TMP_WORK}/lunchkraam-${STAMP}.sql"
 
 docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" --no-owner --no-acl "$POSTGRES_DB"' >"$OUT"
 gzip -f "$OUT"
@@ -53,6 +53,7 @@ echo "Dump: ${DUMP_GZ} ($(du -h "$DUMP_GZ" | cut -f1))"
 extra=( ${RCLONE_EXTRA_FLAGS:-} )
 
 rclone copy "$TMP_WORK" "$RCLONE_DEST" \
+  --include 'lunchkraam-*.sql.gz' \
   --include 'tostikaart-*.sql.gz' \
   --fast-list \
   "${extra[@]}"
@@ -80,7 +81,10 @@ items = [
     x
     for x in items
     if not x.get("IsDir")
-    and x["Name"].startswith("tostikaart-")
+    and (
+        x["Name"].startswith("lunchkraam-")
+        or x["Name"].startswith("tostikaart-")
+    )
     and x["Name"].endswith(".sql.gz")
 ]
 items.sort(key=lambda x: (x["ModTime"], x["Path"]))

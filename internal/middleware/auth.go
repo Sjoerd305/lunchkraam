@@ -3,8 +3,8 @@ package middleware
 import (
 	"net/http"
 
-	"tostikaart/internal/auth"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/auth"
+	"lunchkraam/internal/store"
 )
 
 // OptionalUser loads the logged-in user into the request context when a valid session exists.

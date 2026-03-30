@@ -4,7 +4,7 @@
 # SSH vanuit Actions is niet nodig; git-clone/pull doet de runner zelf via checkout.
 #
 # Standaard wordt .env gekopieerd van /home/sjoerd/lunchkraam/.env op de runner-host.
-# Optioneel: repository variable TOSTIKAART_ENV_FILE overschrijft dat pad.
+# Optioneel: repository variable LUNCHKRAAM_ENV_FILE overschrijft dat pad.
 #
 # Op de runner-host: Docker + docker compose; gebruiker die de runner draait kan `docker` aanroepen (groep `docker`).
 
@@ -32,10 +32,10 @@ jobs:
       - name: Go static checks and compile
         run: |
           go vet ./...
-          go build -trimpath -ldflags="-s -w" -o /tmp/tostikaart-server ./cmd/server
+          go build -trimpath -ldflags="-s -w" -o /tmp/lunchkraam-server ./cmd/server
 
       - name: Verify production Docker image builds
-        run: docker build -t tostikaart:ci .
+        run: docker build -t lunchkraam:ci .
 
   deploy:
     needs: verify
@@ -50,14 +50,14 @@ jobs:
           set -euo pipefail
           DEFAULT="/home/sjoerd/lunchkraam/.env"
           VARS_JSON='${{ toJSON(vars) }}'
-          OVERRIDE="$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('TOSTIKAART_ENV_FILE') or '')" "$VARS_JSON")"
+          OVERRIDE="$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('LUNCHKRAAM_ENV_FILE') or '')" "$VARS_JSON")"
           if [ -n "$OVERRIDE" ]; then
             SRC="$OVERRIDE"
           else
             SRC="$DEFAULT"
           fi
           if [ ! -f "$SRC" ]; then
-            echo "Env file not found: $SRC (set TOSTIKAART_ENV_FILE or place .env at $DEFAULT)" >&2
+            echo "Env file not found: $SRC (set LUNCHKRAAM_ENV_FILE or place .env at $DEFAULT)" >&2
             exit 1
           fi
           cp "$SRC" .env

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"tostikaart/internal/auth"
+	"lunchkraam/internal/auth"
 )
 
 func wsCheckOrigin(d *Deps, r *http.Request) bool {

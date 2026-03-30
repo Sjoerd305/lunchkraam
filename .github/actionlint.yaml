@@ -6,4 +6,4 @@ self-hosted-runner:
     - X64
 
 config-variables:
-  - TOSTIKAART_ENV_FILE
+  - LUNCHKRAAM_ENV_FILE

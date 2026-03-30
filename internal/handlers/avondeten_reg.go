@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"tostikaart/internal/auth"
-	"tostikaart/internal/httpx"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/auth"
+	"lunchkraam/internal/httpx"
+	"lunchkraam/internal/store"
 )
 
 func parseMealDateEuropeAmsterdam(s string) (time.Time, error) {

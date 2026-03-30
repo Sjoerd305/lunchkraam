@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/sessions"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/store"
 )
 
 type ctxKey int
@@ -23,7 +23,7 @@ func WithUser(ctx context.Context, u *store.User) context.Context {
 	return context.WithValue(ctx, ctxKeyUser, u)
 }
 
-const SessionName = "tostikaart"
+const SessionName = "lunchkraam"
 const sessionUserIDKey = "user_id"
 const sessionOAuthStateKey = "oauth_state"
 

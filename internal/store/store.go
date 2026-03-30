@@ -705,7 +705,7 @@ func (s *Store) CreateLocalUser(ctx context.Context, loginUsername, displayName 
 	if loginUsername == "" {
 		return nil, fmt.Errorf("gebruikersnaam vereist")
 	}
-	syntheticEmail := loginUsername + "@local.tostikaart"
+	syntheticEmail := loginUsername + "@local.lunchkraam"
 	row := s.pool.QueryRow(ctx, `
 INSERT INTO users (login_username, password_hash, email, name, is_admin, is_operator)
 VALUES ($1, $2, $3, $4, $5, $6)

@@ -14,7 +14,7 @@ fi
 
 DUMP="${1:-}"
 if [[ -z "$DUMP" ]]; then
-  echo "Gebruik: $0 [--yes] <backups/tostikaart-....sql.gz|....sql>" >&2
+  echo "Gebruik: $0 [--yes] <backups/lunchkraam-....sql.gz|....sql>" >&2
   echo "  --yes  Geen bevestigingsvraag (alleen voor scripts/automation)." >&2
   exit 1
 fi

@@ -1,10 +1,11 @@
-# Tostikaart
+# Lunchkraam
 
-Webapp voor tostikaarten (10 knipjes per kaart, 1 tosti = 1 knipje): leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, beheren kaarten en kunnen **tosti’s bestellen**; operators zien de wachtrij op de **kraampagina**. Betaling verloopt handmatig (Tikkie/overschrijving); een **admin** accordeert aanvragen en beheert gebruikers.
+Webapp voor **tostikaarten** en **avondetenkaarten** (elk 10 eenheden op de kaart: knipjes vs. streepjes in de UI). Leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, beheren kaarten via het dashboard en **Kaart kopen** (`/buy`), en kunnen **tosti’s bestellen** (1 tosti = 1 knipje; meerdere stuks per bestelling mogelijk). Zonder vrije digitale knipjes kan iemand met een **fysieke tostikaart** bestellen; de kraam knipt dan op de kaart (geen afboeking in de app). Betaling verloopt handmatig (Tikkie/overschrijving); een **admin** accordeert aanvragen en beheert gebruikers. Operators zien de tosti-wachtrij op de **kraampagina** en kunnen daar ook **avondeten per datum** afboeken.
 
 - **PostgreSQL** + migraties (goose)
 - **SPA** (React/Vite), in productie door de Go-server geserveerd
 - **Realtime**: WebSocket-hints voor kraam en “mijn tosti” (lijsten verversen zonder polling)
+- **Instellingen**: o.a. Tikkie-URL’s en tarieven per kaartsoort via admin (of defaults in `.env`)
 
 ## Vereisten
 
@@ -51,9 +52,17 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 
 ## Rollen
 
-- **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, betalingswachtrij).
-- **Operator (matroos)**: kraampagina (tosti-wachtrij, kaarten zoeken), betalingswachtrij accorderen/weigeren, en het menu **Betalingen** naar dezelfde wachtrij. Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
+- **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, **betalingswachtrij**, **boodschappen & uitgaven**). In instellingen kun je o.a. een aparte Tikkie voor de avondetenkaart zetten (aanvullend op `.env`).
+- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
+- **Matroos jeugd** (vlag op gebruiker): alleen wie deze vlag heeft ziet de **avondetenkaart** op Kaart kopen. Admins zetten dat bij **lokale** gebruikers in de UI; voor Google-accounts geldt hetzelfde patroon als bij operator (zo nodig handmatig in de database).
+
+Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYMENT_AMOUNT_EUR` / admin-tarieven de historische omzet niet verstoren.
+
+## Databasebackups
+
+- Lokaal dumpen (docker-compose Postgres): [`scripts/backup-database.sh`](scripts/backup-database.sh); terugzetten: [`scripts/restore-database.sh`](scripts/restore-database.sh) (zie commentaar in de scripts).
+- Optioneel: [`scripts/upload-backups-to-drive.sh`](scripts/upload-backups-to-drive.sh) — dump + upload via rclone met retentie op de remote (vereisten en omgevingsvariabelen staan in het script).
 
 ## Milieuvariabelen
 
-Zie [.env.example](.env.example).
+Zie [.env.example](.env.example). Gebruik je de avondetenkaart, zet dan minimaal ook **TIKKIE_URL_AVONDETEN** en **AVONDETEN_PAYMENT_AMOUNT_EUR** (of de equivalenten in de admin-instellingen).

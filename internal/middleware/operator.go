@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"tostikaart/internal/auth"
+	"lunchkraam/internal/auth"
 )
 
 // RequireOperatorOrAdminAPI allows kraam-staff (matroos) or admins to search cards and use knipjes on any card.

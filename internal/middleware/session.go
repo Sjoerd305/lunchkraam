@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/sessions"
-	"tostikaart/internal/auth"
+	"lunchkraam/internal/auth"
 )
 
 type sessionCtxKey struct{}

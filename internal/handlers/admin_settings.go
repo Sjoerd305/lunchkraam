@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"tostikaart/internal/httpx"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/httpx"
+	"lunchkraam/internal/store"
 )
 
 func validateTikkieURL(s string) (string, error) {

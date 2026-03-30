@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tostikaart/internal/auth"
-	"tostikaart/internal/httpx"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/auth"
+	"lunchkraam/internal/httpx"
+	"lunchkraam/internal/store"
 )
 
 type tostiOrderJSON struct {

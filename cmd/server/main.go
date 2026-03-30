@@ -17,13 +17,13 @@ import (
 	"github.com/go-chi/httprate"
 	"github.com/gorilla/sessions"
 
-	"tostikaart/internal/auth"
-	"tostikaart/internal/config"
-	"tostikaart/internal/db"
-	"tostikaart/internal/handlers"
-	apimw "tostikaart/internal/middleware"
-	"tostikaart/internal/realtime"
-	"tostikaart/internal/store"
+	"lunchkraam/internal/auth"
+	"lunchkraam/internal/config"
+	"lunchkraam/internal/db"
+	"lunchkraam/internal/handlers"
+	apimw "lunchkraam/internal/middleware"
+	"lunchkraam/internal/realtime"
+	"lunchkraam/internal/store"
 )
 
 func main() {
