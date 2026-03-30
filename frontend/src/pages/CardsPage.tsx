@@ -32,7 +32,7 @@ export function CardsPage() {
     void load()
   }, [load])
 
-  async function onUse(id: number) {
+  async function onUse(card: api.Card) {
     const ok = await confirm({
       title: 'Knipje gebruiken?',
       message: 'Wil je 1 knipje gebruiken voor een tosti?',
@@ -41,9 +41,9 @@ export function CardsPage() {
       tone: 'brand',
     })
     if (!ok) return
-    setBusyId(id)
+    setBusyId(card.id)
     try {
-      await api.useKnipje(csrf, id)
+      await api.useKnipje(csrf, card.id)
       await load()
       await refresh()
       await alert({
@@ -94,27 +94,36 @@ export function CardsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Mijn tostikaarten</h1>
+      <h1 className="text-2xl font-bold text-slate-900">Mijn kaarten</h1>
       <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((c) => (
           <article
             key={c.id}
             className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-md"
           >
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Kaart #{c.id}
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+              <span>Kaart #{c.id}</span>
+              <span className="rounded-md bg-slate-200/90 px-2 py-0.5 normal-case text-slate-800">
+                {c.kind === 'avondeten' ? 'Avondeten' : 'Tosti'}
+              </span>
             </div>
             <p className="mt-3 text-3xl font-bold text-brand-800">
               {c.knipjes_remaining}
               <span className="text-lg font-medium text-slate-500"> / 10</span>
             </p>
-            <p className="text-sm text-slate-600">knipjes over</p>
+            <p className="text-sm text-slate-600">{c.kind === 'avondeten' ? 'streepjes over' : 'knipjes over'}</p>
             <div className="mt-6 flex-1" />
-            {c.knipjes_remaining > 0 ? (
+            {c.kind === 'avondeten' ? (
+              c.knipjes_remaining > 0 ? (
+                <p className="text-center text-sm text-slate-600">Afboeken via de kraam.</p>
+              ) : (
+                <p className="text-center text-sm text-slate-500">Deze kaart is op.</p>
+              )
+            ) : c.knipjes_remaining > 0 ? (
               <button
                 type="button"
                 disabled={busyId !== null}
-                onClick={() => void onUse(c.id)}
+                onClick={() => void onUse(c)}
                 className="min-h-12 w-full rounded-xl bg-brand-700 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-brand-800 disabled:opacity-50"
               >
                 {busyId === c.id ? 'Bezig…' : '1 knipje gebruiken'}

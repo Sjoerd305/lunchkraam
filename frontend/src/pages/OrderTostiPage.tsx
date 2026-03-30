@@ -42,7 +42,8 @@ export function OrderTostiPage() {
     setLoading(true)
     try {
       const [cList, oList] = await Promise.all([api.getCards(), api.getMyTostiOrders()])
-      setCards(cList)
+      const tostiCards = cList.filter((c) => c.kind === 'tosti')
+      setCards(tostiCards)
       setOrders(oList)
       try {
         setQueue(await api.getTostiQueue())
@@ -51,7 +52,7 @@ export function OrderTostiPage() {
         setQueue([])
         setQueueLoadError(true)
       }
-      const usable = cList.filter((c) => freeKnipjesForCard(c, oList) > 0)
+      const usable = tostiCards.filter((c) => freeKnipjesForCard(c, oList) > 0)
       setCardId((prev) => {
         if (prev !== '' && usable.some((c) => c.id === prev)) return prev
         return usable[0]?.id ?? ''
@@ -256,7 +257,7 @@ export function OrderTostiPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-md">
+      <section className="surface-card">
         <h2 className="text-lg font-semibold text-slate-900">Nieuwe bestelling</h2>
         {usableCards.length === 0 ? (
           <p className="mt-4 text-slate-600">
@@ -265,111 +266,118 @@ export function OrderTostiPage() {
             openstaande bestelling.
           </p>
         ) : (
-          <form onSubmit={(e) => void onSubmit(e)} className="mt-6 space-y-5">
-            <label className="block text-sm">
-              <span className="font-medium text-slate-700">Kaart (knipjes)</span>
-              <select
-                value={cardId === '' ? '' : String(cardId)}
-                onChange={(e) => setCardId(e.target.value ? Number(e.target.value) : '')}
-                className="select-control mt-1.5 w-full max-w-md"
-                required
-              >
-                {usableCards.map((c) => {
-                  const free = freeKnipjesForCard(c, orders)
-                  return (
-                    <option key={c.id} value={c.id}>
-                      Kaart #{c.id} — {c.knipjes_remaining} knipjes ({free} vrij)
-                    </option>
-                  )
-                })}
-              </select>
-            </label>
-            <div className="block text-sm">
-              <span className="font-medium text-slate-700" id="tosti-qty-label">
-                Aantal tosti&apos;s
-              </span>
-              <div
-                className="mt-2 flex max-w-xs items-center gap-2"
-                role="group"
-                aria-labelledby="tosti-qty-label"
-              >
-                <button
-                  type="button"
-                  className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
-                  aria-label="Eén tosti minder"
-                  disabled={maxQuantity < 1 || quantity <= 1}
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+          <form
+            onSubmit={(e) => void onSubmit(e)}
+            className="mt-6 grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-8 md:gap-y-4"
+          >
+            <div className="flex flex-col gap-4">
+              <label className="block text-sm">
+                <span className="font-medium text-slate-700">Kaart (knipjes)</span>
+                <select
+                  value={cardId === '' ? '' : String(cardId)}
+                  onChange={(e) => setCardId(e.target.value ? Number(e.target.value) : '')}
+                  className="select-control mt-1.5 w-full max-w-[min(100%,18rem)]"
+                  required
                 >
-                  −
-                </button>
+                  {usableCards.map((c) => {
+                    const free = freeKnipjesForCard(c, orders)
+                    return (
+                      <option key={c.id} value={c.id}>
+                        Kaart #{c.id} — {c.knipjes_remaining} knipjes ({free} vrij)
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+              <div className="block text-sm">
+                <span className="font-medium text-slate-700" id="tosti-qty-label">
+                  Aantal tosti&apos;s
+                </span>
                 <div
-                  className="min-w-[3rem] flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-center text-lg font-semibold tabular-nums text-slate-900"
-                  role="status"
-                  aria-live="polite"
-                  aria-atomic="true"
+                  className="mt-2 flex max-w-xs items-center gap-2"
+                  role="group"
+                  aria-labelledby="tosti-qty-label"
                 >
-                  {maxQuantity < 1 ? '—' : quantity}
+                  <button
+                    type="button"
+                    className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+                    aria-label="Eén tosti minder"
+                    disabled={maxQuantity < 1 || quantity <= 1}
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  >
+                    −
+                  </button>
+                  <div
+                    className="min-w-[3rem] flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-center text-lg font-semibold tabular-nums text-slate-900"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    {maxQuantity < 1 ? '—' : quantity}
+                  </div>
+                  <button
+                    type="button"
+                    className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+                    aria-label="Eén tosti meer"
+                    disabled={maxQuantity < 1 || quantity >= maxQuantity}
+                    onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+                  >
+                    +
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-xl font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
-                  aria-label="Eén tosti meer"
-                  disabled={maxQuantity < 1 || quantity >= maxQuantity}
-                  onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
-                >
-                  +
-                </button>
+                <span className="mt-2 block text-xs text-slate-500">
+                  {maxQuantity < 1
+                    ? 'Geen vrije knipjes op deze kaart.'
+                    : `Gebruik de knoppen om het aantal te kiezen (max. ${maxQuantity}, vrije knipjes op deze kaart).`}
+                </span>
               </div>
-              <span className="mt-2 block text-xs text-slate-500">
-                {maxQuantity < 1
-                  ? 'Geen vrije knipjes op deze kaart.'
-                  : `Gebruik de knoppen om het aantal te kiezen (max. ${maxQuantity}, vrije knipjes op deze kaart).`}
-              </span>
             </div>
-            <fieldset>
-              <legend className="text-sm font-medium text-slate-700">Brood</legend>
-              <div className="mt-2 flex flex-wrap gap-4">
-                {(['wit', 'bruin'] as const).map((b) => (
-                  <label key={b} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="bread"
-                      value={b}
-                      checked={bread === b}
-                      onChange={() => setBread(b)}
-                    />
-                    {breadLabel(b)}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend className="text-sm font-medium text-slate-700">Vulling</legend>
-              <div className="mt-2 flex flex-wrap gap-4">
-                {(
-                  [
-                    ['ham', 'Ham'],
-                    ['kaas', 'Kaas'],
-                    ['ham_kaas', 'Ham & kaas'],
-                  ] as const
-                ).map(([v, label]) => (
-                  <label key={v} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="filling"
-                      value={v}
-                      checked={filling === v}
-                      onChange={() => setFilling(v)}
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <div className="flex flex-col gap-4">
+              <fieldset>
+                <legend className="text-sm font-medium text-slate-700">Brood</legend>
+                <div className="mt-2 flex flex-wrap gap-4">
+                  {(['wit', 'bruin'] as const).map((b) => (
+                    <label key={b} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="bread"
+                        value={b}
+                        checked={bread === b}
+                        onChange={() => setBread(b)}
+                      />
+                      {breadLabel(b)}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend className="text-sm font-medium text-slate-700">Vulling</legend>
+                <div className="mt-2 flex flex-wrap gap-4">
+                  {(
+                    [
+                      ['ham', 'Ham'],
+                      ['kaas', 'Kaas'],
+                      ['ham_kaas', 'Ham & kaas'],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <label key={v} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="filling"
+                        value={v}
+                        checked={filling === v}
+                        onChange={() => setFilling(v)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
             <button
               type="submit"
               disabled={submitting || maxQuantity < 1 || usableCards.length === 0}
-              className="rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
+              className="btn-primary px-5 md:col-span-2"
             >
               {submitting ? 'Bezig…' : 'Bestelling plaatsen'}
             </button>

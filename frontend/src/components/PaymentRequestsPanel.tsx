@@ -5,6 +5,14 @@ export function canRejectPaymentRequest(knipjesRemaining: number): boolean {
   return knipjesRemaining === 10
 }
 
+function requestKindLabel(r: AdminRequest): string {
+  return r.kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
+}
+
+function punchesLabel(r: AdminRequest): string {
+  return r.kind === 'avondeten' ? 'streepjes' : 'knipjes'
+}
+
 type LayoutMode = 'responsive' | 'cards-only'
 
 type Props = {
@@ -49,8 +57,9 @@ export function PaymentRequestsPanel({
                 </div>
                 <p className="font-medium text-slate-900">{r.user_name}</p>
                 <p className="mt-1 break-all text-sm text-slate-600">{r.user_email}</p>
-                <p className="mt-2 text-sm text-slate-600">
-                  Nog op de kaart: <strong>{r.knipjes_remaining ?? 10}</strong> / 10 knipjes
+                <p className="mt-2 text-xs font-semibold text-slate-700">{requestKindLabel(r)}</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Nog op de kaart: <strong>{r.knipjes_remaining ?? 10}</strong> / 10 {punchesLabel(r)}
                 </p>
                 <div className="mt-4 flex flex-col gap-2">
                   <button
@@ -88,7 +97,8 @@ export function PaymentRequestsPanel({
                     <th className="px-4 py-3">Lid</th>
                     <th className="px-4 py-3">E-mail</th>
                     <th className="px-4 py-3">Aangevraagd</th>
-                    <th className="px-4 py-3">Knipjes resterend</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Resterend</th>
                     <th className="px-4 py-3 text-right">Acties</th>
                   </tr>
                 </thead>
@@ -101,7 +111,10 @@ export function PaymentRequestsPanel({
                       <td className="px-4 py-3 text-slate-600">
                         {new Date(r.created_at).toLocaleString('nl-NL')}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{r.knipjes_remaining ?? 10} / 10</td>
+                      <td className="px-4 py-3 text-slate-600">{requestKindLabel(r)}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {r.knipjes_remaining ?? 10} / 10 {punchesLabel(r)}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <button

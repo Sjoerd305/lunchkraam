@@ -28,16 +28,19 @@ var ErrCannotCancelTrustUsed = errors.New("annuleren niet mogelijk: er zijn al k
 var ErrCannotRejectKnipjesUsed = errors.New("weigeren niet mogelijk: er zijn al knipjes gebruikt; accordeer de betaling")
 var ErrInvalidCredentials = errors.New("ongeldige gebruikersnaam of wachtwoord")
 var ErrUsernameTaken = errors.New("gebruikersnaam bestaat al")
+var ErrCardNotForTosti = errors.New("deze kaart is geen tostikaart")
+var ErrAvondetenManualUseDisabled = errors.New("avondetenkaart: gebruik de ochtendregistratie op de kraampagina")
 
 type User struct {
-	ID            int64
-	GoogleSub     *string
-	LoginUsername *string
-	Email         string
-	Name          string
-	IsAdmin       bool
-	IsOperator    bool
-	CreatedAt     time.Time
+	ID              int64
+	GoogleSub       *string
+	LoginUsername   *string
+	Email           string
+	Name            string
+	IsAdmin         bool
+	IsOperator      bool
+	IsMatroosJeugd  bool
+	CreatedAt       time.Time
 }
 
 type CardWithOwner struct {
@@ -47,20 +50,21 @@ type CardWithOwner struct {
 }
 
 type AdminUserSummary struct {
-	ID            int64
-	GoogleSub     *string
-	LoginUsername *string
-	Email         string
-	Name          string
-	IsAdmin       bool
-	IsOperator    bool
-	CreatedAt     time.Time
+	ID              int64
+	GoogleSub       *string
+	LoginUsername   *string
+	Email           string
+	Name            string
+	IsAdmin         bool
+	IsOperator      bool
+	IsMatroosJeugd  bool
+	CreatedAt       time.Time
 }
 
 func scanUser(scanner interface{ Scan(dest ...any) error }) (*User, error) {
 	var u User
 	var gsub, lun sql.NullString
-	err := scanner.Scan(&u.ID, &gsub, &lun, &u.Email, &u.Name, &u.IsAdmin, &u.IsOperator, &u.CreatedAt)
+	err := scanner.Scan(&u.ID, &gsub, &lun, &u.Email, &u.Name, &u.IsAdmin, &u.IsOperator, &u.IsMatroosJeugd, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +82,7 @@ func scanUser(scanner interface{ Scan(dest ...any) error }) (*User, error) {
 type Card struct {
 	ID               int64
 	UserID           int64
+	Kind             string
 	KnipjesRemaining int
 	Note             *string
 	CreatedAt        time.Time
@@ -87,6 +92,7 @@ type CardRequest struct {
 	ID                  int64
 	UserID              int64
 	Status              string
+	Kind                string
 	CreatedAt           time.Time
 	FulfilledAt         *time.Time
 	FulfilledByAdminID  *int64
@@ -124,7 +130,7 @@ func (s *Store) UpsertUser(ctx context.Context, googleSub, email, name string, b
 	row := tx.QueryRow(ctx, `
 UPDATE users SET email = $1, name = $2, is_admin = users.is_admin OR $3
 WHERE google_sub = $4
-RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, created_at`,
+RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, is_matroos_jeugd, created_at`,
 		email, name, bootstrapAdmin, googleSub,
 	)
 	u, err := scanUser(row)
@@ -138,7 +144,7 @@ RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, cr
 	row = tx.QueryRow(ctx, `
 INSERT INTO users (google_sub, email, name, is_admin)
 VALUES ($1, $2, $3, $4)
-RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, created_at`,
+RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, is_matroos_jeugd, created_at`,
 		googleSub, email, name, bootstrapAdmin,
 	)
 	u, err = scanUser(row)
@@ -150,7 +156,7 @@ RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, cr
 
 func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
 	row := s.pool.QueryRow(ctx, `
-SELECT id, google_sub, login_username, email, name, is_admin, is_operator, created_at FROM users WHERE id = $1`, id)
+SELECT id, google_sub, login_username, email, name, is_admin, is_operator, is_matroos_jeugd, created_at FROM users WHERE id = $1`, id)
 	u, err := scanUser(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -163,7 +169,7 @@ SELECT id, google_sub, login_username, email, name, is_admin, is_operator, creat
 
 func (s *Store) CardsByUser(ctx context.Context, userID int64) ([]Card, error) {
 	const q = `
-SELECT id, user_id, knipjes_remaining, note, created_at
+SELECT id, user_id, kind::text, knipjes_remaining, note, created_at
 FROM cards WHERE user_id = $1 ORDER BY created_at DESC`
 	rows, err := s.pool.Query(ctx, q, userID)
 	if err != nil {
@@ -173,7 +179,7 @@ FROM cards WHERE user_id = $1 ORDER BY created_at DESC`
 	var out []Card
 	for rows.Next() {
 		var c Card
-		if err := rows.Scan(&c.ID, &c.UserID, &c.KnipjesRemaining, &c.Note, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Kind, &c.KnipjesRemaining, &c.Note, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -235,24 +241,53 @@ WHERE id = $1 AND knipjes_remaining > 0`
 }
 
 // UseKnipje lets the card owner use a punch, or an admin/operator on any card.
+// Avondeten cards are excluded: streepjes only via RegisterAvondetenMealsForDate (kraam ochtendlijst).
 func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
+	var kind string
+	err := s.pool.QueryRow(ctx, `SELECT kind::text FROM cards WHERE id = $1`, cardID).Scan(&kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if kind == CardKindAvondeten {
+		return ErrAvondetenManualUseDisabled
+	}
 	if actor.IsAdmin || actor.IsOperator {
 		return s.useKnipjeAnyCard(ctx, cardID)
 	}
 	return s.useKnipjeOwnCard(ctx, cardID, actor.ID)
 }
 
-func (s *Store) CreateCardRequest(ctx context.Context, userID int64) (int64, error) {
+func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string) (int64, error) {
+	kind, err := NormalizeCardKind(kind)
+	if err != nil {
+		return 0, err
+	}
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback(ctx)
 
+	var matroos bool
+	err = tx.QueryRow(ctx, `SELECT is_matroos_jeugd FROM users WHERE id = $1`, userID).Scan(&matroos)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if kind == CardKindAvondeten && !matroos {
+		return 0, ErrForbidden
+	}
+
 	var has int
 	err = tx.QueryRow(ctx,
-		`SELECT 1 FROM card_requests WHERE user_id = $1 AND status = 'pending' LIMIT 1`,
-		userID,
+		`SELECT 1 FROM card_requests WHERE user_id = $1 AND status = 'pending' AND kind = $2::card_kind LIMIT 1`,
+		userID, kind,
 	).Scan(&has)
 	if err == nil {
 		return 0, ErrAlreadyPending
@@ -263,17 +298,22 @@ func (s *Store) CreateCardRequest(ctx context.Context, userID int64) (int64, err
 
 	var cardID int64
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO cards (user_id, knipjes_remaining) VALUES ($1, 10) RETURNING id`,
-		userID,
+		`INSERT INTO cards (user_id, knipjes_remaining, kind) VALUES ($1, 10, $2::card_kind) RETURNING id`,
+		userID, kind,
 	).Scan(&cardID); err != nil {
 		return 0, err
 	}
 
 	var reqID int64
-	if err := tx.QueryRow(ctx,
-		`INSERT INTO card_requests (user_id, card_id) VALUES ($1, $2) RETURNING id`,
-		userID, cardID,
-	).Scan(&reqID); err != nil {
+	err = tx.QueryRow(ctx,
+		`INSERT INTO card_requests (user_id, card_id, kind) VALUES ($1, $2, $3::card_kind) RETURNING id`,
+		userID, cardID, kind,
+	).Scan(&reqID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return 0, ErrAlreadyPending
+		}
 		return 0, err
 	}
 
@@ -285,13 +325,14 @@ func (s *Store) CreateCardRequest(ctx context.Context, userID int64) (int64, err
 
 type PendingCardRequestSummary struct {
 	ID               int64
+	Kind             string
 	CreatedAt        time.Time
 	KnipjesRemaining int
 }
 
 func (s *Store) ListPendingCardRequestsForUser(ctx context.Context, userID int64) ([]PendingCardRequestSummary, error) {
 	const q = `
-SELECT cr.id, cr.created_at,
+SELECT cr.id, cr.kind::text, cr.created_at,
   COALESCE(c.knipjes_remaining, GREATEST(0, 10 - cr.trust_knipjes_used)) AS knip_rem
 FROM card_requests cr
 LEFT JOIN cards c ON c.id = cr.card_id
@@ -305,7 +346,7 @@ ORDER BY cr.created_at ASC`
 	var out []PendingCardRequestSummary
 	for rows.Next() {
 		var r PendingCardRequestSummary
-		if err := rows.Scan(&r.ID, &r.CreatedAt, &r.KnipjesRemaining); err != nil {
+		if err := rows.Scan(&r.ID, &r.Kind, &r.CreatedAt, &r.KnipjesRemaining); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -437,7 +478,7 @@ func (s *Store) PendingCardRequestsByUser(ctx context.Context, userID int64) (in
 
 func (s *Store) ListPendingRequests(ctx context.Context) ([]CardRequestRow, error) {
 	const q = `
-SELECT cr.id, cr.user_id, cr.status::text, cr.created_at, cr.fulfilled_at, cr.fulfilled_by_admin_id, cr.card_id,
+SELECT cr.id, cr.user_id, cr.status::text, cr.kind::text, cr.created_at, cr.fulfilled_at, cr.fulfilled_by_admin_id, cr.card_id,
        u.email, u.name,
        COALESCE(c.knipjes_remaining, GREATEST(0, 10 - cr.trust_knipjes_used)) AS knip_rem
 FROM card_requests cr
@@ -454,7 +495,7 @@ ORDER BY cr.created_at ASC`
 	for rows.Next() {
 		var r CardRequestRow
 		if err := rows.Scan(
-			&r.ID, &r.UserID, &r.Status, &r.CreatedAt, &r.FulfilledAt, &r.FulfilledByAdminID, &r.CardID,
+			&r.ID, &r.UserID, &r.Status, &r.Kind, &r.CreatedAt, &r.FulfilledAt, &r.FulfilledByAdminID, &r.CardID,
 			&r.UserEmail, &r.UserName, &r.KnipjesRemaining,
 		); err != nil {
 			return nil, err
@@ -475,10 +516,11 @@ func (s *Store) FulfillCardRequest(ctx context.Context, requestID, adminUserID i
 	var status string
 	var trustUsed int
 	var existingCardID *int64
+	var reqKind string
 	err = tx.QueryRow(ctx,
-		`SELECT user_id, status::text, trust_knipjes_used, card_id FROM card_requests WHERE id = $1 FOR UPDATE`,
+		`SELECT user_id, status::text, trust_knipjes_used, card_id, kind::text FROM card_requests WHERE id = $1 FOR UPDATE`,
 		requestID,
-	).Scan(&reqUserID, &status, &trustUsed, &existingCardID)
+	).Scan(&reqUserID, &status, &trustUsed, &existingCardID, &reqKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -508,8 +550,8 @@ WHERE id = $1 AND status = 'pending'`,
 	knipjesOnCard := 10 - trustUsed
 	var cardID int64
 	err = tx.QueryRow(ctx,
-		`INSERT INTO cards (user_id, knipjes_remaining) VALUES ($1, $2) RETURNING id`,
-		reqUserID, knipjesOnCard,
+		`INSERT INTO cards (user_id, knipjes_remaining, kind) VALUES ($1, $2, $3::card_kind) RETURNING id`,
+		reqUserID, knipjesOnCard, reqKind,
 	).Scan(&cardID)
 	if err != nil {
 		return err
@@ -667,7 +709,7 @@ func (s *Store) CreateLocalUser(ctx context.Context, loginUsername, displayName 
 	row := s.pool.QueryRow(ctx, `
 INSERT INTO users (login_username, password_hash, email, name, is_admin, is_operator)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, created_at`,
+RETURNING id, google_sub, login_username, email, name, is_admin, is_operator, is_matroos_jeugd, created_at`,
 		loginUsername, string(passwordHash), syntheticEmail, strings.TrimSpace(displayName), isAdmin, isOperator,
 	)
 	u, err := scanUser(row)
@@ -703,9 +745,34 @@ SELECT id, password_hash FROM users WHERE lower(login_username) = $1 AND passwor
 	return s.UserByID(ctx, id)
 }
 
+// CardRequestKind returns the card_kind for a card_request row.
+func (s *Store) CardRequestKind(ctx context.Context, requestID int64) (string, error) {
+	var kind string
+	err := s.pool.QueryRow(ctx, `SELECT kind::text FROM card_requests WHERE id = $1`, requestID).Scan(&kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return kind, nil
+}
+
+// AdminSetMatroosJeugd sets the matroos-jeugd flag for any user (Google or local).
+func (s *Store) AdminSetMatroosJeugd(ctx context.Context, userID int64, v bool) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE users SET is_matroos_jeugd = $2 WHERE id = $1`, userID, v)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListAdminUsers(ctx context.Context) ([]AdminUserSummary, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT id, google_sub, login_username, email, name, is_admin, is_operator, created_at
+SELECT id, google_sub, login_username, email, name, is_admin, is_operator, is_matroos_jeugd, created_at
 FROM users ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -715,7 +782,7 @@ FROM users ORDER BY created_at DESC`)
 	for rows.Next() {
 		var r AdminUserSummary
 		var gsub, lun sql.NullString
-		if err := rows.Scan(&r.ID, &gsub, &lun, &r.Email, &r.Name, &r.IsAdmin, &r.IsOperator, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &gsub, &lun, &r.Email, &r.Name, &r.IsAdmin, &r.IsOperator, &r.IsMatroosJeugd, &r.CreatedAt); err != nil {
 			return nil, err
 		}
 		if gsub.Valid {
@@ -772,7 +839,7 @@ func (s *Store) SearchCardsWithOwners(ctx context.Context, query string, limit i
 	}
 	pat := "%" + q + "%"
 	rows, err := s.pool.Query(ctx, `
-SELECT c.id, c.user_id, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+SELECT c.id, c.user_id, c.kind::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
 FROM cards c
 JOIN users u ON u.id = c.user_id
 WHERE u.name ILIKE $1 OR u.email ILIKE $1
@@ -787,7 +854,7 @@ LIMIT $2`, pat, limit)
 
 func (s *Store) recentCardsWithOwners(ctx context.Context, limit int) ([]CardWithOwner, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT c.id, c.user_id, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+SELECT c.id, c.user_id, c.kind::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
 FROM cards c
 JOIN users u ON u.id = c.user_id
 ORDER BY c.created_at DESC
@@ -801,7 +868,7 @@ LIMIT $1`, limit)
 
 func (s *Store) cardsWithOwnersByCardID(ctx context.Context, cardID int64) ([]CardWithOwner, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT c.id, c.user_id, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+SELECT c.id, c.user_id, c.kind::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
 FROM cards c
 JOIN users u ON u.id = c.user_id
 WHERE c.id = $1`, cardID)
@@ -816,7 +883,7 @@ func scanCardWithOwnerRows(rows pgx.Rows) ([]CardWithOwner, error) {
 	var out []CardWithOwner
 	for rows.Next() {
 		var r CardWithOwner
-		if err := rows.Scan(&r.ID, &r.UserID, &r.KnipjesRemaining, &r.Note, &r.CreatedAt, &r.OwnerName, &r.OwnerEmail); err != nil {
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Kind, &r.KnipjesRemaining, &r.Note, &r.CreatedAt, &r.OwnerName, &r.OwnerEmail); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

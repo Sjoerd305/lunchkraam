@@ -52,14 +52,15 @@ func (d *Deps) APILocalLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 type adminUserListJSON struct {
-	ID            int64   `json:"id"`
-	Name          string  `json:"name"`
-	Email         string  `json:"email"`
-	AuthKind      string  `json:"auth_kind"`
-	LocalUsername *string `json:"local_username,omitempty"`
-	IsAdmin       bool    `json:"is_admin"`
-	IsOperator    bool    `json:"is_operator"`
-	CreatedAt     string  `json:"created_at"`
+	ID               int64   `json:"id"`
+	Name             string  `json:"name"`
+	Email            string  `json:"email"`
+	AuthKind         string  `json:"auth_kind"`
+	LocalUsername    *string `json:"local_username,omitempty"`
+	IsAdmin          bool    `json:"is_admin"`
+	IsOperator       bool    `json:"is_operator"`
+	IsMatroosJeugd   bool    `json:"is_matroos_jeugd"`
+	CreatedAt        string  `json:"created_at"`
 }
 
 func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +73,7 @@ func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		j := adminUserListJSON{
 			ID: row.ID, Name: row.Name, Email: row.Email,
-			IsAdmin: row.IsAdmin, IsOperator: row.IsOperator,
+			IsAdmin: row.IsAdmin, IsOperator: row.IsOperator, IsMatroosJeugd: row.IsMatroosJeugd,
 			CreatedAt: row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		}
 		if row.LoginUsername != nil && *row.LoginUsername != "" {
@@ -173,6 +174,33 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"user": toUserPublic(u)})
 }
 
+func (d *Deps) APIAdminPatchUserMatroosJeugd(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	uid, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige gebruiker.")
+		return
+	}
+	var body struct {
+		IsMatroosJeugd bool `json:"is_matroos_jeugd"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
+	if err := dec.Decode(&body); err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return
+	}
+	err = d.Store.AdminSetMatroosJeugd(r.Context(), uid, body.IsMatroosJeugd)
+	if errors.Is(err, store.ErrNotFound) {
+		httpx.JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
+		return
+	}
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bijwerken mislukt.")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	rows, err := d.Store.SearchCardsWithOwners(r.Context(), q, 40)
@@ -183,12 +211,13 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, map[string]any{
-			"id":                 row.ID,
-			"knipjes_remaining":  row.KnipjesRemaining,
-			"created_at":         row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			"owner_name":         row.OwnerName,
-			"owner_email":        row.OwnerEmail,
-			"owner_user_id":      row.UserID,
+			"id":                  row.ID,
+			"kind":                row.Kind,
+			"knipjes_remaining":   row.KnipjesRemaining,
+			"created_at":          row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"owner_name":          row.OwnerName,
+			"owner_email":         row.OwnerEmail,
+			"owner_user_id":       row.UserID,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"cards": out})

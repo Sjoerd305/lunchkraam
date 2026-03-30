@@ -144,6 +144,8 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_bread", "Brood moet wit of bruin zijn.")
 		case errors.Is(err, store.ErrTostiInvalidFilling):
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_filling", "Vulling moet ham, kaas of ham_kaas zijn.")
+		case errors.Is(err, store.ErrCardNotForTosti):
+			httpx.JSONError(w, http.StatusBadRequest, "wrong_card_kind", "Deze kaart is geen tostikaart.")
 		default:
 			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestellen mislukt.")
 		}

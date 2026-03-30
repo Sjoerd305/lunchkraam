@@ -422,7 +422,7 @@ export function AdminSalesCharts() {
           )}
 
           <p className="text-xs text-slate-500">
-            Omzet per transactie komt uit de database (prijs bij accordering). Uitgaven vul je zelf in onder{' '}
+            Omzet per periode is de som van de prijzen die bij accordering zijn vastgelegd. Uitgaven boek je onder{' '}
             <strong>Boodschappen</strong>.
           </p>
         </>

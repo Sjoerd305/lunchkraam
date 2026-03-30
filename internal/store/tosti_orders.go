@@ -82,15 +82,19 @@ func (s *Store) CreateTostiOrder(ctx context.Context, userID, cardID int64, brea
 	defer tx.Rollback(ctx)
 
 	var knip int
+	var cardKind string
 	err = tx.QueryRow(ctx,
-		`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		`SELECT knipjes_remaining, kind::text FROM cards WHERE id = $1 AND user_id = $2 FOR UPDATE`,
 		cardID, userID,
-	).Scan(&knip)
+	).Scan(&knip, &cardKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if cardKind != CardKindTosti {
+		return nil, ErrCardNotForTosti
 	}
 
 	var pendingSum int
@@ -281,8 +285,8 @@ func (s *Store) DeliverTostiOrder(ctx context.Context, orderID, deliveredByUserI
 
 	var knip int
 	err = tx.QueryRow(ctx,
-		`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2 FOR UPDATE`,
-		cardID, userID,
+		`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2 AND kind = $3::card_kind FOR UPDATE`,
+		cardID, userID, CardKindTosti,
 	).Scan(&knip)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
@@ -296,8 +300,8 @@ func (s *Store) DeliverTostiOrder(ctx context.Context, orderID, deliveredByUserI
 
 	tag, err := tx.Exec(ctx, `
 UPDATE cards SET knipjes_remaining = knipjes_remaining - $3
-WHERE id = $1 AND user_id = $2 AND knipjes_remaining >= $3`,
-		cardID, userID, qty)
+WHERE id = $1 AND user_id = $2 AND kind = $4::card_kind AND knipjes_remaining >= $3`,
+		cardID, userID, qty, CardKindTosti)
 	if err != nil {
 		return err
 	}

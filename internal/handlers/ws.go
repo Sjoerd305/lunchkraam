@@ -91,3 +91,11 @@ func (d *Deps) notifyPaymentRequestsMutation() {
 	}
 	d.Hub.BroadcastKraamPaymentRequests()
 }
+
+// notifyAvondetenRegistration refreshes kraam clients (kaartenlijst).
+func (d *Deps) notifyAvondetenRegistration() {
+	if d.Hub == nil {
+		return
+	}
+	d.Hub.BroadcastKraam()
+}

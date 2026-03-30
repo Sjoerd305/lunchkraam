@@ -1,9 +1,12 @@
+export type CardKind = 'tosti' | 'avondeten'
+
 export type User = {
   id: number
   email: string
   name: string
   is_admin: boolean
   is_operator: boolean
+  is_matroos_jeugd: boolean
   auth_kind: 'google' | 'local'
   local_username?: string
 }
@@ -13,29 +16,35 @@ export type MeResponse = {
   pending_card_requests: number
   csrf_token: string
   payment_amount_eur: string
+  payment_amount_avondeten_eur: string
 }
 
 export type Card = {
   id: number
+  kind: CardKind
   knipjes_remaining: number
   created_at: string
 }
 
 export type MyPendingRequest = {
   id: number
+  kind: CardKind
   created_at: string
   knipjes_remaining: number
 }
 
 export type BuyInfo = {
   payment_amount_eur: string
+  payment_amount_avondeten_eur: string
   tikkie_url: string
+  tikkie_url_avondeten: string
   bank_transfer_instructions: string
   my_pending_requests: MyPendingRequest[]
 }
 
 export type AdminRequest = {
   id: number
+  kind: CardKind
   user_name: string
   user_email: string
   created_at: string
@@ -130,6 +139,7 @@ function normalizeUser(raw: unknown): User | null {
     name: typeof u.name === 'string' ? u.name : '',
     is_admin: Boolean(u.is_admin),
     is_operator: Boolean(u.is_operator),
+    is_matroos_jeugd: Boolean(u.is_matroos_jeugd),
     auth_kind: u.auth_kind === 'local' ? 'local' : 'google',
     local_username: typeof u.local_username === 'string' ? u.local_username : undefined,
   }
@@ -144,6 +154,8 @@ export async function getMe(): Promise<MeResponse> {
     pending_card_requests: jsonInt(j.pending_card_requests),
     csrf_token: typeof j.csrf_token === 'string' ? j.csrf_token : '',
     payment_amount_eur: typeof j.payment_amount_eur === 'string' ? j.payment_amount_eur : '15',
+    payment_amount_avondeten_eur:
+      typeof j.payment_amount_avondeten_eur === 'string' ? j.payment_amount_avondeten_eur : '12',
   }
 }
 
@@ -168,6 +180,7 @@ export type AdminUserRow = {
   local_username?: string
   is_admin: boolean
   is_operator: boolean
+  is_matroos_jeugd: boolean
   created_at: string
 }
 
@@ -187,9 +200,23 @@ export async function getAdminUsers(): Promise<AdminUserRow[]> {
       local_username: typeof r.local_username === 'string' ? r.local_username : undefined,
       is_admin: Boolean(r.is_admin),
       is_operator: Boolean(r.is_operator),
+      is_matroos_jeugd: Boolean(r.is_matroos_jeugd),
       created_at: typeof r.created_at === 'string' ? r.created_at : '',
     }
   })
+}
+
+export async function patchUserMatroosJeugd(csrf: string, userId: number, isMatroosJeugd: boolean): Promise<void> {
+  const res = await fetch(`/api/admin/users/${userId}/matroos-jeugd`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ is_matroos_jeugd: isMatroosJeugd }),
+  })
+  if (!res.ok) throw await parseError(res)
 }
 
 export async function createLocalUser(
@@ -245,11 +272,67 @@ export async function patchLocalUser(
 
 export type OperatorCardRow = {
   id: number
+  kind: CardKind
   knipjes_remaining: number
   created_at: string
   owner_name: string
   owner_email: string
   owner_user_id: number
+}
+
+export type AvondetenRegistrationCard = {
+  card_id: number
+  user_id: number
+  owner_name: string
+  owner_email: string
+  knipjes_remaining: number
+  registered_for_date: boolean
+}
+
+export async function getAvondetenRegistrations(
+  mealDate: string,
+): Promise<{ meal_date: string; cards: AvondetenRegistrationCard[] }> {
+  const qs = `?meal_date=${encodeURIComponent(mealDate)}`
+  const res = await fetch(`/api/operator/avondeten/registrations${qs}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as Record<string, unknown>
+  const raw = j.cards
+  const cards: AvondetenRegistrationCard[] = Array.isArray(raw)
+    ? raw.map((row) => {
+        const r = row as Record<string, unknown>
+        return {
+          card_id: jsonInt(r.card_id, 0),
+          user_id: jsonInt(r.user_id, 0),
+          owner_name: typeof r.owner_name === 'string' ? r.owner_name : '',
+          owner_email: typeof r.owner_email === 'string' ? r.owner_email : '',
+          knipjes_remaining: jsonInt(r.knipjes_remaining, 0),
+          registered_for_date: Boolean(r.registered_for_date),
+        }
+      })
+    : []
+  return {
+    meal_date: typeof j.meal_date === 'string' ? j.meal_date : mealDate,
+    cards,
+  }
+}
+
+export async function postAvondetenRegister(
+  csrf: string,
+  mealDate: string,
+  cardIds: number[],
+): Promise<number> {
+  const res = await fetch('/api/operator/avondeten/register', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ meal_date: mealDate, card_ids: cardIds }),
+  })
+  if (!res.ok) throw await parseError(res)
+  const j = (await res.json()) as { registered_count?: number }
+  return jsonInt(j.registered_count, 0)
 }
 
 export async function getOperatorCards(q: string): Promise<OperatorCardRow[]> {
@@ -261,8 +344,11 @@ export async function getOperatorCards(q: string): Promise<OperatorCardRow[]> {
   if (!Array.isArray(raw)) return []
   return raw.map((row) => {
     const r = row as Record<string, unknown>
+    const kindRaw = r.kind
+    const kind: CardKind = kindRaw === 'avondeten' ? 'avondeten' : 'tosti'
     return {
       id: jsonInt(r.id, 0),
+      kind,
       knipjes_remaining: jsonInt(r.knipjes_remaining, 0),
       created_at: typeof r.created_at === 'string' ? r.created_at : '',
       owner_name: typeof r.owner_name === 'string' ? r.owner_name : '',
@@ -446,11 +532,25 @@ export async function logout(csrf: string): Promise<void> {
   if (!res.ok) throw await parseError(res)
 }
 
+function parseCardKind(v: unknown): CardKind {
+  return v === 'avondeten' ? 'avondeten' : 'tosti'
+}
+
 export async function getCards(): Promise<Card[]> {
   const res = await fetch('/api/cards', { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
-  const j = (await res.json()) as { cards: Card[] }
-  return j.cards ?? []
+  const j = (await res.json()) as { cards?: unknown }
+  const raw = j.cards
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return {
+      id: jsonInt(r.id, 0),
+      kind: parseCardKind(r.kind),
+      knipjes_remaining: jsonInt(r.knipjes_remaining, 0),
+      created_at: typeof r.created_at === 'string' ? r.created_at : '',
+    }
+  })
 }
 
 export async function useKnipje(csrf: string, cardId: number): Promise<void> {
@@ -469,22 +569,30 @@ export async function getBuyInfo(): Promise<BuyInfo> {
   const raw = (j.my_pending_requests ?? []) as Partial<MyPendingRequest>[]
   const my_pending_requests = raw.map((r) => ({
     id: r.id as number,
+    kind: parseCardKind(r.kind),
     created_at: r.created_at as string,
     knipjes_remaining: r.knipjes_remaining ?? 10,
   }))
   return {
     payment_amount_eur: j.payment_amount_eur ?? '',
+    payment_amount_avondeten_eur:
+      typeof j.payment_amount_avondeten_eur === 'string' ? j.payment_amount_avondeten_eur : '12',
     tikkie_url: j.tikkie_url ?? '',
+    tikkie_url_avondeten: typeof j.tikkie_url_avondeten === 'string' ? j.tikkie_url_avondeten : '',
     bank_transfer_instructions: j.bank_transfer_instructions ?? '',
     my_pending_requests,
   }
 }
 
-export async function requestCard(csrf: string): Promise<void> {
+export async function requestCard(csrf: string, kind: CardKind = 'tosti'): Promise<void> {
   const res = await fetch('/api/buy/request', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ kind }),
   })
   if (!res.ok) throw await parseError(res)
 }
@@ -619,11 +727,20 @@ export async function deleteShopExpense(csrf: string, id: number): Promise<void>
 export async function getAdminRequests(): Promise<AdminRequest[]> {
   const res = await fetch('/api/admin/requests', { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
-  const j = (await res.json()) as { requests: AdminRequest[] }
-  return j.requests.map((r) => ({
-    ...r,
-    knipjes_remaining: r.knipjes_remaining ?? 10,
-  }))
+  const j = (await res.json()) as { requests?: unknown }
+  const raw = j.requests
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return {
+      id: jsonInt(r.id, 0),
+      kind: parseCardKind(r.kind),
+      user_name: typeof r.user_name === 'string' ? r.user_name : '',
+      user_email: typeof r.user_email === 'string' ? r.user_email : '',
+      created_at: typeof r.created_at === 'string' ? r.created_at : '',
+      knipjes_remaining: jsonInt(r.knipjes_remaining, 10),
+    }
+  })
 }
 
 export async function fulfillRequest(csrf: string, id: number): Promise<void> {
@@ -648,6 +765,9 @@ export type AdminAppSettings = {
   tikkie_url: string
   tikkie_url_effective: string
   tikkie_url_env_config: string
+  tikkie_url_avondeten: string
+  tikkie_url_avondeten_effective: string
+  tikkie_url_avondeten_env_config: string
 }
 
 export async function getAdminSettings(): Promise<AdminAppSettings> {
@@ -658,10 +778,18 @@ export async function getAdminSettings(): Promise<AdminAppSettings> {
     tikkie_url: typeof j.tikkie_url === 'string' ? j.tikkie_url : '',
     tikkie_url_effective: typeof j.tikkie_url_effective === 'string' ? j.tikkie_url_effective : '',
     tikkie_url_env_config: typeof j.tikkie_url_env_config === 'string' ? j.tikkie_url_env_config : '',
+    tikkie_url_avondeten: typeof j.tikkie_url_avondeten === 'string' ? j.tikkie_url_avondeten : '',
+    tikkie_url_avondeten_effective:
+      typeof j.tikkie_url_avondeten_effective === 'string' ? j.tikkie_url_avondeten_effective : '',
+    tikkie_url_avondeten_env_config:
+      typeof j.tikkie_url_avondeten_env_config === 'string' ? j.tikkie_url_avondeten_env_config : '',
   }
 }
 
-export async function patchAdminSettings(csrf: string, tikkieUrl: string): Promise<AdminAppSettings> {
+export async function patchAdminSettings(
+  csrf: string,
+  body: { tikkie_url: string; tikkie_url_avondeten: string },
+): Promise<AdminAppSettings> {
   const res = await fetch('/api/admin/settings', {
     method: 'PATCH',
     credentials: 'include',
@@ -669,7 +797,10 @@ export async function patchAdminSettings(csrf: string, tikkieUrl: string): Promi
       'Content-Type': 'application/json',
       'X-CSRF-Token': csrf,
     },
-    body: JSON.stringify({ tikkie_url: tikkieUrl }),
+    body: JSON.stringify({
+      tikkie_url: body.tikkie_url,
+      tikkie_url_avondeten: body.tikkie_url_avondeten,
+    }),
   })
   if (!res.ok) throw await parseError(res)
   const j = (await res.json()) as Record<string, unknown>
@@ -677,5 +808,10 @@ export async function patchAdminSettings(csrf: string, tikkieUrl: string): Promi
     tikkie_url: typeof j.tikkie_url === 'string' ? j.tikkie_url : '',
     tikkie_url_effective: typeof j.tikkie_url_effective === 'string' ? j.tikkie_url_effective : '',
     tikkie_url_env_config: typeof j.tikkie_url_env_config === 'string' ? j.tikkie_url_env_config : '',
+    tikkie_url_avondeten: typeof j.tikkie_url_avondeten === 'string' ? j.tikkie_url_avondeten : '',
+    tikkie_url_avondeten_effective:
+      typeof j.tikkie_url_avondeten_effective === 'string' ? j.tikkie_url_avondeten_effective : '',
+    tikkie_url_avondeten_env_config:
+      typeof j.tikkie_url_avondeten_env_config === 'string' ? j.tikkie_url_avondeten_env_config : '',
   }
 }

@@ -92,11 +92,12 @@ export function AdminDashboardPage() {
 
   const eur = parseEurPerCard(stats.payment_amount_eur)
   const openstaandEur = stats.pending_requests * eur
+  const orphanRequestCount = stats.pending_requests - stats.pending_with_card
 
   return (
     <div className="space-y-8">
       <p className="text-slate-600">
-        Stand van zorgplicht en voorraad aan knipjes. Cijfers komen rechtstreeks uit de database.
+        Stand van zorgplicht en voorraad aan knipjes. Onderstaande cijfers zijn actueel volgens het systeem.
       </p>
 
       <section>
@@ -160,8 +161,8 @@ export function AdminDashboardPage() {
           Nog niet geaccordeerd (wachtrij betaling)
         </h2>
         <p className="mb-3 text-sm text-slate-600">
-          Leden kunnen al knipjes gebruiken vóór jouw accordering. Hier zie je het risico / de &quot;fictieve
-          min&quot;: lunches die al zijn verbruikt terwijl de betaling nog in de wachtrij staat.
+          Leden kunnen al knipjes gebruiken vóór jij de betaling hebt geaccordeerd. Hier zie je het risico:
+          tosti&apos;s die al zijn verbruikt terwijl de betaling nog in de wachtrij staat.
         </p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
@@ -170,7 +171,7 @@ export function AdminDashboardPage() {
             hint={
               eur > 0
                 ? `Indicatie openstaand bedrag: ca. €${openstaandEur.toFixed(2)} (à €${stats.payment_amount_eur} per kaart).`
-                : 'Configureer PAYMENT_AMOUNT_EUR voor een bedrag-indicatie.'
+                : 'Zonder ingestelde kaartprijs is er geen euro-indicatie bij openstaande aanvragen.'
             }
             tone="amber"
           />
@@ -183,14 +184,15 @@ export function AdminDashboardPage() {
           <StatCard
             label="Knipjes al gebruikt vóór accordering (schatting)"
             value={stats.pending_knipjes_consumed_estimate}
-            hint="Som van (10 − resterend) per kaart in de wachtrij. Geldt als alle kaarten met 10 knipjes zijn gestart."
+            hint="Schatting van verbruikte knipjes op kaarten in de wachtrij, uitgaande van 10 knipjes per kaart bij afgifte."
             tone="amber"
           />
         </div>
-        {stats.pending_requests !== stats.pending_with_card ? (
+        {orphanRequestCount !== 0 ? (
           <p className="mt-3 text-sm text-amber-900/90">
-            Let op: {stats.pending_requests - stats.pending_with_card} aanvra(a)g(en) zonder gekoppelde kaart
-            (oude data of migratie); die tellen niet mee in de knipjes-kolommen hiernaast.
+            Let op: {orphanRequestCount}{' '}
+            {orphanRequestCount === 1 ? 'aanvraag heeft' : 'aanvragen hebben'} geen gekoppelde kaart in het
+            systeem en {orphanRequestCount === 1 ? 'valt' : 'vallen'} buiten de knipjestellers hierboven.
           </p>
         ) : null}
       </section>
@@ -218,7 +220,7 @@ export function AdminDashboardPage() {
         <StatCard
           label="Geannuleerde aanvragen (historisch)"
           value={stats.cancelled_requests}
-          hint="Teller in de database; geannuleerde kaarten worden verwijderd."
+          hint="Historische teller voor geannuleerde aanvragen. De bijbehorende kaarten verdwijnen uit het actieve overzicht."
         />
       </section>
 

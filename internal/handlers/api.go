@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"math"
 	"net/http"
 	"sort"
@@ -18,23 +20,26 @@ import (
 )
 
 type userPublicJSON struct {
-	ID            int64   `json:"id"`
-	Email         string  `json:"email"`
-	Name          string  `json:"name"`
-	IsAdmin       bool    `json:"is_admin"`
-	IsOperator    bool    `json:"is_operator"`
-	AuthKind      string  `json:"auth_kind"`
-	LocalUsername *string `json:"local_username,omitempty"`
+	ID               int64   `json:"id"`
+	Email            string  `json:"email"`
+	Name             string  `json:"name"`
+	IsAdmin          bool    `json:"is_admin"`
+	IsOperator       bool    `json:"is_operator"`
+	IsMatroosJeugd   bool    `json:"is_matroos_jeugd"`
+	AuthKind         string  `json:"auth_kind"`
+	LocalUsername    *string `json:"local_username,omitempty"`
 }
 
 type cardJSON struct {
 	ID               int64  `json:"id"`
+	Kind             string `json:"kind"`
 	KnipjesRemaining int    `json:"knipjes_remaining"`
 	CreatedAt        string `json:"created_at"`
 }
 
 type adminRequestJSON struct {
 	ID               int64  `json:"id"`
+	Kind             string `json:"kind"`
 	UserName         string `json:"user_name"`
 	UserEmail        string `json:"user_email"`
 	CreatedAt        string `json:"created_at"`
@@ -43,6 +48,7 @@ type adminRequestJSON struct {
 
 type myPendingRequestJSON struct {
 	ID               int64  `json:"id"`
+	Kind             string `json:"kind"`
 	CreatedAt        string `json:"created_at"`
 	KnipjesRemaining int    `json:"knipjes_remaining"`
 }
@@ -50,6 +56,7 @@ type myPendingRequestJSON struct {
 func toUserPublic(u *store.User) userPublicJSON {
 	j := userPublicJSON{
 		ID: u.ID, Email: u.Email, Name: u.Name, IsAdmin: u.IsAdmin, IsOperator: u.IsOperator,
+		IsMatroosJeugd: u.IsMatroosJeugd,
 	}
 	if u.LoginUsername != nil && *u.LoginUsername != "" {
 		j.AuthKind = "local"
@@ -70,10 +77,11 @@ func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
 		pending = n
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"user":                  user,
-		"pending_card_requests": pending,
-		"csrf_token":            "",
-		"payment_amount_eur":    d.Config.PaymentAmountEUR,
+		"user":                          user,
+		"pending_card_requests":         pending,
+		"csrf_token":                    "",
+		"payment_amount_eur":            d.Config.PaymentAmountEUR,
+		"payment_amount_avondeten_eur": d.Config.AvondetenPaymentAmountEUR,
 	})
 }
 
@@ -97,6 +105,7 @@ func (d *Deps) APICards(w http.ResponseWriter, r *http.Request) {
 	for _, c := range cards {
 		out = append(out, cardJSON{
 			ID:               c.ID,
+			Kind:             c.Kind,
 			KnipjesRemaining: c.KnipjesRemaining,
 			CreatedAt:        c.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		})
@@ -119,6 +128,8 @@ func (d *Deps) APICardUse(w http.ResponseWriter, r *http.Request) {
 			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Deze kaart heeft geen knipjes meer.")
 		case store.ErrNotFound:
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Kaart niet gevonden.")
+		case store.ErrAvondetenManualUseDisabled:
+			httpx.JSONError(w, http.StatusBadRequest, "avondeten_use_disabled", err.Error())
 		default:
 			httpx.JSONError(w, http.StatusBadRequest, "use_failed", "Kon geen knipje gebruiken.")
 		}
@@ -139,17 +150,25 @@ func (d *Deps) APIBuy(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
+	dbTikkieAvondeten, err := d.Store.GetAppSetting(r.Context(), store.SettingKeyTikkieURLAvondeten)
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
 	out := make([]myPendingRequestJSON, 0, len(list))
 	for _, row := range list {
 		out = append(out, myPendingRequestJSON{
 			ID:               row.ID,
+			Kind:             row.Kind,
 			CreatedAt:        row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			KnipjesRemaining: row.KnipjesRemaining,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"payment_amount_eur":         d.Config.PaymentAmountEUR,
-		"tikkie_url":                 store.EffectiveTikkieURL(dbTikkie, d.Config.TikkieURL),
+		"payment_amount_eur":            d.Config.PaymentAmountEUR,
+		"payment_amount_avondeten_eur":   d.Config.AvondetenPaymentAmountEUR,
+		"tikkie_url":                    store.EffectiveTikkieURL(dbTikkie, d.Config.TikkieURL),
+		"tikkie_url_avondeten":          store.EffectiveTikkieURL(dbTikkieAvondeten, d.Config.TikkieURLAvondeten),
 		"bank_transfer_instructions": d.Config.BankTransferInstructions,
 		"my_pending_requests":        out,
 	})
@@ -157,11 +176,28 @@ func (d *Deps) APIBuy(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) APIBuyRequest(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.UserFromContext(r.Context())
-	_, err := d.Store.CreateCardRequest(r.Context(), u.ID)
+	var body struct {
+		Kind string `json:"kind"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
+	if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return
+	}
+	if _, err := store.NormalizeCardKind(body.Kind); err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_kind", "Ongeldig kaarttype.")
+		return
+	}
+	_, err := d.Store.CreateCardRequest(r.Context(), u.ID, body.Kind)
 	if err != nil {
 		if errors.Is(err, store.ErrAlreadyPending) {
 			httpx.JSONError(w, http.StatusConflict, "already_pending",
-				"Je hebt al een openstaande aanvraag. Annuleer die eerst of wacht tot de beheerder de betaling heeft geaccordeerd.")
+				"Je hebt al een openstaande aanvraag voor dit kaarttype. Annuleer die eerst of wacht tot de beheerder de betaling heeft geaccordeerd.")
+			return
+		}
+		if errors.Is(err, store.ErrForbidden) {
+			httpx.JSONError(w, http.StatusForbidden, "not_matroos_jeugd",
+				"De avondetenkaart is alleen voor matroos-jeugdleden. Neem contact op met de beheerder.")
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Aanvraag opslaan mislukt.")
@@ -383,6 +419,7 @@ func (d *Deps) APIAdminRequests(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, adminRequestJSON{
 			ID:               row.ID,
+			Kind:             row.Kind,
 			UserName:         row.UserName,
 			UserEmail:        row.UserEmail,
 			CreatedAt:        row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
@@ -400,7 +437,19 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige aanvraag.")
 		return
 	}
+	kind, err := d.Store.CardRequestKind(r.Context(), reqID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden.")
+			return
+		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
 	salePrice := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
+	if kind == store.CardKindAvondeten {
+		salePrice = parsePaymentEURAmount(d.Config.AvondetenPaymentAmountEUR)
+	}
 	err = d.Store.FulfillCardRequest(r.Context(), reqID, u.ID, salePrice)
 	if err != nil {
 		switch err {

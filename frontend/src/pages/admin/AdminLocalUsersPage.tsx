@@ -19,6 +19,7 @@ export function AdminLocalUsersPage() {
   const [editAdmin, setEditAdmin] = useState(false)
   const [editOp, setEditOp] = useState(false)
   const [savingId, setSavingId] = useState<number | null>(null)
+  const [matroosJeugdBusyId, setMatroosJeugdBusyId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -74,6 +75,19 @@ export function AdminLocalUsersPage() {
     setEditPwd('')
     setEditAdmin(r.is_admin)
     setEditOp(r.is_operator)
+  }
+
+  async function toggleMatroosJeugd(r: api.AdminUserRow, next: boolean) {
+    setMatroosJeugdBusyId(r.id)
+    try {
+      await api.patchUserMatroosJeugd(csrf, r.id, next)
+      await load()
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Opslaan mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setMatroosJeugdBusyId(null)
+    }
   }
 
   async function saveEdit() {
@@ -187,6 +201,9 @@ export function AdminLocalUsersPage() {
                   <th className="px-5 py-3.5">Login / e-mail</th>
                   <th className="px-5 py-3.5">Type</th>
                   <th className="px-5 py-3.5">Matroos</th>
+                  <th className="whitespace-nowrap px-5 py-3.5" title="Mag avondetenkaart kopen">
+                    Jeugd avondeten
+                  </th>
                   <th className="px-5 py-3.5">Admin</th>
                   <th className="px-5 py-3.5" />
                 </tr>
@@ -207,6 +224,16 @@ export function AdminLocalUsersPage() {
                       {r.auth_kind === 'local' ? 'Lokaal' : 'Google'}
                     </td>
                     <td className="px-5 py-3.5">{r.is_operator ? 'Ja' : '—'}</td>
+                    <td className="px-5 py-3.5">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
+                        checked={r.is_matroos_jeugd}
+                        disabled={matroosJeugdBusyId !== null}
+                        onChange={(e) => void toggleMatroosJeugd(r, e.target.checked)}
+                        aria-label={`Matroos jeugd voor ${r.name}`}
+                      />
+                    </td>
                     <td className="px-5 py-3.5">{r.is_admin ? 'Ja' : '—'}</td>
                     <td className="px-5 py-3.5 text-right">
                       {r.auth_kind === 'local' ? (

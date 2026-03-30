@@ -17,9 +17,11 @@ type Config struct {
 	AllowedGoogleDomain      string
 	SessionSecret            []byte
 	PublicBaseURL            string
-	TikkieURL                string
-	PaymentAmountEUR         string
-	BankTransferInstructions string
+	TikkieURL                 string
+	TikkieURLAvondeten        string
+	PaymentAmountEUR           string
+	AvondetenPaymentAmountEUR  string
+	BankTransferInstructions   string
 	BootstrapAdminEmails     map[string]struct{}
 	SecureCookies            bool
 	// TrustProxyHeaders: trust X-Forwarded-Proto from the edge (cloudflared, etc.).
@@ -79,6 +81,10 @@ func Load() (*Config, error) {
 	if amount == "" {
 		amount = "15"
 	}
+	avondetenAmount := strings.TrimSpace(os.Getenv("AVONDETEN_PAYMENT_AMOUNT_EUR"))
+	if avondetenAmount == "" {
+		avondetenAmount = "12"
+	}
 
 	frontendDist := strings.TrimSpace(os.Getenv("FRONTEND_DIST"))
 	if frontendDist == "" {
@@ -95,9 +101,11 @@ func Load() (*Config, error) {
 		AllowedGoogleDomain:      domain,
 		SessionSecret:            []byte(sessionSecret),
 		PublicBaseURL:            publicBase,
-		TikkieURL:                strings.TrimSpace(os.Getenv("TIKKIE_URL")),
-		PaymentAmountEUR:         amount,
-		BankTransferInstructions: os.Getenv("BANK_TRANSFER_INSTRUCTIONS"),
+		TikkieURL:                 strings.TrimSpace(os.Getenv("TIKKIE_URL")),
+		TikkieURLAvondeten:        strings.TrimSpace(os.Getenv("TIKKIE_URL_AVONDETEN")),
+		PaymentAmountEUR:          amount,
+		AvondetenPaymentAmountEUR: avondetenAmount,
+		BankTransferInstructions:  os.Getenv("BANK_TRANSFER_INSTRUCTIONS"),
 		BootstrapAdminEmails:     parseEmailSet(os.Getenv("BOOTSTRAP_ADMIN_EMAILS")),
 		SecureCookies:            secure,
 		TrustProxyHeaders:        trustProxy,

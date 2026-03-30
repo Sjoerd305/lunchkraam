@@ -3,8 +3,12 @@ import * as api from '../api'
 import { useAuth } from '../AuthContext'
 import { useAlertDialog } from '../components/AlertDialogProvider'
 
+function cardKindLabel(kind: api.CardKind): string {
+  return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
+}
+
 export function BuyPage() {
-  const { csrf, refresh } = useAuth()
+  const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
   const [info, setInfo] = useState<api.BuyInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -37,20 +41,26 @@ export function BuyPage() {
   }, [loadBuyInfo])
 
   const pending = info?.my_pending_requests ?? []
-  const hasPending = pending.length > 0
+  const hasAnyPending = pending.length > 0
   const anyKnipjesUsed = pending.some((r) => r.knipjes_remaining < 10)
+  const hasPendingTosti = pending.some((r) => r.kind === 'tosti')
+  const hasPendingAvondeten = pending.some((r) => r.kind === 'avondeten')
+  const showAvondeten = Boolean(user?.is_matroos_jeugd)
 
-  async function onRequest() {
-    if (hasPending) return
+  async function onRequest(kind: api.CardKind) {
+    if (kind === 'tosti' && hasPendingTosti) return
+    if (kind === 'avondeten' && hasPendingAvondeten) return
     setSubmitting(true)
     try {
-      await api.requestCard(csrf)
+      await api.requestCard(csrf, kind)
       await refresh()
       await loadBuyInfo()
+      const isAvondeten = kind === 'avondeten'
       await alert({
         title: 'Aanvraag ontvangen',
-        message:
-          'Je kaart met 10 knipjes staat nu op Mijn kaarten — je kunt meteen bestellen. De beheerder accordeert de betaling later voor de administratie.',
+        message: isAvondeten
+          ? 'Je kaart staat op Mijn kaarten. De beheerder accordeert later.'
+          : 'Je tostikaart met 10 knipjes staat nu op Mijn kaarten — je kunt meteen bestellen. De beheerder accordeert de betaling later voor de administratie.',
         variant: 'success',
       })
     } catch (e) {
@@ -142,19 +152,28 @@ export function BuyPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
-      <h1 className="text-2xl font-bold text-slate-900">Lunchkraam kaart kopen</h1>
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-lg">
-        <p className="text-slate-700">
-          Een nieuwe lunchkraam kaart kost{' '}
-          <strong className="text-brand-800">€{info.payment_amount_eur}</strong>. Zodra je hieronder je
-          aanvraag registreert, verschijnt er een <strong>volle kaart met 10 knipjes</strong> op{' '}
-          <strong>Mijn kaarten</strong>. Zo kunnen bestellingen tijdens de verkoop doorgaan zonder dat een
-          beheerder direct hoeft te accorderen. De beheerder vinkt de betaling later nog voor de
-          administratie af.
-        </p>
+      <h1 className="text-2xl font-bold text-slate-900">Kaarten kopen</h1>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
+          <h2 className="text-lg font-semibold text-slate-900">Tostikaart (lunchkraam)</h2>
+          <p className="mt-2 text-slate-700">
+            Nieuwe kaart: <strong className="text-brand-800">€{info.payment_amount_eur}</strong>. Na je
+            aanvraag krijg je meteen <strong>10 knipjes</strong> op <strong>Mijn kaarten</strong> om tosti’s te
+            bestellen. De beheerder accordeert de betaling later voor de administratie.
+          </p>
+        </div>
+        {showAvondeten ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
+            <h2 className="text-lg font-semibold text-slate-900">Avondetenkaart (matroos jeugd)</h2>
+            <p className="mt-2 text-slate-700">
+              <strong className="text-brand-800">€{info.payment_amount_avondeten_eur}</strong> — 10 streepjes op
+              Mijn kaarten. Afboeken via de kraam.
+            </p>
+          </div>
+        ) : null}
       </div>
 
-      {hasPending ? (
+      {hasAnyPending ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50/90 p-6 shadow-md">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <h2 className="text-lg font-semibold text-amber-950">Jouw openstaande aanvragen</h2>
@@ -170,9 +189,9 @@ export function BuyPage() {
             ) : null}
           </div>
           <p className="mt-2 text-sm text-amber-900/90">
-            Je kunt geen nieuwe aanvraag doen zolang er minstens één openstaand is. Annuleer foutieve
-            dubbelingen hier als je nog <strong>geen knipjes</strong> hebt gebruikt op die aanvraag. Na
-            knipjegebruik kun je niet meer annuleren — neem dan contact op met de beheerder.
+            Je kunt per kaarttype maximaal één openstaande aanvraag hebben. Annuleer foutieve dubbelingen hier
+            als je nog <strong>geen knipjes</strong> hebt gebruikt op die aanvraag. Na knipjegebruik kun je niet
+            meer annuleren — neem dan contact op met de beheerder.
           </p>
           <ul className="mt-4 space-y-2">
             {pending.map((r) => (
@@ -182,11 +201,14 @@ export function BuyPage() {
               >
                 <div>
                   <span className="font-mono text-sm text-slate-600">#{r.id}</span>
+                  <span className="ml-2 inline-block rounded-md bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-800">
+                    {cardKindLabel(r.kind)}
+                  </span>
                   <span className="ml-2 text-sm text-slate-700">
                     {new Date(r.created_at).toLocaleString('nl-NL')}
                   </span>
                   <p className="mt-1 text-sm text-slate-600">
-                    Knipjes op deze kaart:{' '}
+                    {r.kind === 'avondeten' ? 'Streepjes' : 'Knipjes'} op deze kaart:{' '}
                     <strong className="text-slate-800">{r.knipjes_remaining}</strong> / 10 over
                   </p>
                 </div>
@@ -211,22 +233,47 @@ export function BuyPage() {
       ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md">
-        <h2 className="text-lg font-semibold text-slate-900">Betalen</h2>
-        {info.tikkie_url ? (
-          <a
-            href={info.tikkie_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex rounded-xl bg-brand-700 px-5 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
-          >
-            Open Tikkie
-          </a>
-        ) : (
-          <p className="mt-3 text-sm text-slate-500">
-            Er is nog geen Tikkie-link. De beheerder kan die zetten onder <strong>Admin → Instellingen</strong>{' '}
-            of via <code>TIKKIE_URL</code> op de server.
-          </p>
-        )}
+        <h2 className="text-lg font-semibold text-slate-900">Betalen (Tikkie)</h2>
+        <div className="mt-6 space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">Tostikaart (€{info.payment_amount_eur})</h3>
+            {info.tikkie_url ? (
+              <a
+                href={info.tikkie_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex rounded-xl bg-brand-700 px-5 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
+              >
+                Tikkie tosti
+              </a>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">
+                Nog geen Tikkie voor de tostikaart. Vraag een beheerder om de link in te stellen.
+              </p>
+            )}
+          </div>
+          {showAvondeten ? (
+            <div className="border-t border-slate-100 pt-6">
+              <h3 className="text-sm font-semibold text-slate-800">
+                Avondetenkaart (€{info.payment_amount_avondeten_eur})
+              </h3>
+              {info.tikkie_url_avondeten ? (
+                <a
+                  href={info.tikkie_url_avondeten}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex rounded-xl border-2 border-brand-700 bg-white px-5 py-3 text-sm font-semibold text-brand-800 shadow-sm hover:bg-brand-50"
+                >
+                  Tikkie avondeten
+                </a>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  Nog geen Tikkie voor de avondetenkaart. Vraag een beheerder om een aparte link in te stellen.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md">
         <h2 className="text-lg font-semibold text-slate-900">Overschrijven</h2>
@@ -236,7 +283,7 @@ export function BuyPage() {
           </pre>
         ) : (
           <p className="mt-3 text-sm text-slate-500">
-            Geen overschrijvingsinstructies geconfigureerd (<code>BANK_TRANSFER_INSTRUCTIONS</code>).
+            Er zijn nog geen overschrijvingsinstructies ingesteld. Vraag een beheerder als je per bank wilt betalen.
           </p>
         )}
       </section>
@@ -245,22 +292,39 @@ export function BuyPage() {
         <p className="mt-2 text-slate-600">
           Na betaling registreer je hier je aanvraag: je krijgt meteen een kaart op Mijn kaarten. De
           beheerder ziet de aanvraag nog in de wachtrij voor betalingscontrole. Maximaal{' '}
-          <strong>één</strong> openstaande aanvraag tegelijk.
+          <strong>één openstaande aanvraag per kaarttype</strong>.
         </p>
-        {hasPending ? (
+        {hasPendingTosti ? (
           <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            Je hebt al een openstaande aanvraag — zie hierboven. Annuleren kan alleen zolang je nog geen
-            knipjes hebt gebruikt.
+            Je hebt al een openstaande <strong>tosti</strong>-aanvraag — zie hierboven. Annuleren kan alleen
+            zolang je nog geen knipjes hebt gebruikt.
           </p>
         ) : null}
         <button
           type="button"
-          disabled={submitting || hasPending}
-          onClick={() => void onRequest()}
+          disabled={submitting || hasPendingTosti}
+          onClick={() => void onRequest('tosti')}
           className="mt-6 min-h-12 w-full rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-md hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting ? 'Bezig…' : 'Ik heb betaald — kaart aanvragen'}
+          {submitting ? 'Bezig…' : 'Ik heb betaald — tostikaart aanvragen'}
         </button>
+        {showAvondeten ? (
+          <>
+            {hasPendingAvondeten ? (
+              <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                Je hebt al een openstaande <strong>avondeten</strong>-aanvraag — zie hierboven.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              disabled={submitting || hasPendingAvondeten}
+              onClick={() => void onRequest('avondeten')}
+              className="mt-4 min-h-12 w-full rounded-xl border-2 border-brand-700 bg-white px-5 py-3 text-sm font-semibold text-brand-800 shadow-sm hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting ? 'Bezig…' : 'Ik heb betaald — avondetenkaart aanvragen'}
+            </button>
+          </>
+        ) : null}
       </section>
     </div>
   )

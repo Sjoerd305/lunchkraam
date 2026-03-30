@@ -122,6 +122,8 @@ func main() {
 					r.Get("/operator/tosti-orders", h.APIOperatorTostiOrders)
 					r.Post("/operator/tosti-orders/{id}/deliver", h.APIOperatorTostiOrderDeliver)
 					r.Post("/operator/tosti-orders/{id}/cancel", h.APIOperatorTostiOrderCancel)
+					r.Get("/operator/avondeten/registrations", h.APIOperatorAvondetenList)
+					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/avondeten/register", h.APIOperatorAvondetenRegister)
 				})
 
 				r.Group(func(r chi.Router) {
@@ -150,6 +152,7 @@ func main() {
 					r.Get("/admin/users", h.APIAdminUsers)
 					r.Post("/admin/users/local", h.APIAdminCreateLocalUser)
 					r.Patch("/admin/users/{id}/local", h.APIAdminPatchLocalUser)
+					r.Patch("/admin/users/{id}/matroos-jeugd", h.APIAdminPatchUserMatroosJeugd)
 					r.Get("/admin/settings", h.APIAdminSettingsGet)
 					r.Patch("/admin/settings", h.APIAdminSettingsPatch)
 				})
