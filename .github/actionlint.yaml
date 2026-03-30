@@ -1,0 +1,9 @@
+# https://github.com/rhysd/actionlint/blob/main/docs/config.md
+self-hosted-runner:
+  labels:
+    - self-hosted
+    - Linux
+    - X64
+
+config-variables:
+  - TOSTIKAART_ENV_FILE
