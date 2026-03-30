@@ -165,8 +165,8 @@ export function BuyPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
             <h2 className="text-lg font-semibold text-slate-900">Avondetenkaart (matroos jeugd)</h2>
             <p className="mt-2 text-slate-700">
-              <strong className="text-brand-800">€{info.payment_amount_avondeten_eur}</strong> — 10 streepjes op
-              Mijn kaarten. Afboeken via de kraam.
+              <strong className="text-brand-800">€{info.payment_amount_avondeten_eur}</strong> — 10 knipjes op Mijn
+              kaarten. Afboeken via de kraam.
             </p>
           </div>
         ) : null}
@@ -205,7 +205,7 @@ export function BuyPage() {
                     {new Date(r.created_at).toLocaleString('nl-NL')}
                   </span>
                   <p className="mt-1 text-sm text-slate-600">
-                    {r.kind === 'avondeten' ? 'Streepjes' : 'Knipjes'} op deze kaart:{' '}
+                    Knipjes op deze kaart:{' '}
                     <strong className="text-slate-800">{r.knipjes_remaining}</strong> / 10 over
                   </p>
                 </div>

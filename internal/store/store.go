@@ -241,7 +241,7 @@ WHERE id = $1 AND knipjes_remaining > 0`
 }
 
 // UseKnipje lets the card owner use a punch, or an admin/operator on any card.
-// Avondeten cards are excluded: streepjes only via RegisterAvondetenMealsForDate (kraam ochtendlijst).
+// Avondeten cards are excluded: debits only via RegisterAvondetenMealsForDate (kraam ochtendlijst).
 func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
 	var kind string
 	err := s.pool.QueryRow(ctx, `SELECT kind::text FROM cards WHERE id = $1`, cardID).Scan(&kind)

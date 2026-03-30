@@ -211,7 +211,7 @@ export function KraamPage() {
     }
     const ok = await confirm({
       title: 'Avondeten registreren?',
-      message: `Voor ${avondetenMealDate}: ${avondetenPicked.length} streepje(s) afboeken op de geselecteerde kaarten?`,
+      message: `Voor ${avondetenMealDate}: ${avondetenPicked.length} knipje(s) afboeken op de geselecteerde kaarten?`,
       confirmLabel: 'Ja, opslaan',
       cancelLabel: 'Terug',
       tone: 'brand',
@@ -225,7 +225,7 @@ export function KraamPage() {
       await refresh()
       await alert({
         title: 'Opgeslagen',
-        message: n === 1 ? '1 streepje is afgeboekt.' : `${n} streepjes zijn afgeboekt.`,
+        message: n === 1 ? '1 knipje is afgeboekt.' : `${n} knipjes zijn afgeboekt.`,
         variant: 'success',
       })
     } catch (e) {
@@ -324,7 +324,7 @@ export function KraamPage() {
     const physical = isPhysicalTostiOrder(o)
     const knipjeTxt = q === 1 ? '1 knipje wordt' : `${q} knipjes worden`
     const confirmMessage = physical
-      ? `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${q === 1 ? '1 streepje' : `${q} streepjes`} op de kaart.`
+      ? `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${q === 1 ? '1 knipje' : `${q} knipjes`} op de kaart.`
       : `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — ${knipjeTxt} afgetrokken van kaart #${o.card_id}.`
     const ok = await confirm({
       title: 'Als geleverd markeren?',
@@ -343,8 +343,8 @@ export function KraamPage() {
         title: 'Geleverd',
         message: physical
           ? q === 1
-            ? 'Knip 1 streepje op de fysieke kaart.'
-            : `Knip ${q} streepjes op de fysieke kaart.`
+            ? 'Knip 1 knipje op de fysieke kaart.'
+            : `Knip ${q} knipjes op de fysieke kaart.`
           : q === 1
             ? 'Het knipje is afgetrokken.'
             : `De ${q} knipjes zijn afgetrokken.`,
@@ -410,7 +410,7 @@ export function KraamPage() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Tosti-bestellingen</h2>
             <p className="text-sm text-slate-600">
-              Bij een digitale kaart worden knipjes bij leveren afgeboekt. Bij een fysieke kaart streepjes knippen op de
+              Bij een digitale kaart worden knipjes bij leveren afgeboekt. Bij een fysieke kaart knipjes knippen op de
               kaart.
             </p>
           </div>
@@ -577,7 +577,7 @@ export function KraamPage() {
                   <p className="font-semibold text-slate-900">{c.owner_name}</p>
                   <p className="text-sm text-slate-600">{c.owner_email}</p>
                   <p className="mt-1 text-sm text-slate-700">
-                    <strong>{c.knipjes_remaining}</strong> / 10 {c.kind === 'avondeten' ? 'streepjes' : 'knipjes'}
+                    <strong>{c.knipjes_remaining}</strong> / 10 knipjes
                   </p>
                 </div>
                 {c.kind === 'avondeten' ? (
@@ -633,7 +633,7 @@ export function KraamPage() {
                     <th className="w-10 px-3 py-2.5" />
                     <th className="px-3 py-2.5">Naam</th>
                     <th className="px-3 py-2.5">Kaart</th>
-                    <th className="px-3 py-2.5">Streepjes</th>
+                    <th className="px-3 py-2.5">Knipjes</th>
                     <th className="px-3 py-2.5">Status</th>
                   </tr>
                 </thead>

@@ -111,7 +111,7 @@ export function CardsPage() {
               {c.knipjes_remaining}
               <span className="text-lg font-medium text-slate-500"> / 10</span>
             </p>
-            <p className="text-sm text-slate-600">{c.kind === 'avondeten' ? 'streepjes over' : 'knipjes over'}</p>
+            <p className="text-sm text-slate-600">knipjes over</p>
             <div className="mt-6 flex-1" />
             {c.kind === 'avondeten' ? (
               c.knipjes_remaining > 0 ? (

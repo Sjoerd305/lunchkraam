@@ -1,6 +1,6 @@
 # Lunchkraam
 
-Webapp voor **tostikaarten** en **avondetenkaarten** (elk 10 eenheden op de kaart: knipjes vs. streepjes in de UI). Leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, beheren kaarten via het dashboard en **Kaart kopen** (`/buy`), en kunnen **tosti’s bestellen** (1 tosti = 1 knipje; meerdere stuks per bestelling mogelijk). Zonder vrije digitale knipjes kan iemand met een **fysieke tostikaart** bestellen; de kraam knipt dan op de kaart (geen afboeking in de app). Betaling verloopt handmatig (Tikkie/overschrijving); een **admin** accordeert aanvragen en beheert gebruikers. Operators zien de tosti-wachtrij op de **kraampagina** en kunnen daar ook **avondeten per datum** afboeken.
+Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de kaart). Leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, beheren kaarten via het dashboard en **Kaart kopen** (`/buy`), en kunnen **tosti’s bestellen** (1 tosti = 1 knipje; meerdere stuks per bestelling mogelijk). Zonder vrije digitale knipjes kan iemand met een **fysieke tostikaart** bestellen; de kraam knipt dan op de kaart (geen afboeking in de app). Betaling verloopt handmatig (Tikkie/overschrijving); een **admin** accordeert aanvragen en beheert gebruikers. Operators zien de tosti-wachtrij op de **kraampagina** en kunnen daar ook **avondeten per datum** afboeken.
 
 - **PostgreSQL** + migraties (goose)
 - **SPA** (React/Vite), in productie door de Go-server geserveerd

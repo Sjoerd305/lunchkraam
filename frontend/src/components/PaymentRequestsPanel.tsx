@@ -9,10 +9,6 @@ function requestKindLabel(r: AdminRequest): string {
   return r.kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
 }
 
-function punchesLabel(r: AdminRequest): string {
-  return r.kind === 'avondeten' ? 'streepjes' : 'knipjes'
-}
-
 type LayoutMode = 'responsive' | 'cards-only'
 
 type Props = {
@@ -59,7 +55,7 @@ export function PaymentRequestsPanel({
                 <p className="mt-1 break-all text-sm text-slate-600">{r.user_email}</p>
                 <p className="mt-2 text-xs font-semibold text-slate-700">{requestKindLabel(r)}</p>
                 <p className="mt-1 text-sm text-slate-600">
-                  Nog op de kaart: <strong>{r.knipjes_remaining ?? 10}</strong> / 10 {punchesLabel(r)}
+                  Nog op de kaart: <strong>{r.knipjes_remaining ?? 10}</strong> / 10 knipjes
                 </p>
                 <div className="mt-4 flex flex-col gap-2">
                   <button
@@ -113,7 +109,7 @@ export function PaymentRequestsPanel({
                       </td>
                       <td className="px-4 py-3 text-slate-600">{requestKindLabel(r)}</td>
                       <td className="px-4 py-3 text-slate-600">
-                        {r.knipjes_remaining ?? 10} / 10 {punchesLabel(r)}
+                        {r.knipjes_remaining ?? 10} / 10 knipjes
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap items-center justify-end gap-2">

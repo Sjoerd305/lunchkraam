@@ -92,7 +92,7 @@ func (d *Deps) APIOperatorAvondetenRegister(w http.ResponseWriter, r *http.Reque
 		case errors.Is(err, store.ErrAvondetenWrongCardKind):
 			httpx.JSONError(w, http.StatusBadRequest, "wrong_card", "Alleen avondetenkaarten kunnen zo worden geregistreerd.")
 		case errors.Is(err, store.ErrNoKnipjes):
-			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Een van de kaarten heeft geen streepjes meer.")
+			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Een van de kaarten heeft geen knipjes meer.")
 		case errors.Is(err, store.ErrAvondetenAlreadyRegistered):
 			httpx.JSONError(w, http.StatusConflict, "already_registered", "Een van de kaarten was al geregistreerd voor deze datum. Vernieuw de lijst en probeer opnieuw.")
 		default:
