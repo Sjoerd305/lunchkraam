@@ -64,3 +64,5 @@ jobs:
 
       - name: Build and start stack
         run: docker compose up -d --build
+
+        
