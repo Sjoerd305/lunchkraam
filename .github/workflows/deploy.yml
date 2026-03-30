@@ -1,0 +1,66 @@
+# Bij push naar `main`: eerst checks op GitHub-hosted, daarna build + deploy op je self-hosted runner.
+#
+# Self-hosted runner (labels: self-hosted, Linux, X64) — de job draait op de server waar Docker draait.
+# SSH vanuit Actions is niet nodig; git-clone/pull doet de runner zelf via checkout.
+#
+# Standaard wordt .env gekopieerd van /home/sjoerd/lunchkraam/.env op de runner-host.
+# Optioneel: repository variable TOSTIKAART_ENV_FILE overschrijft dat pad.
+#
+# Op de runner-host: Docker + docker compose; gebruiker die de runner draait kan `docker` aanroepen (groep `docker`).
+
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Go static checks and compile
+        run: |
+          go vet ./...
+          go build -trimpath -ldflags="-s -w" -o /tmp/tostikaart-server ./cmd/server
+
+      - name: Verify production Docker image builds
+        run: docker build -t tostikaart:ci .
+
+  deploy:
+    needs: verify
+    runs-on: [self-hosted, Linux, X64]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy production .env
+        env:
+          OVERRIDE: ${{ vars.TOSTIKAART_ENV_FILE }}
+        run: |
+          set -euo pipefail
+          DEFAULT="/home/sjoerd/lunchkraam/.env"
+          if [ -n "${OVERRIDE:-}" ]; then
+            SRC="$OVERRIDE"
+          else
+            SRC="$DEFAULT"
+          fi
+          if [ ! -f "$SRC" ]; then
+            echo "Env file not found: $SRC (set TOSTIKAART_ENV_FILE or place .env at $DEFAULT)" >&2
+            exit 1
+          fi
+          cp "$SRC" .env
+
+      - name: Build and start stack
+        run: docker compose up -d --build
