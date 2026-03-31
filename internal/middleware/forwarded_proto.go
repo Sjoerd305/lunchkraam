@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -26,6 +27,10 @@ func RedirectHTTPToHTTPS(trustProxy bool, publicBaseURL string) func(http.Handle
 				return
 			}
 			loc := httpsRedirectLocation(r, publicBaseURL)
+			if loc == "" {
+				http.Error(w, "invalid redirect host", http.StatusBadRequest)
+				return
+			}
 			http.Redirect(w, r, loc, http.StatusPermanentRedirect)
 		})
 	}
@@ -36,14 +41,40 @@ func httpsRedirectLocation(r *http.Request, publicBaseURL string) string {
 	if reqURI == "" {
 		reqURI = "/"
 	}
+	if host := httpsRedirectHost(publicBaseURL, r); host != "" {
+		return "https://" + host + reqURI
+	}
+	return ""
+}
+
+func httpsRedirectHost(publicBaseURL string, r *http.Request) string {
 	if publicBaseURL != "" && strings.HasPrefix(strings.ToLower(publicBaseURL), "https://") {
-		return publicBaseURL + reqURI
+		if parsed, err := url.Parse(publicBaseURL); err == nil && isSafeRedirectHost(parsed.Host) {
+			return parsed.Host
+		}
 	}
-	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host := forwardedRequestHost(r); isSafeRedirectHost(host) {
+		return host
+	}
+	return ""
+}
+
+func isSafeRedirectHost(host string) bool {
+	host = strings.TrimSpace(host)
 	if host == "" {
-		host = r.Host
+		return false
 	}
-	return "https://" + host + reqURI
+	if strings.ContainsAny(host, " \t\r\n/@\\") {
+		return false
+	}
+	parsed, err := url.Parse("https://" + host)
+	if err != nil {
+		return false
+	}
+	if parsed.Host != host {
+		return false
+	}
+	return parsed.Hostname() != ""
 }
 
 // forwardedRequestHost returns the client-facing host (first X-Forwarded-Host value or r.Host).

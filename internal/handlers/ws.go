@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -10,18 +11,42 @@ import (
 )
 
 func wsCheckOrigin(d *Deps, r *http.Request) bool {
-	o := strings.TrimSpace(r.Header.Get("Origin"))
-	if o == "" {
+	originURL, ok := parseOriginURL(r.Header.Get("Origin"))
+	if !ok {
 		return true
 	}
-	base := strings.TrimSuffix(strings.TrimSpace(d.Config.PublicBaseURL), "/")
-	if base != "" {
-		return strings.HasPrefix(o, base)
+	baseURL, ok := parseOriginURL(d.Config.PublicBaseURL)
+	if ok {
+		return sameOrigin(originURL, baseURL)
 	}
-	lo := strings.ToLower(o)
-	return strings.HasPrefix(lo, "http://localhost") ||
-		strings.HasPrefix(lo, "http://127.0.0.1") ||
-		strings.HasPrefix(lo, "http://[::1]")
+	return isLocalOrigin(originURL)
+}
+
+func parseOriginURL(raw string) (*url.URL, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, false
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, false
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return nil, false
+	}
+	return parsed, true
+}
+
+func sameOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
+}
+
+func isLocalOrigin(originURL *url.URL) bool {
+	if !strings.EqualFold(originURL.Scheme, "http") && !strings.EqualFold(originURL.Scheme, "https") {
+		return false
+	}
+	host := strings.ToLower(originURL.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 // WSKraam is a WebSocket for operators/admins; pushes tosti_queue and payment_requests refresh hints.

@@ -32,7 +32,8 @@ ORDER BY 1`, year)
 			return out, err
 		}
 		if m >= 1 && m <= 12 {
-			out[m-1] = q
+			monthIndex := m - 1
+			out[monthIndex] = q // #nosec G602 -- monthIndex is validated to be within 0..11
 		}
 	}
 	return out, rows.Err()
