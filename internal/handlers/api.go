@@ -20,14 +20,15 @@ import (
 )
 
 type userPublicJSON struct {
-	ID             int64   `json:"id"`
-	Email          string  `json:"email"`
-	Name           string  `json:"name"`
-	IsAdmin        bool    `json:"is_admin"`
-	IsOperator     bool    `json:"is_operator"`
-	IsMatroosJeugd bool    `json:"is_matroos_jeugd"`
-	AuthKind       string  `json:"auth_kind"`
-	LocalUsername  *string `json:"local_username,omitempty"`
+	ID                 int64   `json:"id"`
+	Email              string  `json:"email"`
+	Name               string  `json:"name"`
+	IsAdmin            bool    `json:"is_admin"`
+	IsOperator         bool    `json:"is_operator"`
+	IsMatroosJeugd     bool    `json:"is_matroos_jeugd"`
+	MustChangePassword bool    `json:"must_change_password"`
+	AuthKind           string  `json:"auth_kind"`
+	LocalUsername      *string `json:"local_username,omitempty"`
 }
 
 type cardJSON struct {
@@ -56,7 +57,8 @@ type myPendingRequestJSON struct {
 func toUserPublic(u *store.User) userPublicJSON {
 	j := userPublicJSON{
 		ID: u.ID, Email: u.Email, Name: u.Name, IsAdmin: u.IsAdmin, IsOperator: u.IsOperator,
-		IsMatroosJeugd: u.IsMatroosJeugd,
+		IsMatroosJeugd:     u.IsMatroosJeugd,
+		MustChangePassword: u.MustChangePassword,
 	}
 	if u.LoginUsername != nil && *u.LoginUsername != "" {
 		j.AuthKind = "local"
@@ -480,6 +482,10 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 	}
 	salePrice := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
 	if kind == store.CardKindAvondeten {
+		if !u.IsAdmin {
+			httpx.JSONError(w, http.StatusForbidden, "admin_required_for_avondeten", "Alleen beheerders mogen avondetenkaarten accorderen.")
+			return
+		}
 		salePrice = parsePaymentEURAmount(d.Config.AvondetenPaymentAmountEUR)
 	}
 	err = d.Store.FulfillCardRequest(r.Context(), reqID, u.ID, salePrice)

@@ -37,13 +37,28 @@ export function AppShell() {
                 {user?.is_admin ? 'Admin' : 'Betalingen'}
               </NavLink>
             ) : null}
-            <button
-              type="button"
-              onClick={() => void onLogout()}
-              className="btn-secondary ml-1 shrink-0 px-3 py-1.5 text-sm font-medium"
-            >
-              Uitloggen
-            </button>
+            <details className="relative ml-1">
+              <summary className="btn-secondary cursor-pointer list-none px-3 py-1.5 text-sm font-medium">
+                Account
+              </summary>
+              <div className="absolute right-0 z-30 mt-2 min-w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+                {user?.auth_kind === 'local' ? (
+                  <Link
+                    to="/account/password"
+                    className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    Wachtwoord wijzigen
+                  </Link>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void onLogout()}
+                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Uitloggen
+                </button>
+              </div>
+            </details>
           </nav>
         </div>
       </header>

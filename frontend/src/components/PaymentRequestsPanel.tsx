@@ -18,6 +18,7 @@ type Props = {
   busyId: number | null
   onFulfill: (id: number, knipjesRemaining: number) => void
   onReject: (id: number) => void
+  canManageRequest?: (row: AdminRequest) => boolean
   layout?: LayoutMode
 }
 
@@ -28,9 +29,11 @@ export function PaymentRequestsPanel({
   busyId,
   onFulfill,
   onReject,
+  canManageRequest,
   layout = 'responsive',
 }: Props) {
   const cardsOnly = layout === 'cards-only'
+  const mayManage = (row: AdminRequest): boolean => (canManageRequest ? canManageRequest(row) : true)
 
   return (
     <div className="space-y-4">
@@ -60,25 +63,40 @@ export function PaymentRequestsPanel({
                 <div className="mt-4 flex flex-col gap-2">
                   <button
                     type="button"
-                    disabled={busyId !== null}
+                    disabled={busyId !== null || !mayManage(r)}
                     onClick={() => onFulfill(r.id, r.knipjes_remaining ?? 10)}
-                    className="min-h-12 w-full rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
+                    className={`min-h-12 w-full rounded-xl px-4 py-3 text-sm font-semibold shadow-sm disabled:cursor-not-allowed ${
+                      mayManage(r)
+                        ? 'bg-brand-700 text-white hover:bg-brand-800 disabled:opacity-50'
+                        : 'bg-slate-200 text-slate-500'
+                    }`}
                   >
                     {busyId === r.id ? '…' : 'Betaling accorderen'}
                   </button>
                   <button
                     type="button"
-                    disabled={busyId !== null || !canRejectPaymentRequest(r.knipjes_remaining ?? 10)}
+                    disabled={
+                      busyId !== null || !mayManage(r) || !canRejectPaymentRequest(r.knipjes_remaining ?? 10)
+                    }
                     title={
-                      canRejectPaymentRequest(r.knipjes_remaining ?? 10)
+                      !mayManage(r)
+                        ? 'Alleen beheerders mogen avondetenaanvragen afhandelen.'
+                        : canRejectPaymentRequest(r.knipjes_remaining ?? 10)
                         ? undefined
                         : 'Niet weigeren na knipjegebruik — accorderen.'
                     }
                     onClick={() => onReject(r.id)}
-                    className="min-h-12 w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-800 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className={`min-h-12 w-full rounded-xl px-4 py-3 text-sm font-semibold shadow-sm disabled:cursor-not-allowed ${
+                      mayManage(r)
+                        ? 'border border-red-200 bg-white text-red-800 hover:bg-red-50 disabled:opacity-50'
+                        : 'border border-slate-200 bg-slate-100 text-slate-500'
+                    }`}
                   >
                     {busyId === r.id ? '…' : 'Weigeren (geen betaling)'}
                   </button>
+                  {!mayManage(r) ? (
+                    <p className="text-xs text-slate-500">Alleen een beheerder kan deze avondetenaanvraag afhandelen.</p>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -115,22 +133,34 @@ export function PaymentRequestsPanel({
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
                             type="button"
-                            disabled={busyId !== null}
+                            disabled={busyId !== null || !mayManage(r)}
                             onClick={() => onFulfill(r.id, r.knipjes_remaining ?? 10)}
-                            className="min-h-10 rounded-lg bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
+                            className={`min-h-10 rounded-lg px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed ${
+                              mayManage(r)
+                                ? 'bg-brand-700 text-white hover:bg-brand-800 disabled:opacity-50'
+                                : 'bg-slate-200 text-slate-500'
+                            }`}
                           >
                             {busyId === r.id ? '…' : 'Accorderen'}
                           </button>
                           <button
                             type="button"
-                            disabled={busyId !== null || !canRejectPaymentRequest(r.knipjes_remaining ?? 10)}
+                            disabled={
+                              busyId !== null || !mayManage(r) || !canRejectPaymentRequest(r.knipjes_remaining ?? 10)
+                            }
                             title={
-                              canRejectPaymentRequest(r.knipjes_remaining ?? 10)
+                              !mayManage(r)
+                                ? 'Alleen beheerders mogen avondetenaanvragen afhandelen.'
+                                : canRejectPaymentRequest(r.knipjes_remaining ?? 10)
                                 ? undefined
                                 : 'Niet weigeren na knipjegebruik — accorderen.'
                             }
                             onClick={() => onReject(r.id)}
-                            className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className={`min-h-10 rounded-lg px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed ${
+                              mayManage(r)
+                                ? 'border border-red-200 bg-white text-red-800 hover:bg-red-50 disabled:opacity-50'
+                                : 'border border-slate-200 bg-slate-100 text-slate-500'
+                            }`}
                           >
                             Weigeren
                           </button>

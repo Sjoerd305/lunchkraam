@@ -14,10 +14,12 @@ export function AdminLocalUsersPage() {
   const [password, setPassword] = useState('')
   const [newIsAdmin, setNewIsAdmin] = useState(false)
   const [newIsOperator, setNewIsOperator] = useState(true)
+  const [newMustChangePassword, setNewMustChangePassword] = useState(true)
   const [editId, setEditId] = useState<number | null>(null)
   const [editPwd, setEditPwd] = useState('')
   const [editAdmin, setEditAdmin] = useState(false)
   const [editOp, setEditOp] = useState(false)
+  const [editMustChangePassword, setEditMustChangePassword] = useState(false)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [matroosJeugdBusyId, setMatroosJeugdBusyId] = useState<number | null>(null)
 
@@ -49,12 +51,14 @@ export function AdminLocalUsersPage() {
         password,
         is_admin: newIsAdmin,
         is_operator: newIsOperator,
+        must_change_password: newMustChangePassword,
       })
       setUsername('')
       setDisplayName('')
       setPassword('')
       setNewIsAdmin(false)
       setNewIsOperator(true)
+      setNewMustChangePassword(true)
       await load()
       await alert({
         title: 'Account aangemaakt',
@@ -75,6 +79,7 @@ export function AdminLocalUsersPage() {
     setEditPwd('')
     setEditAdmin(r.is_admin)
     setEditOp(r.is_operator)
+    setEditMustChangePassword(r.must_change_password)
   }
 
   async function toggleMatroosJeugd(r: api.AdminUserRow, next: boolean) {
@@ -98,6 +103,7 @@ export function AdminLocalUsersPage() {
         password: editPwd,
         is_admin: editAdmin,
         is_operator: editOp,
+        must_change_password: editMustChangePassword,
       })
       setEditId(null)
       await load()
@@ -173,6 +179,15 @@ export function AdminLocalUsersPage() {
                 />
                 <span>Beheerder (admin)</span>
               </label>
+              <label className="flex cursor-pointer items-start gap-2.5 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 shrink-0 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
+                  checked={newMustChangePassword}
+                  onChange={(e) => setNewMustChangePassword(e.target.checked)}
+                />
+                <span>Wachtwoord wijzigen bij eerste login verplicht</span>
+              </label>
             </div>
           </div>
           <div className="sm:col-span-2">
@@ -199,6 +214,7 @@ export function AdminLocalUsersPage() {
                   <th className="px-5 py-3.5">Login / e-mail</th>
                   <th className="px-5 py-3.5">Type</th>
                   <th className="px-5 py-3.5">Matroos</th>
+                  <th className="px-5 py-3.5">Reset verplicht</th>
                   <th className="whitespace-nowrap px-5 py-3.5" title="Mag avondetenkaart kopen">
                     Jeugd avondeten
                   </th>
@@ -222,6 +238,7 @@ export function AdminLocalUsersPage() {
                       {r.auth_kind === 'local' ? 'Lokaal' : 'Google'}
                     </td>
                     <td className="px-5 py-3.5">{r.is_operator ? 'Ja' : '—'}</td>
+                    <td className="px-5 py-3.5">{r.must_change_password ? 'Ja' : '—'}</td>
                     <td className="px-5 py-3.5">
                       <input
                         type="checkbox"
@@ -282,6 +299,14 @@ export function AdminLocalUsersPage() {
             <label className="mt-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={editAdmin} onChange={(e) => setEditAdmin(e.target.checked)} />
               Beheerder
+            </label>
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editMustChangePassword}
+                onChange={(e) => setEditMustChangePassword(e.target.checked)}
+              />
+              Wachtwoord wijzigen bij eerstvolgende login verplicht
             </label>
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => setEditId(null)} className="btn-secondary">

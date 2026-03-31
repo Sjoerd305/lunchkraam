@@ -10,11 +10,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"golang.org/x/crypto/bcrypt"
 	"lunchkraam/internal/auth"
 	"lunchkraam/internal/httpx"
 	"lunchkraam/internal/middleware"
 	"lunchkraam/internal/store"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var localUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,31}$`)
@@ -52,15 +52,16 @@ func (d *Deps) APILocalLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 type adminUserListJSON struct {
-	ID               int64   `json:"id"`
-	Name             string  `json:"name"`
-	Email            string  `json:"email"`
-	AuthKind         string  `json:"auth_kind"`
-	LocalUsername    *string `json:"local_username,omitempty"`
-	IsAdmin          bool    `json:"is_admin"`
-	IsOperator       bool    `json:"is_operator"`
-	IsMatroosJeugd   bool    `json:"is_matroos_jeugd"`
-	CreatedAt        string  `json:"created_at"`
+	ID                 int64   `json:"id"`
+	Name               string  `json:"name"`
+	Email              string  `json:"email"`
+	AuthKind           string  `json:"auth_kind"`
+	LocalUsername      *string `json:"local_username,omitempty"`
+	IsAdmin            bool    `json:"is_admin"`
+	IsOperator         bool    `json:"is_operator"`
+	IsMatroosJeugd     bool    `json:"is_matroos_jeugd"`
+	MustChangePassword bool    `json:"must_change_password"`
+	CreatedAt          string  `json:"created_at"`
 }
 
 func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +75,8 @@ func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
 		j := adminUserListJSON{
 			ID: row.ID, Name: row.Name, Email: row.Email,
 			IsAdmin: row.IsAdmin, IsOperator: row.IsOperator, IsMatroosJeugd: row.IsMatroosJeugd,
-			CreatedAt: row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			MustChangePassword: row.MustChangePassword,
+			CreatedAt:          row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		}
 		if row.LoginUsername != nil && *row.LoginUsername != "" {
 			j.AuthKind = "local"
@@ -90,11 +92,12 @@ func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) APIAdminCreateLocalUser(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Username   string `json:"username"`
-		Name       string `json:"name"`
-		Password   string `json:"password"`
-		IsAdmin    bool   `json:"is_admin"`
-		IsOperator bool   `json:"is_operator"`
+		Username           string `json:"username"`
+		Name               string `json:"name"`
+		Password           string `json:"password"`
+		IsAdmin            bool   `json:"is_admin"`
+		IsOperator         bool   `json:"is_operator"`
+		MustChangePassword *bool  `json:"must_change_password"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
 	if err := dec.Decode(&body); err != nil {
@@ -120,7 +123,11 @@ func (d *Deps) APIAdminCreateLocalUser(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Wachtwoord verwerken mislukt.")
 		return
 	}
-	nu, err := d.Store.CreateLocalUser(r.Context(), u, display, hash, body.IsAdmin, body.IsOperator)
+	mustChangePassword := true
+	if body.MustChangePassword != nil {
+		mustChangePassword = *body.MustChangePassword
+	}
+	nu, err := d.Store.CreateLocalUser(r.Context(), u, display, hash, body.IsAdmin, body.IsOperator, mustChangePassword)
 	if errors.Is(err, store.ErrUsernameTaken) {
 		httpx.JSONError(w, http.StatusConflict, "username_taken", "Deze gebruikersnaam bestaat al.")
 		return
@@ -140,9 +147,10 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Password   string `json:"password"`
-		IsAdmin    bool   `json:"is_admin"`
-		IsOperator bool   `json:"is_operator"`
+		Password           string `json:"password"`
+		IsAdmin            bool   `json:"is_admin"`
+		IsOperator         bool   `json:"is_operator"`
+		MustChangePassword bool   `json:"must_change_password"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
 	if err := dec.Decode(&body); err != nil {
@@ -157,7 +165,7 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 		}
 		pwd = &t
 	}
-	err = d.Store.AdminUpdateLocalUser(r.Context(), uid, pwd, body.IsAdmin, body.IsOperator)
+	err = d.Store.AdminUpdateLocalUser(r.Context(), uid, pwd, body.IsAdmin, body.IsOperator, body.MustChangePassword)
 	if errors.Is(err, store.ErrNotFound) {
 		httpx.JSONError(w, http.StatusNotFound, "not_found", "Lokaal account niet gevonden.")
 		return
@@ -172,6 +180,43 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"user": toUserPublic(u)})
+}
+
+func (d *Deps) APILocalChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	u, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		httpx.JSONError(w, http.StatusUnauthorized, "unauthorized", "Niet ingelogd.")
+		return
+	}
+	var body struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
+	if err := dec.Decode(&body); err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return
+	}
+	if len(strings.TrimSpace(body.NewPassword)) < 8 {
+		httpx.JSONError(w, http.StatusBadRequest, "weak_password", "Wachtwoord moet minstens 8 tekens zijn.")
+		return
+	}
+	err := d.Store.ChangeOwnLocalPassword(r.Context(), u.ID, body.CurrentPassword, body.NewPassword)
+	switch {
+	case errors.Is(err, store.ErrInvalidCurrentPassword):
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_current_password", "Huidig wachtwoord is onjuist.")
+		return
+	case errors.Is(err, store.ErrNotLocalAccount):
+		httpx.JSONError(w, http.StatusBadRequest, "not_local_account", "Dit account gebruikt geen lokaal wachtwoord.")
+		return
+	case errors.Is(err, store.ErrNotFound):
+		httpx.JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
+		return
+	case err != nil:
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Wachtwoord wijzigen mislukt.")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (d *Deps) APIAdminPatchUserMatroosJeugd(w http.ResponseWriter, r *http.Request) {
@@ -211,13 +256,13 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, map[string]any{
-			"id":                  row.ID,
-			"kind":                row.Kind,
-			"knipjes_remaining":   row.KnipjesRemaining,
-			"created_at":          row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			"owner_name":          row.OwnerName,
-			"owner_email":         row.OwnerEmail,
-			"owner_user_id":       row.UserID,
+			"id":                row.ID,
+			"kind":              row.Kind,
+			"knipjes_remaining": row.KnipjesRemaining,
+			"created_at":        row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"owner_name":        row.OwnerName,
+			"owner_email":       row.OwnerEmail,
+			"owner_user_id":     row.UserID,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"cards": out})

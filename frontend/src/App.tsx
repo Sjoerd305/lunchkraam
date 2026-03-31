@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import { AlertDialogProvider } from './components/AlertDialogProvider'
 import { AppShell } from './components/AppShell'
@@ -8,6 +8,7 @@ import { AdminLocalUsersPage } from './pages/admin/AdminLocalUsersPage'
 import { AdminRequestsPage } from './pages/admin/AdminRequestsPage'
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage'
 import { AdminShopExpensesPage } from './pages/admin/AdminShopExpensesPage'
+import { AccountPasswordPage } from './pages/AccountPasswordPage'
 import { BuyPage } from './pages/BuyPage'
 import { CardsPage } from './pages/CardsPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -17,6 +18,7 @@ import { OrderTostiPage } from './pages/OrderTostiPage'
 
 function RequireAuth() {
   const { user, loading } = useAuth()
+  const location = useLocation()
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
@@ -26,6 +28,9 @@ function RequireAuth() {
   }
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+  if (user.must_change_password && location.pathname !== '/account/password') {
+    return <Navigate to="/account/password" replace />
   }
   return <Outlet />
 }
@@ -43,6 +48,7 @@ export default function App() {
               <Route path="/buy" element={<BuyPage />} />
               <Route path="/tosti" element={<OrderTostiPage />} />
               <Route path="/kraam" element={<KraamPage />} />
+              <Route path="/account/password" element={<AccountPasswordPage />} />
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminDashboardPage />} />
                 <Route path="requests" element={<AdminRequestsPage />} />

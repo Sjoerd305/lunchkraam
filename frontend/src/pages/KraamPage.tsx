@@ -526,6 +526,7 @@ export function KraamPage() {
           <PaymentRequestsPanel
             rows={paymentRows}
             busyId={paymentBusyId}
+            canManageRequest={(row) => Boolean(user.is_admin || row.kind !== 'avondeten')}
             onFulfill={(id, k) => void onPaymentFulfill(id, k)}
             onReject={(id) => void onPaymentReject(id)}
             layout="cards-only"

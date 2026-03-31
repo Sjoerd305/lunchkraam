@@ -17,6 +17,19 @@ func writeAPIUnauthorized(w http.ResponseWriter, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized", "message": msg})
 }
 
+func writeAPIPasswordChangeRequired(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   "password_change_required",
+		"message": "Wijzig eerst je wachtwoord om door te gaan.",
+	})
+}
+
+func isAllowedWhilePasswordChangeRequired(r *http.Request) bool {
+	return r.Method == http.MethodPost && r.URL.Path == "/api/account/password"
+}
+
 // RequireUserAPI ensures a logged-in user is loaded (JSON errors, no redirect).
 func RequireUserAPI(st *store.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -36,6 +49,10 @@ func RequireUserAPI(st *store.Store) func(http.Handler) http.Handler {
 				auth.ClearSessionUser(sess)
 				_ = sess.Save(r, w)
 				writeAPIUnauthorized(w, "Sessie ongeldig.")
+				return
+			}
+			if u.MustChangePassword && !isAllowedWhilePasswordChangeRequired(r) {
+				writeAPIPasswordChangeRequired(w)
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), u)))

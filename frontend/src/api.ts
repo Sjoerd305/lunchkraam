@@ -7,6 +7,7 @@ export type User = {
   is_admin: boolean
   is_operator: boolean
   is_matroos_jeugd: boolean
+  must_change_password: boolean
   auth_kind: 'google' | 'local'
   local_username?: string
 }
@@ -163,6 +164,7 @@ function normalizeUser(raw: unknown): User | null {
     is_admin: Boolean(u.is_admin),
     is_operator: Boolean(u.is_operator),
     is_matroos_jeugd: Boolean(u.is_matroos_jeugd),
+    must_change_password: Boolean(u.must_change_password),
     auth_kind: u.auth_kind === 'local' ? 'local' : 'google',
     local_username: typeof u.local_username === 'string' ? u.local_username : undefined,
   }
@@ -195,6 +197,22 @@ export async function localLogin(csrf: string, username: string, password: strin
   if (!res.ok) throw await parseError(res)
 }
 
+export async function changeOwnPassword(
+  csrf: string,
+  body: { current_password: string; new_password: string },
+): Promise<void> {
+  const res = await fetch('/api/account/password', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
 export type AdminUserRow = {
   id: number
   name: string
@@ -204,6 +222,7 @@ export type AdminUserRow = {
   is_admin: boolean
   is_operator: boolean
   is_matroos_jeugd: boolean
+  must_change_password: boolean
   created_at: string
 }
 
@@ -224,6 +243,7 @@ export async function getAdminUsers(): Promise<AdminUserRow[]> {
       is_admin: Boolean(r.is_admin),
       is_operator: Boolean(r.is_operator),
       is_matroos_jeugd: Boolean(r.is_matroos_jeugd),
+      must_change_password: Boolean(r.must_change_password),
       created_at: typeof r.created_at === 'string' ? r.created_at : '',
     }
   })
@@ -250,6 +270,7 @@ export async function createLocalUser(
     password: string
     is_admin: boolean
     is_operator: boolean
+    must_change_password: boolean
   },
 ): Promise<User> {
   const res = await fetch('/api/admin/users/local', {
@@ -265,6 +286,7 @@ export async function createLocalUser(
       password: body.password,
       is_admin: body.is_admin,
       is_operator: body.is_operator,
+      must_change_password: body.must_change_password,
     }),
   })
   if (!res.ok) throw await parseError(res)
@@ -277,7 +299,7 @@ export async function createLocalUser(
 export async function patchLocalUser(
   csrf: string,
   id: number,
-  body: { password: string; is_admin: boolean; is_operator: boolean },
+  body: { password: string; is_admin: boolean; is_operator: boolean; must_change_password: boolean },
 ): Promise<User | null> {
   const res = await fetch(`/api/admin/users/${id}/local`, {
     method: 'PATCH',

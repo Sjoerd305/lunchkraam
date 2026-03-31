@@ -133,6 +133,7 @@ func main() {
 
 				r.Group(func(r chi.Router) {
 					r.Use(apimw.RequireUserAPI(st))
+					r.With(httprate.Limit(10, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/account/password", h.APILocalChangeOwnPassword)
 					r.Get("/tosti-orders/mine", h.APITostiOrdersMine)
 					r.Get("/tosti-orders/queue", h.APITostiOrdersQueue)
 					r.With(httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/tosti-orders", h.APITostiOrderCreate)
