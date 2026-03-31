@@ -241,7 +241,7 @@ export function BuyPage() {
                 rel="noopener noreferrer"
                 className="mt-2 inline-flex rounded-xl bg-brand-700 px-5 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
               >
-                Tikkie tosti
+                Tikkie tostikaart
               </a>
             ) : (
               <p className="mt-2 text-sm text-slate-500">
@@ -301,7 +301,7 @@ export function BuyPage() {
           onClick={() => void onRequest('tosti')}
           className="mt-6 min-h-12 w-full rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-md hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting ? 'Bezig…' : 'Ik heb betaald — tostikaart aanvragen'}
+          {submitting ? 'Bezig…' : 'Ik heb betaald — online tostikaart aanvragen'}
         </button>
         {showAvondeten ? (
           <>
@@ -316,7 +316,7 @@ export function BuyPage() {
               onClick={() => void onRequest('avondeten')}
               className="mt-4 min-h-12 w-full rounded-xl border-2 border-brand-700 bg-white px-5 py-3 text-sm font-semibold text-brand-800 shadow-sm hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? 'Bezig…' : 'Ik heb betaald — avondetenkaart aanvragen'}
+              {submitting ? 'Bezig…' : 'Ik heb betaald — online avondetenkaart aanvragen'}
             </button>
           </>
         ) : null}
