@@ -14,24 +14,26 @@ type ShopExpense struct {
 	AmountEUR   float64
 	SpentOn     time.Time
 	Description string
+	Purpose     string
 	CreatedAt   time.Time
 }
 
 // InsertShopExpense records a positive expense; spentOn is the calendar date (time-of-day ignored).
-func (s *Store) InsertShopExpense(ctx context.Context, createdBy int64, amountEUR float64, spentOn time.Time, description string) (*ShopExpense, error) {
+// purpose must be lunchkraam or avondeten (caller validates).
+func (s *Store) InsertShopExpense(ctx context.Context, createdBy int64, amountEUR float64, spentOn time.Time, description, purpose string) (*ShopExpense, error) {
 	if amountEUR <= 0 {
 		return nil, fmt.Errorf("bedrag moet groter dan nul zijn")
 	}
 	desc := strings.TrimSpace(description)
 	dateStr := spentOn.UTC().Format("2006-01-02")
 	row := s.pool.QueryRow(ctx, `
-INSERT INTO shop_expenses (amount_eur, spent_on, description, created_by)
-VALUES ($1, $2::date, $3, $4)
-RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), created_at`,
-		amountEUR, dateStr, desc, createdBy,
+INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by)
+VALUES ($1, $2::date, $3, $4, $5)
+RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at`,
+		amountEUR, dateStr, desc, purpose, createdBy,
 	)
 	var e ShopExpense
-	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.CreatedAt); err != nil {
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt); err != nil {
 		return nil, err
 	}
 	return &e, nil
@@ -52,7 +54,7 @@ func (s *Store) DeleteShopExpense(ctx context.Context, id int64) error {
 // ListShopExpensesByYear returns expenses for a calendar year (spent_on), newest first.
 func (s *Store) ListShopExpensesByYear(ctx context.Context, year int) ([]ShopExpense, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), created_at
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at
 FROM shop_expenses
 WHERE (EXTRACT(YEAR FROM spent_on))::int = $1
 ORDER BY spent_on DESC, id DESC`,
@@ -65,7 +67,7 @@ ORDER BY spent_on DESC, id DESC`,
 	var out []ShopExpense
 	for rows.Next() {
 		var e ShopExpense
-		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

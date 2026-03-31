@@ -20,6 +20,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Cron heeft vaak een minimale PATH; zet expliciet veelgebruikte paden.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Vereiste command ontbreekt in PATH: $1 (PATH=$PATH)" >&2
+    exit 1
+  fi
+}
+
+require_cmd docker
+require_cmd rclone
+require_cmd python3
+require_cmd gzip
+require_cmd date
+require_cmd mktemp
+
 ENV_FILE="$ROOT/.env"
 if [ -n "${RCLONE_DEST+x}" ]; then
   _rclone_from_env=1
@@ -42,11 +59,6 @@ REMOTE_BACKUP_KEEP="${REMOTE_BACKUP_KEEP:-${RCLONE_BACKUP_KEEP:-30}}"
 
 if [[ -z "${RCLONE_DEST:-}" ]]; then
   echo "Zet RCLONE_DEST in ${ENV_FILE} of exporteer het vóór dit script." >&2
-  exit 1
-fi
-
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 ontbreekt (nodig voor retentie op de remote)." >&2
   exit 1
 fi
 

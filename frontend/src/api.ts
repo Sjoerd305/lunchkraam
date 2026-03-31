@@ -103,12 +103,20 @@ export type AdminSalesStats = {
   tosti_by_kind: AdminTostiKindBucket[]
 }
 
+export type ShopExpensePurpose = 'lunchkraam' | 'avondeten'
+
 export type AdminShopExpense = {
   id: number
   amount_eur: number
   spent_on: string
   description: string
+  purpose: ShopExpensePurpose
   created_at: string
+}
+
+function parseShopExpensePurpose(v: unknown): ShopExpensePurpose {
+  if (v === 'avondeten') return 'avondeten'
+  return 'lunchkraam'
 }
 
 export class ApiError extends Error {
@@ -763,6 +771,7 @@ export async function getOperatorShopExpenses(year: number): Promise<AdminShopEx
       amount_eur: jsonFloat(r.amount_eur, 0),
       spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
       description: typeof r.description === 'string' ? r.description : '',
+      purpose: parseShopExpensePurpose(r.purpose),
       created_at: typeof r.created_at === 'string' ? r.created_at : '',
     }
   })
@@ -770,7 +779,7 @@ export async function getOperatorShopExpenses(year: number): Promise<AdminShopEx
 
 export async function createOperatorShopExpense(
   csrf: string,
-  body: { amount_eur: number; spent_on: string; description: string },
+  body: { amount_eur: number; spent_on: string; description: string; purpose: ShopExpensePurpose },
 ): Promise<AdminShopExpense> {
   const res = await fetch('/api/operator/shop-expenses', {
     method: 'POST',
@@ -788,6 +797,7 @@ export async function createOperatorShopExpense(
     amount_eur: jsonFloat(r.amount_eur, 0),
     spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
     description: typeof r.description === 'string' ? r.description : '',
+    purpose: parseShopExpensePurpose(r.purpose),
     created_at: typeof r.created_at === 'string' ? r.created_at : '',
   }
 }
@@ -827,6 +837,7 @@ export async function getAdminShopExpenses(year: number): Promise<AdminShopExpen
       amount_eur: jsonFloat(r.amount_eur, 0),
       spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
       description: typeof r.description === 'string' ? r.description : '',
+      purpose: parseShopExpensePurpose(r.purpose),
       created_at: typeof r.created_at === 'string' ? r.created_at : '',
     }
   })
@@ -834,7 +845,7 @@ export async function getAdminShopExpenses(year: number): Promise<AdminShopExpen
 
 export async function createShopExpense(
   csrf: string,
-  body: { amount_eur: number; spent_on: string; description: string },
+  body: { amount_eur: number; spent_on: string; description: string; purpose: ShopExpensePurpose },
 ): Promise<AdminShopExpense> {
   const res = await fetch('/api/admin/shop-expenses', {
     method: 'POST',
@@ -852,6 +863,7 @@ export async function createShopExpense(
     amount_eur: jsonFloat(r.amount_eur, 0),
     spent_on: typeof r.spent_on === 'string' ? r.spent_on : '',
     description: typeof r.description === 'string' ? r.description : '',
+    purpose: parseShopExpensePurpose(r.purpose),
     created_at: typeof r.created_at === 'string' ? r.created_at : '',
   }
 }

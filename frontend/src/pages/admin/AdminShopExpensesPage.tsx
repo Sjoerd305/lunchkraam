@@ -25,6 +25,10 @@ function fillingLabel(f: string): string {
   return 'Ham'
 }
 
+function shopExpensePurposeLabel(p: api.ShopExpensePurpose): string {
+  return p === 'avondeten' ? 'Avondeten' : 'Lunchkraam'
+}
+
 function FinanceStatCard({
   label,
   value,
@@ -71,8 +75,19 @@ export function AdminShopExpensesPage() {
   const [statsLoading, setStatsLoading] = useState(false)
   const [amount, setAmount] = useState('')
   const [spentOn, setSpentOn] = useState(todayISO)
+  const [purpose, setPurpose] = useState<api.ShopExpensePurpose>('lunchkraam')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const expenseSubtotals = useMemo(() => {
+    let lunchkraam = 0
+    let avondeten = 0
+    for (const r of rows) {
+      if (r.purpose === 'avondeten') avondeten += r.amount_eur
+      else lunchkraam += r.amount_eur
+    }
+    return { lunchkraam, avondeten }
+  }, [rows])
 
   useEffect(() => {
     if (!user) return
@@ -162,7 +177,7 @@ export function AdminShopExpensesPage() {
     }
     setSubmitting(true)
     try {
-      const body = { amount_eur: n, spent_on: spentOn, description: description.trim() }
+      const body = { amount_eur: n, spent_on: spentOn, description: description.trim(), purpose }
       if (isOperatorOnly) {
         await api.createOperatorShopExpense(csrf, body)
       } else {
@@ -170,6 +185,7 @@ export function AdminShopExpensesPage() {
       }
       setAmount('')
       setDescription('')
+      setPurpose('lunchkraam')
       setSpentOn(todayISO())
       await loadList(year)
       await loadStats(year)
@@ -213,8 +229,8 @@ export function AdminShopExpensesPage() {
       <div>
         <h2 className="text-xl font-semibold text-slate-900">Boodschappen &amp; uitgaven</h2>
         <p className="mt-2 text-slate-600">
-          Boek inkopen voor de lunch. Omzet = geaccordeerde kaartverkopen dit jaar; uitgaven = geboekte boodschappen
-          dit jaar.
+          Boek boodschappen voor de lunchkraam en voor het avondeten (beide uit dezelfde omzet). Omzet = geaccordeerde
+          kaartverkopen dit jaar; uitgaven = alle geboekte boodschappen dit jaar.
           {isOperatorOnly ? ' Verkochte tosti’s op basis van levermoment.' : ''}
         </p>
       </div>
@@ -236,6 +252,11 @@ export function AdminShopExpensesPage() {
                   label="Uitgaven dit jaar"
                   value={formatEUR(salesStats.year_expenses_eur)}
                   tone="slate"
+                  hint={
+                    rows.length > 0
+                      ? `Lunchkraam ${formatEUR(expenseSubtotals.lunchkraam)} · Avondeten ${formatEUR(expenseSubtotals.avondeten)}`
+                      : undefined
+                  }
                 />
                 <FinanceStatCard
                   label="Saldo (omzet − uitgaven)"
@@ -349,7 +370,7 @@ export function AdminShopExpensesPage() {
 
       <section className="surface-card">
         <h3 className="text-sm font-semibold text-slate-800">Nieuwe uitgave</h3>
-        <form onSubmit={(e) => void onSubmit(e)} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <form onSubmit={(e) => void onSubmit(e)} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="block text-sm sm:col-span-1">
             <span className="font-medium text-slate-700">Bedrag (€)</span>
             <input
@@ -372,7 +393,18 @@ export function AdminShopExpensesPage() {
               required
             />
           </label>
-          <label className="block text-sm sm:col-span-2 lg:col-span-2">
+          <label className="block text-sm sm:col-span-1">
+            <span className="font-medium text-slate-700">Waarvoor</span>
+            <select
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value as api.ShopExpensePurpose)}
+              className="select-control mt-1.5 min-h-11 w-full"
+            >
+              <option value="lunchkraam">Lunchkraam</option>
+              <option value="avondeten">Avondeten</option>
+            </select>
+          </label>
+          <label className="block text-sm sm:col-span-2 lg:col-span-3">
             <span className="font-medium text-slate-700">Omschrijving (optioneel)</span>
             <input
               type="text"
@@ -382,7 +414,7 @@ export function AdminShopExpensesPage() {
               className="input-control mt-1.5"
             />
           </label>
-          <div className="flex items-end sm:col-span-2 lg:col-span-4">
+          <div className="flex items-end sm:col-span-2 lg:col-span-3">
             <button type="submit" disabled={submitting || year === null} className="btn-primary min-h-11 px-5">
               {submitting ? 'Bezig…' : 'Toevoegen'}
             </button>
@@ -421,11 +453,12 @@ export function AdminShopExpensesPage() {
           </p>
         ) : (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[28rem] text-left text-sm">
+            <table className="w-full min-w-[32rem] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="py-2 pr-4">Datum</th>
                   <th className="py-2 pr-4">Bedrag</th>
+                  <th className="py-2 pr-4">Waarvoor</th>
                   <th className="py-2 pr-4">Omschrijving</th>
                   {user?.is_admin ? <th className="py-2 text-right">Actie</th> : null}
                 </tr>
@@ -437,6 +470,7 @@ export function AdminShopExpensesPage() {
                     <td className="py-3 pr-4 font-medium tabular-nums text-slate-900">
                       {formatEUR(r.amount_eur)}
                     </td>
+                    <td className="py-3 pr-4 text-slate-700">{shopExpensePurposeLabel(r.purpose)}</td>
                     <td className="py-3 pr-4 text-slate-700">{r.description || '—'}</td>
                     {user?.is_admin ? (
                       <td className="py-3 text-right">

@@ -14,6 +14,16 @@ import (
 	"lunchkraam/internal/store"
 )
 
+func parseShopExpensePurpose(s string) (string, bool) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	switch s {
+	case "lunchkraam", "avondeten":
+		return s, true
+	default:
+		return "", false
+	}
+}
+
 func parseShopExpenseAmount(s string) (float64, bool) {
 	s = strings.TrimSpace(strings.ReplaceAll(s, ",", "."))
 	if s == "" {
@@ -45,6 +55,7 @@ func (d *Deps) APIAdminShopExpensesList(w http.ResponseWriter, r *http.Request) 
 			"amount_eur":   e.AmountEUR,
 			"spent_on":     e.SpentOn.Format("2006-01-02"),
 			"description":  e.Description,
+			"purpose":      e.Purpose,
 			"created_at":   e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
@@ -61,6 +72,7 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		AmountEUR   any    `json:"amount_eur"`
 		SpentOn     string `json:"spent_on"`
 		Description string `json:"description"`
+		Purpose     string `json:"purpose"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
 	if err := dec.Decode(&body); err != nil {
@@ -100,7 +112,12 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_date", "Jaar buiten bereik.")
 		return
 	}
-	e, err := d.Store.InsertShopExpense(r.Context(), u.ID, amount, t, body.Description)
+	purpose, ok := parseShopExpensePurpose(body.Purpose)
+	if !ok {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_purpose", "Doel moet lunchkraam of avondeten zijn.")
+		return
+	}
+	e, err := d.Store.InsertShopExpense(r.Context(), u.ID, amount, t, body.Description, purpose)
 	if err != nil {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan mislukt.")
 		return
@@ -110,6 +127,7 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		"amount_eur":   e.AmountEUR,
 		"spent_on":     e.SpentOn.Format("2006-01-02"),
 		"description":  e.Description,
+		"purpose":      e.Purpose,
 		"created_at":   e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
