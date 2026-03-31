@@ -10,7 +10,7 @@ Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de
 ## Vereisten
 
 - **Go 1.25+** (in `go.mod` staat `toolchain go1.25.8`; oudere installs halen die toolchain zo nodig binnen)
-- **Node.js 20+** (frontend bouwen of `npm run dev`; de Docker-build gebruikt **Node 22**, zie `Dockerfile`)
+- **Node.js 24+** (frontend bouwen of `npm run dev`; de Docker-build gebruikt **Node 24**, zie `Dockerfile`)
 - **Docker** (optioneel: Postgres of volledige stack)
 
 ## Lokaal (alleen Postgres in Docker)
