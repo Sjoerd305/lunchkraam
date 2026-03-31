@@ -1,3 +1,6 @@
+import type { ZodType } from 'zod'
+import { buyInfoResponseSchema, cardsResponseSchema, meResponseSchema } from './api.schemas'
+
 export type CardKind = 'tosti' | 'avondeten'
 
 export type User = {
@@ -154,6 +157,14 @@ async function parseError(res: Response): Promise<ApiError> {
   }
 }
 
+function parseApiResponse<T>(schema: ZodType<T>, payload: unknown): T {
+  const parsed = schema.safeParse(payload)
+  if (!parsed.success) {
+    throw new ApiError(502, 'invalid_response', 'Server gaf een ongeldig antwoord.')
+  }
+  return parsed.data
+}
+
 function normalizeUser(raw: unknown): User | null {
   if (raw === null || typeof raw !== 'object') return null
   const u = raw as Record<string, unknown>
@@ -173,15 +184,7 @@ function normalizeUser(raw: unknown): User | null {
 export async function getMe(): Promise<MeResponse> {
   const res = await fetch('/api/me', { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
-  const j = (await res.json()) as Record<string, unknown>
-  return {
-    user: normalizeUser(j.user),
-    pending_card_requests: jsonInt(j.pending_card_requests),
-    csrf_token: typeof j.csrf_token === 'string' ? j.csrf_token : '',
-    payment_amount_eur: typeof j.payment_amount_eur === 'string' ? j.payment_amount_eur : '15',
-    payment_amount_avondeten_eur:
-      typeof j.payment_amount_avondeten_eur === 'string' ? j.payment_amount_avondeten_eur : '12',
-  }
+  return parseApiResponse(meResponseSchema, await res.json())
 }
 
 export async function localLogin(csrf: string, username: string, password: string): Promise<void> {
@@ -633,18 +636,8 @@ function parseCardKind(v: unknown): CardKind {
 export async function getCards(): Promise<Card[]> {
   const res = await fetch('/api/cards', { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
-  const j = (await res.json()) as { cards?: unknown }
-  const raw = j.cards
-  if (!Array.isArray(raw)) return []
-  return raw.map((row) => {
-    const r = row as Record<string, unknown>
-    return {
-      id: jsonInt(r.id, 0),
-      kind: parseCardKind(r.kind),
-      knipjes_remaining: jsonInt(r.knipjes_remaining, 0),
-      created_at: typeof r.created_at === 'string' ? r.created_at : '',
-    }
-  })
+  const payload = parseApiResponse(cardsResponseSchema, await res.json())
+  return payload.cards
 }
 
 export async function useKnipje(csrf: string, cardId: number): Promise<void> {
@@ -659,23 +652,7 @@ export async function useKnipje(csrf: string, cardId: number): Promise<void> {
 export async function getBuyInfo(): Promise<BuyInfo> {
   const res = await fetch('/api/buy', { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
-  const j = (await res.json()) as Partial<BuyInfo>
-  const raw = (j.my_pending_requests ?? []) as Partial<MyPendingRequest>[]
-  const my_pending_requests = raw.map((r) => ({
-    id: r.id as number,
-    kind: parseCardKind(r.kind),
-    created_at: r.created_at as string,
-    knipjes_remaining: r.knipjes_remaining ?? 10,
-  }))
-  return {
-    payment_amount_eur: j.payment_amount_eur ?? '',
-    payment_amount_avondeten_eur:
-      typeof j.payment_amount_avondeten_eur === 'string' ? j.payment_amount_avondeten_eur : '12',
-    tikkie_url: j.tikkie_url ?? '',
-    tikkie_url_avondeten: typeof j.tikkie_url_avondeten === 'string' ? j.tikkie_url_avondeten : '',
-    bank_transfer_instructions: j.bank_transfer_instructions ?? '',
-    my_pending_requests,
-  }
+  return parseApiResponse(buyInfoResponseSchema, await res.json())
 }
 
 export async function requestCard(csrf: string, kind: CardKind = 'tosti'): Promise<void> {

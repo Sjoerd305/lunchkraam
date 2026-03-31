@@ -63,6 +63,12 @@ Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYM
 - Lokaal dumpen (docker-compose Postgres): [`scripts/backup-database.sh`](scripts/backup-database.sh); terugzetten: [`scripts/restore-database.sh`](scripts/restore-database.sh) (zie commentaar in de scripts).
 - Optioneel: [`scripts/upload-backups-to-drive.sh`](scripts/upload-backups-to-drive.sh) — dump + upload via rclone met retentie op de remote (vereisten en omgevingsvariabelen staan in het script).
 
+## Frontend API-contracten
+
+- De frontend valideert `res.json()`-payloads in `frontend/src/api.ts` met **Zod**.
+- Definieer response-schema's centraal in `frontend/src/api.schemas.ts`.
+- Components/pages werken alleen met reeds gevalideerde types; geen losse shape-checks in UI-code.
+
 ## Milieuvariabelen
 
 Zie [.env.example](.env.example). Gebruik je de avondetenkaart, zet dan minimaal ook **TIKKIE_URL_AVONDETEN** en **AVONDETEN_PAYMENT_AMOUNT_EUR** (of de equivalenten in de admin-instellingen).
