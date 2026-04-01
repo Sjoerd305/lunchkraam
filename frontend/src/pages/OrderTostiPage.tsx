@@ -28,6 +28,7 @@ function pendingReservedOnCard(orders: api.TostiOrder[], cardId: number): number
 }
 
 function freeKnipjesForCard(card: api.Card, orders: api.TostiOrder[]): number {
+  if (card.source !== 'online') return 0
   return Math.max(0, card.knipjes_remaining - pendingReservedOnCard(orders, card.id))
 }
 
@@ -98,8 +99,12 @@ export function OrderTostiPage() {
   ])
 
   const usableCards = useMemo(
-    () => cards.filter((c) => freeKnipjesForCard(c, orders) > 0),
+    () => cards.filter((c) => c.source === 'online' && freeKnipjesForCard(c, orders) > 0),
     [cards, orders],
+  )
+  const hasPhysicalTostiCard = useMemo(
+    () => cards.some((c) => c.kind === 'tosti' && c.source === 'physical' && c.knipjes_remaining > 0),
+    [cards],
   )
   const selectedCard = useMemo(
     () => (cardId !== '' ? cards.find((c) => c.id === cardId) : undefined),
@@ -138,6 +143,14 @@ export function OrderTostiPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (paymentMode === 'physical') {
+      if (!hasPhysicalTostiCard) {
+        void alert({
+          title: 'Geen fysieke kaart',
+          message: 'Nog geen fysieke tostikaart met knipjes.',
+          variant: 'error',
+        })
+        return
+      }
       if (quantity < 1 || quantity > 10) {
         void alert({
           title: 'Aantal',
@@ -150,7 +163,7 @@ export function OrderTostiPage() {
       if (cardId === '' || typeof cardId !== 'number') {
         void alert({
           title: 'Geen kaart',
-          message: 'Geen digitale kaart met vrije knipjes, of kies fysieke kaart.',
+          message: 'Geen digitale kaart met vrije knipjes. Kies fysieke kaart.',
           variant: 'error',
         })
         return
@@ -180,14 +193,14 @@ export function OrderTostiPage() {
         const knipWord = quantity === 1 ? 'knipje' : 'knipjes'
         await alert({
           title: 'Bestelling geplaatst',
-          message: `Neem je fysieke tostikaart mee; bij leveren knipt de kraam ${quantity === 1 ? '1' : String(quantity)} ${knipWord} op de kaart.`,
+          message: `Neem je fysieke kaart mee. Kraam knipt ${quantity === 1 ? '1' : String(quantity)} ${knipWord}.`,
           variant: 'success',
         })
       } else {
         const knipWord = quantity === 1 ? 'knipje' : 'knipjes'
         await alert({
           title: 'Bestelling geplaatst',
-          message: `Knipjes worden afgetrokken zodra de kraam levert (${quantity === 1 ? '1' : String(quantity)} ${knipWord}).`,
+          message: `${quantity === 1 ? '1' : String(quantity)} ${knipWord} wordt bij levering afgeschreven.`,
           variant: 'success',
         })
       }
@@ -228,8 +241,7 @@ export function OrderTostiPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Tosti bestellen</h1>
         <p className="mt-2 text-slate-600">
-          1 tosti = 1 knipje. Digitale kaart: meerdere open bestellingen mogen, tot je vrije knipjes op; afschrijving bij
-          leveren. Fysieke kaart: knippen bij de kraam, niet in de app.
+          1 tosti = 1 knipje. Digitaal wordt afgeschreven bij levering. Fysiek wordt bij de kraam geknipt.
         </p>
       </div>
 
@@ -241,7 +253,7 @@ export function OrderTostiPage() {
         ) : null}
         {queueLoadError ? (
           <p className="mt-4 text-amber-800">
-            De wachtrij kon niet worden geladen. Vernieuw de pagina of probeer het later opnieuw.
+            Wachtrij laden mislukt. Vernieuw en probeer opnieuw.
           </p>
         ) : queue.length === 0 ? (
           <p className="mt-4 text-slate-600">Er staan nu geen bestellingen in de wachtrij.</p>
@@ -278,7 +290,7 @@ export function OrderTostiPage() {
                       <span className="text-slate-500">
                         {' '}
                         ·{' '}
-                        {row.card_id === null ? 'fysieke kaart' : `kaart #${row.card_id}`}
+                      {row.is_physical_card ? 'fysieke kaart' : `kaart #${row.card_id}`}
                       </span>
                     </p>
                     <p className="text-xs text-slate-500">
@@ -305,8 +317,7 @@ export function OrderTostiPage() {
         <h2 className="text-lg font-semibold text-slate-900">Nieuwe bestelling</h2>
         {usableCards.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">
-            Geen vrije digitale knipjes. Je kunt met een fysieke tostikaart bestellen, of kaart kopen / open bestelling
-            annuleren.
+            Geen vrije digitale knipjes. Bestel met fysieke kaart of koop een nieuwe kaart.
           </p>
         ) : null}
         <form
@@ -316,7 +327,7 @@ export function OrderTostiPage() {
           {usableCards.length > 0 ? (
             <fieldset className="md:col-span-2">
               <legend className="text-sm font-medium text-slate-700">Hoe betaal je?</legend>
-              <p className="mt-1 text-xs text-slate-600">Digitale kaart heeft de voorkeur als die vrije knipjes heeft.</p>
+              <p className="mt-1 text-xs text-slate-600">Gebruik digitaal als je vrije knipjes hebt.</p>
               <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50/50">
                   <input
@@ -332,7 +343,7 @@ export function OrderTostiPage() {
                       <span className="ml-1.5 font-normal text-brand-800">(aanbevolen)</span>
                     </span>
                     <span className="mt-0.5 block text-slate-600">
-                      Knipjes worden bij leveren afgetrokken van je gekozen kaart.
+                      Afschrijving bij levering.
                     </span>
                   </span>
                 </label>
@@ -346,7 +357,7 @@ export function OrderTostiPage() {
                   />
                   <span>
                     <span className="font-medium text-slate-900">Fysieke tostikaart</span>
-                    <span className="mt-0.5 block text-slate-600">Kraam knipt op je kaart bij levering.</span>
+                    <span className="mt-0.5 block text-slate-600">Kraam knipt bij levering.</span>
                   </span>
                 </label>
               </div>
@@ -355,7 +366,7 @@ export function OrderTostiPage() {
 
           {paymentMode === 'physical' ? (
             <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2.5 text-sm text-amber-950 md:col-span-2">
-              Neem je tostikaart mee; knippen gebeurt bij de kraam (niet in de app).
+              Neem je kaart mee; knippen gebeurt bij de kraam.
             </div>
           ) : null}
 
@@ -504,7 +515,7 @@ export function OrderTostiPage() {
                   <span className="text-slate-400">
                     {' '}
                     · {new Date(o.created_at).toLocaleString('nl-NL')}
-                    {o.card_id === null ? ' · fysieke kaart' : ''}
+                    {o.is_physical_card ? ' · fysieke kaart' : ''}
                   </span>
                 </li>
               ))}

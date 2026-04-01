@@ -19,6 +19,7 @@ type tostiOrderJSON struct {
 	UserID            int64   `json:"user_id"`
 	CardID            *int64  `json:"card_id"`
 	Quantity          int     `json:"quantity"`
+	IsPhysicalCard    bool    `json:"is_physical_card"`
 	Bread             string  `json:"bread"`
 	Filling           string  `json:"filling"`
 	Status            string  `json:"status"`
@@ -37,15 +38,16 @@ type tostiOrderOperatorJSON struct {
 
 // tostiQueueEntryJSON is a public queue row (FIFO); omits email.
 type tostiQueueEntryJSON struct {
-	Place        int    `json:"place"`
-	ID           int64  `json:"id"`
-	CardID       *int64 `json:"card_id"`
-	Quantity     int    `json:"quantity"`
-	Bread        string `json:"bread"`
-	Filling      string `json:"filling"`
-	CreatedAt    string `json:"created_at"`
-	CustomerName string `json:"customer_name"`
-	IsMine       bool   `json:"is_mine"`
+	Place          int    `json:"place"`
+	ID             int64  `json:"id"`
+	CardID         *int64 `json:"card_id"`
+	IsPhysicalCard bool   `json:"is_physical_card"`
+	Quantity       int    `json:"quantity"`
+	Bread          string `json:"bread"`
+	Filling        string `json:"filling"`
+	CreatedAt      string `json:"created_at"`
+	CustomerName   string `json:"customer_name"`
+	IsMine         bool   `json:"is_mine"`
 }
 
 func tostiOrderToJSON(o store.TostiOrder) tostiOrderJSON {
@@ -54,6 +56,7 @@ func tostiOrderToJSON(o store.TostiOrder) tostiOrderJSON {
 		UserID:            o.UserID,
 		CardID:            o.CardID,
 		Quantity:          o.Quantity,
+		IsPhysicalCard:    o.IsPhysicalCard,
 		Bread:             o.Bread,
 		Filling:           o.Filling,
 		Status:            o.Status,
@@ -82,15 +85,16 @@ func (d *Deps) APITostiOrdersQueue(w http.ResponseWriter, r *http.Request) {
 	out := make([]tostiQueueEntryJSON, 0, len(list))
 	for i, row := range list {
 		out = append(out, tostiQueueEntryJSON{
-			Place:        i + 1,
-			ID:           row.ID,
-			CardID:       row.CardID,
-			Quantity:     row.Quantity,
-			Bread:        row.Bread,
-			Filling:      row.Filling,
-			CreatedAt:    row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			CustomerName: row.CustomerName,
-			IsMine:       row.UserID == u.ID,
+			Place:          i + 1,
+			ID:             row.ID,
+			CardID:         row.CardID,
+			IsPhysicalCard: row.IsPhysicalCard,
+			Quantity:       row.Quantity,
+			Bread:          row.Bread,
+			Filling:        row.Filling,
+			CreatedAt:      row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			CustomerName:   row.CustomerName,
+			IsMine:         row.UserID == u.ID,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"orders": out})
@@ -143,9 +147,15 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusBadRequest, "no_card", "Kaart niet gevonden of niet van jou.")
+			if body.PhysicalCard {
+				httpx.JSONError(w, http.StatusBadRequest, "no_physical_card", "Geen fysieke tostikaart gevonden. Laat de kraam er eerst één registreren.")
+			} else {
+				httpx.JSONError(w, http.StatusBadRequest, "no_card", "Kaart niet gevonden of niet van jou.")
+			}
 		case errors.Is(err, store.ErrNoKnipjes):
 			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Niet genoeg vrije knipjes op deze kaart.")
+		case errors.Is(err, store.ErrCardPhysicalReadonly):
+			httpx.JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Fysieke kaart is niet digitaal bruikbaar. Kies fysieke kaart als betaalwijze.")
 		case errors.Is(err, store.ErrTostiInvalidQuantity):
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_quantity", "Aantal moet tussen 1 en 10 zijn.")
 		case errors.Is(err, store.ErrTostiInvalidBread):

@@ -29,9 +29,11 @@ var ErrCannotRejectKnipjesUsed = errors.New("weigeren niet mogelijk: er zijn al 
 var ErrInvalidCredentials = errors.New("ongeldige gebruikersnaam of wachtwoord")
 var ErrUsernameTaken = errors.New("gebruikersnaam bestaat al")
 var ErrCardNotForTosti = errors.New("deze kaart is geen tostikaart")
+var ErrCardPhysicalReadonly = errors.New("fysieke kaart is alleen read-only in de app")
 var ErrAvondetenManualUseDisabled = errors.New("avondetenkaart: gebruik de ochtendregistratie op de kraampagina")
 var ErrInvalidCurrentPassword = errors.New("huidig wachtwoord is onjuist")
 var ErrNotLocalAccount = errors.New("account gebruikt geen lokaal wachtwoord")
+var ErrInvalidKnipjesRange = errors.New("knipjes moeten tussen 0 en 10 liggen")
 
 type User struct {
 	ID                 int64
@@ -65,6 +67,12 @@ type AdminUserSummary struct {
 	CreatedAt          time.Time
 }
 
+type OperatorMemberSummary struct {
+	ID    int64
+	Name  string
+	Email string
+}
+
 func scanUser(scanner interface{ Scan(dest ...any) error }) (*User, error) {
 	var u User
 	var gsub, lun sql.NullString
@@ -87,6 +95,7 @@ type Card struct {
 	ID               int64
 	UserID           int64
 	Kind             string
+	Source           string
 	KnipjesRemaining int
 	Note             *string
 	CreatedAt        time.Time
@@ -97,6 +106,7 @@ type CardRequest struct {
 	UserID             int64
 	Status             string
 	Kind               string
+	PaymentMethod      string
 	CreatedAt          time.Time
 	FulfilledAt        *time.Time
 	FulfilledByAdminID *int64
@@ -177,7 +187,7 @@ SELECT id, google_sub, login_username, email, name, is_admin, is_operator, is_ma
 
 func (s *Store) CardsByUser(ctx context.Context, userID int64) ([]Card, error) {
 	const q = `
-SELECT id, user_id, kind::text, knipjes_remaining, note, created_at
+SELECT id, user_id, kind::text, source::text, knipjes_remaining, note, created_at
 FROM cards WHERE user_id = $1 ORDER BY created_at DESC`
 	rows, err := s.pool.Query(ctx, q, userID)
 	if err != nil {
@@ -187,7 +197,7 @@ FROM cards WHERE user_id = $1 ORDER BY created_at DESC`
 	var out []Card
 	for rows.Next() {
 		var c Card
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Kind, &c.KnipjesRemaining, &c.Note, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Kind, &c.Source, &c.KnipjesRemaining, &c.Note, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -227,7 +237,8 @@ func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error 
 		return ErrForbidden
 	}
 	var kind string
-	err := s.pool.QueryRow(ctx, `SELECT kind::text FROM cards WHERE id = $1`, cardID).Scan(&kind)
+	var source string
+	err := s.pool.QueryRow(ctx, `SELECT kind::text, source::text FROM cards WHERE id = $1`, cardID).Scan(&kind, &source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -237,7 +248,28 @@ func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error 
 	if kind == CardKindAvondeten {
 		return ErrAvondetenManualUseDisabled
 	}
+	if source == "physical" {
+		return ErrCardPhysicalReadonly
+	}
 	return s.useKnipjeAnyCard(ctx, cardID)
+}
+
+func (s *Store) SetPhysicalCardKnipjesEstimate(ctx context.Context, cardID int64, knipjesRemaining int) error {
+	if knipjesRemaining < 0 || knipjesRemaining > 10 {
+		return ErrInvalidKnipjesRange
+	}
+	tag, err := s.pool.Exec(ctx, `
+UPDATE cards
+SET knipjes_remaining = $2
+WHERE id = $1
+  AND source = 'physical'::card_source`, cardID, knipjesRemaining)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string) (int64, error) {
@@ -278,7 +310,7 @@ func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string
 
 	var cardID int64
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO cards (user_id, knipjes_remaining, kind) VALUES ($1, 10, $2::card_kind) RETURNING id`,
+		`INSERT INTO cards (user_id, knipjes_remaining, kind, source) VALUES ($1, 10, $2::card_kind, 'online'::card_source) RETURNING id`,
 		userID, kind,
 	).Scan(&cardID); err != nil {
 		return 0, err
@@ -286,8 +318,8 @@ func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string
 
 	var reqID int64
 	err = tx.QueryRow(ctx,
-		`INSERT INTO card_requests (user_id, card_id, kind) VALUES ($1, $2, $3::card_kind) RETURNING id`,
-		userID, cardID, kind,
+		`INSERT INTO card_requests (user_id, card_id, kind, payment_method) VALUES ($1, $2, $3::card_kind, $4::payment_method) RETURNING id`,
+		userID, cardID, kind, PaymentMethodTikkie,
 	).Scan(&reqID)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -297,6 +329,80 @@ func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string
 		return 0, err
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return reqID, nil
+}
+
+type PhysicalCardSaleInput struct {
+	BuyerUserID   int64
+	SellerUserID  int64
+	Kind          string
+	PaymentMethod string
+	SalePriceEUR  float64
+}
+
+func (s *Store) CreatePhysicalCardSale(ctx context.Context, in PhysicalCardSaleInput) (int64, error) {
+	kind, err := NormalizeCardKind(in.Kind)
+	if err != nil {
+		return 0, err
+	}
+	paymentMethod, err := NormalizePaymentMethod(in.PaymentMethod)
+	if err != nil {
+		return 0, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	var matroos bool
+	err = tx.QueryRow(ctx, `SELECT is_matroos_jeugd FROM users WHERE id = $1`, in.BuyerUserID).Scan(&matroos)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if kind == CardKindAvondeten && !matroos {
+		return 0, ErrForbidden
+	}
+
+	var has int
+	err = tx.QueryRow(ctx,
+		`SELECT 1 FROM card_requests WHERE user_id = $1 AND status = 'pending' AND kind = $2::card_kind LIMIT 1`,
+		in.BuyerUserID, kind,
+	).Scan(&has)
+	if err == nil {
+		return 0, ErrAlreadyPending
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, err
+	}
+
+	var cardID int64
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO cards (user_id, knipjes_remaining, kind, source) VALUES ($1, 10, $2::card_kind, 'physical'::card_source) RETURNING id`,
+		in.BuyerUserID, kind,
+	).Scan(&cardID); err != nil {
+		return 0, err
+	}
+
+	var reqID int64
+	err = tx.QueryRow(ctx, `
+INSERT INTO card_requests (
+	user_id, status, kind, payment_method, card_id, fulfilled_at, fulfilled_by_admin_id, sale_price_eur
+) VALUES (
+	$1, 'fulfilled', $2::card_kind, $3::payment_method, $4, now(), $5, $6
+) RETURNING id`,
+		in.BuyerUserID, kind, paymentMethod, cardID, in.SellerUserID, in.SalePriceEUR,
+	).Scan(&reqID)
+	if err != nil {
+		return 0, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, err
 	}
@@ -459,6 +565,7 @@ func (s *Store) PendingCardRequestsByUser(ctx context.Context, userID int64) (in
 func (s *Store) ListPendingRequests(ctx context.Context) ([]CardRequestRow, error) {
 	const q = `
 SELECT cr.id, cr.user_id, cr.status::text, cr.kind::text, cr.created_at, cr.fulfilled_at, cr.fulfilled_by_admin_id, cr.card_id,
+       cr.payment_method::text,
        u.email, u.name,
        COALESCE(c.knipjes_remaining, GREATEST(0, 10 - cr.trust_knipjes_used)) AS knip_rem
 FROM card_requests cr
@@ -476,6 +583,7 @@ ORDER BY cr.created_at ASC`
 		var r CardRequestRow
 		if err := rows.Scan(
 			&r.ID, &r.UserID, &r.Status, &r.Kind, &r.CreatedAt, &r.FulfilledAt, &r.FulfilledByAdminID, &r.CardID,
+			&r.PaymentMethod,
 			&r.UserEmail, &r.UserName, &r.KnipjesRemaining,
 		); err != nil {
 			return nil, err
@@ -530,7 +638,7 @@ WHERE id = $1 AND status = 'pending'`,
 	knipjesOnCard := 10 - trustUsed
 	var cardID int64
 	err = tx.QueryRow(ctx,
-		`INSERT INTO cards (user_id, knipjes_remaining, kind) VALUES ($1, $2, $3::card_kind) RETURNING id`,
+		`INSERT INTO cards (user_id, knipjes_remaining, kind, source) VALUES ($1, $2, $3::card_kind, 'online'::card_source) RETURNING id`,
 		reqUserID, knipjesOnCard, reqKind,
 	).Scan(&cardID)
 	if err != nil {
@@ -778,6 +886,26 @@ FROM users ORDER BY created_at DESC`)
 	return out, rows.Err()
 }
 
+func (s *Store) ListOperatorMembers(ctx context.Context) ([]OperatorMemberSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT id, name, email
+FROM users
+ORDER BY lower(name) ASC, lower(email) ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OperatorMemberSummary
+	for rows.Next() {
+		var r OperatorMemberSummary
+		if err := rows.Scan(&r.ID, &r.Name, &r.Email); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // AdminUpdateLocalUser updates flags and optionally replaces the password (local accounts only).
 func (s *Store) AdminUpdateLocalUser(ctx context.Context, userID int64, newPassword *string, isAdmin, isOperator, mustChangePassword bool) error {
 	var ok bool
@@ -855,7 +983,7 @@ func (s *Store) SearchCardsWithOwners(ctx context.Context, query string, limit i
 	}
 	pat := "%" + q + "%"
 	rows, err := s.pool.Query(ctx, `
-SELECT c.id, c.user_id, c.kind::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+SELECT c.id, c.user_id, c.kind::text, c.source::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
 FROM cards c
 JOIN users u ON u.id = c.user_id
 WHERE u.name ILIKE $1 OR u.email ILIKE $1
@@ -870,7 +998,7 @@ LIMIT $2`, pat, limit)
 
 func (s *Store) recentCardsWithOwners(ctx context.Context, limit int) ([]CardWithOwner, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT c.id, c.user_id, c.kind::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+SELECT c.id, c.user_id, c.kind::text, c.source::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
 FROM cards c
 JOIN users u ON u.id = c.user_id
 ORDER BY c.created_at DESC
@@ -884,7 +1012,7 @@ LIMIT $1`, limit)
 
 func (s *Store) cardsWithOwnersByCardID(ctx context.Context, cardID int64) ([]CardWithOwner, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT c.id, c.user_id, c.kind::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
+SELECT c.id, c.user_id, c.kind::text, c.source::text, c.knipjes_remaining, c.note, c.created_at, u.name, u.email
 FROM cards c
 JOIN users u ON u.id = c.user_id
 WHERE c.id = $1`, cardID)
@@ -899,7 +1027,7 @@ func scanCardWithOwnerRows(rows pgx.Rows) ([]CardWithOwner, error) {
 	var out []CardWithOwner
 	for rows.Next() {
 		var r CardWithOwner
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Kind, &r.KnipjesRemaining, &r.Note, &r.CreatedAt, &r.OwnerName, &r.OwnerEmail); err != nil {
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Kind, &r.Source, &r.KnipjesRemaining, &r.Note, &r.CreatedAt, &r.OwnerName, &r.OwnerEmail); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

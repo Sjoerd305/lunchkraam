@@ -41,6 +41,7 @@ type tikkieWarningJSON struct {
 type cardJSON struct {
 	ID               int64  `json:"id"`
 	Kind             string `json:"kind"`
+	Source           string `json:"source"`
 	KnipjesRemaining int    `json:"knipjes_remaining"`
 	CreatedAt        string `json:"created_at"`
 }
@@ -48,6 +49,7 @@ type cardJSON struct {
 type adminRequestJSON struct {
 	ID               int64  `json:"id"`
 	Kind             string `json:"kind"`
+	PaymentMethod    string `json:"payment_method"`
 	UserName         string `json:"user_name"`
 	UserEmail        string `json:"user_email"`
 	CreatedAt        string `json:"created_at"`
@@ -118,6 +120,7 @@ func (d *Deps) APICards(w http.ResponseWriter, r *http.Request) {
 		out = append(out, cardJSON{
 			ID:               c.ID,
 			Kind:             c.Kind,
+			Source:           c.Source,
 			KnipjesRemaining: c.KnipjesRemaining,
 			CreatedAt:        c.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		})
@@ -146,6 +149,8 @@ func (d *Deps) APICardUse(w http.ResponseWriter, r *http.Request) {
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Kaart niet gevonden.")
 		case store.ErrAvondetenManualUseDisabled:
 			httpx.JSONError(w, http.StatusBadRequest, "avondeten_use_disabled", err.Error())
+		case store.ErrCardPhysicalReadonly:
+			httpx.JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Fysieke kaarten zijn read-only in de app.")
 		default:
 			httpx.JSONError(w, http.StatusBadRequest, "use_failed", "Kon geen knipje gebruiken.")
 		}
@@ -218,6 +223,108 @@ func (d *Deps) APIBuyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.notifyPaymentRequestsMutation()
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func validatePhysicalCardSaleInput(actor *store.User, buyerUserID int64, kind, paymentMethod string) (string, string, string, string) {
+	if actor == nil || (!actor.IsAdmin && !actor.IsOperator) {
+		return "", "", "operator_or_admin_required", "Alleen admin of operator kan fysieke kaartverkoop registreren."
+	}
+	if buyerUserID <= 0 {
+		return "", "", "invalid_user_id", "Ongeldige gebruiker."
+	}
+	normalizedKind, err := store.NormalizeCardKind(kind)
+	if err != nil {
+		return "", "", "invalid_kind", "Ongeldig kaarttype."
+	}
+	normalizedPaymentMethod, err := store.NormalizePaymentMethod(paymentMethod)
+	if err != nil {
+		return "", "", "invalid_payment_method", "Ongeldig betaalmiddel."
+	}
+	return normalizedKind, normalizedPaymentMethod, "", ""
+}
+
+func (d *Deps) APIOperatorCardSale(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	var body struct {
+		UserID        int64  `json:"user_id"`
+		Kind          string `json:"kind"`
+		PaymentMethod string `json:"payment_method"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
+	if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return
+	}
+	kind, paymentMethod, errCode, errMessage := validatePhysicalCardSaleInput(u, body.UserID, body.Kind, body.PaymentMethod)
+	if errCode != "" {
+		statusCode := http.StatusBadRequest
+		if errCode == "operator_or_admin_required" {
+			statusCode = http.StatusForbidden
+		}
+		httpx.JSONError(w, statusCode, errCode, errMessage)
+		return
+	}
+	salePrice := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
+	if kind == store.CardKindAvondeten {
+		salePrice = parsePaymentEURAmount(d.Config.AvondetenPaymentAmountEUR)
+	}
+	reqID, err := d.Store.CreatePhysicalCardSale(r.Context(), store.PhysicalCardSaleInput{
+		BuyerUserID:   body.UserID,
+		SellerUserID:  u.ID,
+		Kind:          kind,
+		PaymentMethod: paymentMethod,
+		SalePriceEUR:  salePrice,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
+		case errors.Is(err, store.ErrForbidden):
+			httpx.JSONError(w, http.StatusForbidden, "forbidden", "Avondetenkaart alleen voor matroos-jeugd.")
+		case errors.Is(err, store.ErrAlreadyPending):
+			httpx.JSONError(w, http.StatusConflict, "already_pending", "Er is al een open aanvraag voor dit kaarttype.")
+		default:
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Verkoop registreren mislukt.")
+		}
+		return
+	}
+	d.notifyPaymentRequestsMutation()
+	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true, "request_id": reqID})
+}
+
+func (d *Deps) APIOperatorCardEstimateSet(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	if !u.IsAdmin && !u.IsOperator {
+		httpx.JSONError(w, http.StatusForbidden, "operator_or_admin_required", "Alleen admin of operator kan de fysieke schatting bijwerken.")
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	cardID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige kaart.")
+		return
+	}
+	var body struct {
+		KnipjesRemaining int `json:"knipjes_remaining"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
+	if err := dec.Decode(&body); err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return
+	}
+	err = d.Store.SetPhysicalCardKnipjesEstimate(r.Context(), cardID, body.KnipjesRemaining)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrInvalidKnipjesRange):
+			httpx.JSONError(w, http.StatusBadRequest, "invalid_knipjes_range", "Schatting moet tussen 0 en 10 liggen.")
+		case errors.Is(err, store.ErrNotFound):
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Fysieke kaart niet gevonden.")
+		default:
+			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bijwerken van schatting mislukt.")
+		}
+		return
+	}
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -528,6 +635,7 @@ func (d *Deps) APIAdminRequests(w http.ResponseWriter, r *http.Request) {
 		out = append(out, adminRequestJSON{
 			ID:               row.ID,
 			Kind:             row.Kind,
+			PaymentMethod:    row.PaymentMethod,
 			UserName:         row.UserName,
 			UserEmail:        row.UserEmail,
 			CreatedAt:        row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),

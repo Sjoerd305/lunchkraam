@@ -31,6 +31,7 @@ type TostiOrder struct {
 	CancelledAt       *time.Time
 	CancelledByUserID *int64
 	Quantity          int
+	IsPhysicalCard    bool
 }
 
 // TostiOrderOperatorRow is a pending order with customer name and email for operators.
@@ -69,8 +70,9 @@ func parseTostiFilling(s string) (string, error) {
 const tostiQtyMin = 1
 const tostiQtyMax = 10
 
-// CreateTostiOrder inserts a pending order. Physical card: cardID nil. Digital: card must be
-// tostikaart with enough free knipjes (including pending orders on that card).
+// CreateTostiOrder inserts a pending order.
+// - cardID nil: use member's latest physical tostikaart estimate.
+// - cardID set: must be an online tostikaart with enough free knipjes.
 func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int64, breadIn, fillingIn string, quantity int) (*TostiOrder, error) {
 	if quantity < tostiQtyMin || quantity > tostiQtyMax {
 		return nil, ErrTostiInvalidQuantity
@@ -91,7 +93,11 @@ func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int6
 	defer tx.Rollback(ctx)
 
 	if cardID == nil {
-		o, err := insertTostiOrderRow(ctx, tx, userID, nil, bread, filling, quantity)
+		physicalCardID, err := findPhysicalTostiCardForUser(ctx, tx, userID)
+		if err != nil {
+			return nil, err
+		}
+		o, err := insertTostiOrderRow(ctx, tx, userID, &physicalCardID, bread, filling, quantity)
 		if err != nil {
 			return nil, err
 		}
@@ -103,10 +109,11 @@ func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int6
 
 	var knip int
 	var cardKind string
+	var cardSource string
 	err = tx.QueryRow(ctx,
-		`SELECT knipjes_remaining, kind::text FROM cards WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		`SELECT knipjes_remaining, kind::text, source::text FROM cards WHERE id = $1 AND user_id = $2 FOR UPDATE`,
 		*cardID, userID,
-	).Scan(&knip, &cardKind)
+	).Scan(&knip, &cardKind, &cardSource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -115,6 +122,9 @@ func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int6
 	}
 	if cardKind != CardKindTosti {
 		return nil, ErrCardNotForTosti
+	}
+	if cardSource != "online" {
+		return nil, ErrCardPhysicalReadonly
 	}
 
 	var pendingSum int
@@ -157,7 +167,30 @@ RETURNING id, user_id, card_id, bread::text, filling::text, status::text, create
 		return nil, err
 	}
 	o.CardID = nullInt64ToPtr(cardIDScan)
+	o.IsPhysicalCard = false
 	return &o, nil
+}
+
+func findPhysicalTostiCardForUser(ctx context.Context, tx pgx.Tx, userID int64) (int64, error) {
+	var cardID int64
+	err := tx.QueryRow(ctx, `
+SELECT id
+FROM cards
+WHERE user_id = $1
+  AND kind = $2::card_kind
+  AND source = 'physical'::card_source
+ORDER BY created_at DESC
+LIMIT 1
+FOR UPDATE`,
+		userID, CardKindTosti,
+	).Scan(&cardID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return cardID, nil
 }
 
 // TostiOrderOwnerID returns the member user_id for an order (any status).
@@ -180,7 +213,11 @@ func (s *Store) ListTostiOrdersForUser(ctx context.Context, userID int64, limit 
 	}
 	rows, err := s.pool.Query(ctx, `
 SELECT id, user_id, card_id, bread::text, filling::text, status::text, created_at,
-  delivered_at, delivered_by_user_id, cancelled_at, cancelled_by_user_id, quantity
+  delivered_at, delivered_by_user_id, cancelled_at, cancelled_by_user_id, quantity,
+  CASE
+    WHEN card_id IS NULL THEN TRUE
+    ELSE EXISTS(SELECT 1 FROM cards c WHERE c.id = tosti_orders.card_id AND c.source = 'physical'::card_source)
+  END AS is_physical_card
 FROM tosti_orders
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -203,6 +240,10 @@ func (s *Store) ListPendingTostiOrdersForOperator(ctx context.Context, limit int
 	rows, err := s.pool.Query(ctx, `
 SELECT o.id, o.user_id, o.card_id, o.bread::text, o.filling::text, o.status::text, o.created_at,
   o.delivered_at, o.delivered_by_user_id, o.cancelled_at, o.cancelled_by_user_id, o.quantity,
+  CASE
+    WHEN o.card_id IS NULL THEN TRUE
+    ELSE EXISTS(SELECT 1 FROM cards c WHERE c.id = o.card_id AND c.source = 'physical'::card_source)
+  END AS is_physical_card,
   u.name, u.email
 FROM tosti_orders o
 JOIN users u ON u.id = o.user_id
@@ -219,7 +260,7 @@ LIMIT $1`, limit)
 		var cardIDScan sql.NullInt64
 		if err := rows.Scan(
 			&r.ID, &r.UserID, &cardIDScan, &r.Bread, &r.Filling, &r.Status, &r.CreatedAt,
-			&r.DeliveredAt, &r.DeliveredByUserID, &r.CancelledAt, &r.CancelledByUserID, &r.Quantity,
+			&r.DeliveredAt, &r.DeliveredByUserID, &r.CancelledAt, &r.CancelledByUserID, &r.Quantity, &r.IsPhysicalCard,
 			&r.CustomerName, &r.CustomerEmail,
 		); err != nil {
 			return nil, err
@@ -237,7 +278,7 @@ func scanTostiOrders(rows pgx.Rows) ([]TostiOrder, error) {
 		var cardIDScan sql.NullInt64
 		if err := rows.Scan(
 			&o.ID, &o.UserID, &cardIDScan, &o.Bread, &o.Filling, &o.Status, &o.CreatedAt,
-			&o.DeliveredAt, &o.DeliveredByUserID, &o.CancelledAt, &o.CancelledByUserID, &o.Quantity,
+			&o.DeliveredAt, &o.DeliveredByUserID, &o.CancelledAt, &o.CancelledByUserID, &o.Quantity, &o.IsPhysicalCard,
 		); err != nil {
 			return nil, err
 		}
@@ -288,7 +329,7 @@ WHERE id = $1 AND status = 'pending'`,
 	return tx.Commit(ctx)
 }
 
-// DeliverTostiOrder marks delivered; decrements knipjes on digital cards only.
+// DeliverTostiOrder marks delivered and decrements estimate on the linked tosti card.
 func (s *Store) DeliverTostiOrder(ctx context.Context, orderID, deliveredByUserID int64) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -317,22 +358,16 @@ func (s *Store) DeliverTostiOrder(ctx context.Context, orderID, deliveredByUserI
 		return ErrTostiInvalidQuantity
 	}
 
+	var cardID int64
 	if !cardIDScan.Valid {
-		tag, err := tx.Exec(ctx, `
-UPDATE tosti_orders
-SET status = 'delivered', delivered_at = now(), delivered_by_user_id = $2
-WHERE id = $1 AND status = 'pending'`,
-			orderID, deliveredByUserID)
+		physicalCardID, err := findPhysicalTostiCardForUser(ctx, tx, userID)
 		if err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 0 {
-			return ErrTostiOrderNotPending
-		}
-		return tx.Commit(ctx)
+		cardID = physicalCardID
+	} else {
+		cardID = cardIDScan.Int64
 	}
-
-	cardID := cardIDScan.Int64
 	var knip int
 	err = tx.QueryRow(ctx,
 		`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2 AND kind = $3::card_kind FOR UPDATE`,
@@ -361,9 +396,9 @@ WHERE id = $1 AND user_id = $2 AND kind = $4::card_kind AND knipjes_remaining >=
 
 	tag, err = tx.Exec(ctx, `
 UPDATE tosti_orders
-SET status = 'delivered', delivered_at = now(), delivered_by_user_id = $2
+SET status = 'delivered', delivered_at = now(), delivered_by_user_id = $2, card_id = $3
 WHERE id = $1 AND status = 'pending'`,
-		orderID, deliveredByUserID)
+		orderID, deliveredByUserID, cardID)
 	if err != nil {
 		return err
 	}

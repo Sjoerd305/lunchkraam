@@ -12,6 +12,8 @@ import {
   createTostiOrderResponseSchema,
   meResponseSchema,
   operatorCardsResponseSchema,
+  operatorMembersResponseSchema,
+  operatorCardSaleResponseSchema,
   operatorTostiOrdersResponseSchema,
   operatorTostiSoldTodaySchema,
   registeredCountResponseSchema,
@@ -25,6 +27,7 @@ import {
 } from './api.schemas'
 
 export type CardKind = 'tosti' | 'avondeten'
+export type PaymentMethod = 'tikkie' | 'contant'
 
 export type User = {
   id: number
@@ -57,6 +60,7 @@ export type TikkieWarning = {
 export type Card = {
   id: number
   kind: CardKind
+  source: 'online' | 'physical'
   knipjes_remaining: number
   created_at: string
 }
@@ -80,6 +84,7 @@ export type BuyInfo = {
 export type AdminRequest = {
   id: number
   kind: CardKind
+  payment_method: PaymentMethod
   user_name: string
   user_email: string
   created_at: string
@@ -347,11 +352,18 @@ export async function patchLocalUser(
 export type OperatorCardRow = {
   id: number
   kind: CardKind
+  source: 'online' | 'physical'
   knipjes_remaining: number
   created_at: string
   owner_name: string
   owner_email: string
   owner_user_id: number
+}
+
+export type OperatorMember = {
+  id: number
+  name: string
+  email: string
 }
 
 export type AvondetenRegistrationCard = {
@@ -403,6 +415,48 @@ export async function getOperatorCards(q: string): Promise<OperatorCardRow[]> {
   return payload.cards
 }
 
+export async function getOperatorMembers(): Promise<OperatorMember[]> {
+  const res = await fetch('/api/operator/members', { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const payload = parseApiResponse(operatorMembersResponseSchema, await res.json())
+  return payload.members
+}
+
+export async function createOperatorCardSale(
+  csrf: string,
+  body: { user_id: number; kind: CardKind; payment_method: PaymentMethod },
+): Promise<number> {
+  const res = await fetch('/api/operator/card-sales', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw await parseError(res)
+  const payload = parseApiResponse(operatorCardSaleResponseSchema, await res.json())
+  return payload.request_id
+}
+
+export async function setOperatorPhysicalCardEstimate(
+  csrf: string,
+  cardId: number,
+  knipjesRemaining: number,
+): Promise<void> {
+  const res = await fetch(`/api/operator/cards/${cardId}/estimate`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ knipjes_remaining: knipjesRemaining }),
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
 export type TostiBread = 'wit' | 'bruin'
 export type TostiFilling = 'ham' | 'kaas' | 'ham_kaas'
 export type TostiOrderStatus = 'pending' | 'delivered' | 'cancelled'
@@ -412,6 +466,7 @@ export type TostiOrder = {
   user_id: number
   card_id: number | null
   quantity: number
+  is_physical_card: boolean
   bread: TostiBread
   filling: TostiFilling
   status: TostiOrderStatus
@@ -432,6 +487,7 @@ export type TostiQueueEntry = {
   place: number
   id: number
   card_id: number | null
+  is_physical_card: boolean
   quantity: number
   bread: TostiBread
   filling: TostiFilling

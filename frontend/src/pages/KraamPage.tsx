@@ -24,7 +24,7 @@ function localISODate(d: Date = new Date()): string {
 }
 
 function isPhysicalTostiOrder(o: api.OperatorTostiOrderRow): boolean {
-  return o.card_id === null
+  return o.is_physical_card
 }
 
 function formatAmsterdamDateLong(yyyyMMdd: string): string {
@@ -44,6 +44,7 @@ export function KraamPage() {
   const { alert, confirm } = useAlertDialog()
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<api.OperatorCardRow[]>([])
+  const [members, setMembers] = useState<api.OperatorMember[]>([])
   const [orders, setOrders] = useState<api.OperatorTostiOrderRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingOrders, setLoadingOrders] = useState(true)
@@ -60,6 +61,11 @@ export function KraamPage() {
   const [avondetenSubmitting, setAvondetenSubmitting] = useState(false)
   const [soldToday, setSoldToday] = useState<api.OperatorTostiSoldToday | null>(null)
   const [soldTodayLoading, setSoldTodayLoading] = useState(true)
+  const [saleUserID, setSaleUserID] = useState<number>(0)
+  const [saleKind, setSaleKind] = useState<api.CardKind>('tosti')
+  const [salePaymentMethod, setSalePaymentMethod] = useState<api.PaymentMethod>('tikkie')
+  const [saleSubmitting, setSaleSubmitting] = useState(false)
+  const [estimateBusyId, setEstimateBusyId] = useState<number | null>(null)
 
   const loadPayments = useCallback(async () => {
     setPaymentLoading(true)
@@ -136,6 +142,17 @@ export function KraamPage() {
     }
   }, [q, alert])
 
+  const loadMembers = useCallback(async () => {
+    try {
+      const list = await api.getOperatorMembers()
+      setMembers(list)
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
+      setMembers([])
+      void alert({ title: 'Leden laden mislukt', message: msg, variant: 'error' })
+    }
+  }, [alert])
+
   useEffect(() => {
     void loadOrders()
   }, [loadOrders])
@@ -152,6 +169,10 @@ export function KraamPage() {
     const t = window.setTimeout(() => void load(), 300)
     return () => window.clearTimeout(t)
   }, [load])
+
+  useEffect(() => {
+    void loadMembers()
+  }, [loadMembers])
 
   const onKraamRealtime = useCallback(
     (reason: string) => {
@@ -192,7 +213,7 @@ export function KraamPage() {
   }
 
   async function refreshAll() {
-    await Promise.all([loadOrders(), loadSoldToday(), loadPayments(), load(), loadAvondeten()])
+    await Promise.all([loadOrders(), loadSoldToday(), loadPayments(), load(), loadAvondeten(), loadMembers()])
   }
 
   function toggleAvondetenPick(cardId: number) {
@@ -233,6 +254,44 @@ export function KraamPage() {
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
     } finally {
       setAvondetenSubmitting(false)
+    }
+  }
+
+  async function onRegisterPhysicalSale() {
+    if (saleUserID <= 0) {
+      void alert({ title: 'Geen lid gekozen', message: 'Kies eerst een lid voor de kaartverkoop.', variant: 'error' })
+      return
+    }
+    const selectedMember = memberOptions.find((m) => m.user_id === saleUserID)
+    const kindLabel = saleKind === 'avondeten' ? 'avondetenkaart' : 'tostikaart'
+    const paymentLabel = salePaymentMethod === 'contant' ? 'contant' : 'tikkie'
+    const ok = await confirm({
+      title: 'Fysieke kaartverkoop registreren?',
+      message: `${selectedMember?.label ?? `Gebruiker #${saleUserID}`}: ${kindLabel} betaald via ${paymentLabel}.`,
+      confirmLabel: 'Ja, registreren',
+      cancelLabel: 'Terug',
+      tone: 'brand',
+    })
+    if (!ok) return
+    setSaleSubmitting(true)
+    try {
+      const requestID = await api.createOperatorCardSale(csrf, {
+        user_id: saleUserID,
+        kind: saleKind,
+        payment_method: salePaymentMethod,
+      })
+      await refreshAll()
+      await refresh()
+      await alert({
+        title: 'Verkoop geregistreerd',
+        message: `Kaartverkoop opgeslagen (aanvraag #${requestID}).`,
+        variant: 'success',
+      })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Registreren mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setSaleSubmitting(false)
     }
   }
 
@@ -318,6 +377,22 @@ export function KraamPage() {
     }
   }
 
+  async function onAdjustPhysicalEstimate(c: api.OperatorCardRow, delta: number) {
+    const nextValue = Math.max(0, Math.min(10, c.knipjes_remaining + delta))
+    if (nextValue === c.knipjes_remaining) return
+    setEstimateBusyId(c.id)
+    try {
+      await api.setOperatorPhysicalCardEstimate(csrf, c.id, nextValue)
+      await load()
+      await refresh()
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Bijwerken mislukt.'
+      await alert({ title: 'Schatting bijwerken mislukt', message: msg, variant: 'error' })
+    } finally {
+      setEstimateBusyId(null)
+    }
+  }
+
   async function onDeliverOrder(o: api.OperatorTostiOrderRow) {
     const q = o.quantity
     const qtyPrefix = q > 1 ? `${q}× ` : ''
@@ -382,6 +457,12 @@ export function KraamPage() {
 
   const avondetenSelectable = avondetenRows.filter((r) => !r.registered_for_date && r.knipjes_remaining > 0)
   const avondetenPickableIds = new Set(avondetenSelectable.map((r) => r.card_id))
+  const memberOptions = members
+    .map((m) => ({
+      user_id: m.id,
+      label: `${m.name} (${m.email})`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'nl-NL'))
 
   return (
     <div className="space-y-10">
@@ -534,6 +615,64 @@ export function KraamPage() {
         )}
       </section>
 
+      <section className="space-y-4 rounded-2xl border border-indigo-200/90 bg-indigo-50/40 p-5 shadow-sm sm:p-6">
+        <div>
+          <h2 className="text-lg font-semibold text-indigo-950">Fysieke kaartverkoop registreren</h2>
+          <p className="text-sm text-indigo-900/85">
+            Registreer directe verkoop (operator/admin).
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-indigo-950">Lid</span>
+            <select
+              value={saleUserID}
+              onChange={(e) => setSaleUserID(Number(e.target.value))}
+              className="input-control min-h-11 rounded-xl"
+            >
+              <option value={0}>Kies een lid…</option>
+              {memberOptions.map((m) => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-indigo-950">Kaarttype</span>
+            <select
+              value={saleKind}
+              onChange={(e) => setSaleKind(e.target.value as api.CardKind)}
+              className="input-control min-h-11 rounded-xl"
+            >
+              <option value="tosti">Tostikaart</option>
+              <option value="avondeten">Avondetenkaart</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-indigo-950">Betaalmiddel</span>
+            <select
+              value={salePaymentMethod}
+              onChange={(e) => setSalePaymentMethod(e.target.value as api.PaymentMethod)}
+              className="input-control min-h-11 rounded-xl"
+            >
+              <option value="tikkie">Tikkie</option>
+              <option value="contant">Contant</option>
+            </select>
+          </label>
+        </div>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            disabled={saleSubmitting || memberOptions.length === 0}
+            onClick={() => void onRegisterPhysicalSale()}
+            className="min-h-11 rounded-xl bg-indigo-700 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-800 disabled:opacity-50"
+          >
+            {saleSubmitting ? 'Bezig…' : 'Verkoop opslaan'}
+          </button>
+        </div>
+      </section>
+
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Kaarten & handmatig knipje</h2>
         <p className="text-slate-600">Zoek op kaartnummer, naam of e-mail. Alleen tostikaarten: handmatig knipje.</p>
@@ -574,6 +713,11 @@ export function KraamPage() {
                     <span className="ml-1 rounded bg-slate-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-slate-800">
                       {c.kind === 'avondeten' ? 'Avondeten' : 'Tosti'}
                     </span>
+                    {c.source === 'physical' ? (
+                      <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900">
+                        Fysiek (schatting)
+                      </span>
+                    ) : null}
                   </p>
                   <p className="font-semibold text-slate-900">{c.owner_name}</p>
                   <p className="text-sm text-slate-600">{c.owner_email}</p>
@@ -581,7 +725,26 @@ export function KraamPage() {
                     <strong>{c.knipjes_remaining}</strong> / 10 knipjes
                   </p>
                 </div>
-                {c.kind === 'avondeten' ? (
+                {c.source === 'physical' ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={estimateBusyId !== null || c.knipjes_remaining <= 0}
+                      onClick={() => void onAdjustPhysicalEstimate(c, -1)}
+                      className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      -1
+                    </button>
+                    <button
+                      type="button"
+                      disabled={estimateBusyId !== null || c.knipjes_remaining >= 10}
+                      onClick={() => void onAdjustPhysicalEstimate(c, +1)}
+                      className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      +1
+                    </button>
+                  </div>
+                ) : c.kind === 'avondeten' ? (
                   <span className="text-sm text-slate-400">—</span>
                 ) : (
                   <button

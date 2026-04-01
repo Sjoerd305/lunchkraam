@@ -23,6 +23,8 @@ const optionalInt = z.preprocess(
 const booleanLike = z.preprocess((value) => Boolean(value), z.boolean())
 
 export const cardKindSchema = z.enum(['tosti', 'avondeten']).catch('tosti')
+export const paymentMethodSchema = z.enum(['tikkie', 'contant']).catch('tikkie')
+export const cardSourceSchema = z.enum(['online', 'physical']).catch('online')
 export const shopExpensePurposeSchema = z.enum(['lunchkraam', 'avondeten']).catch('lunchkraam')
 
 export const userSchema = z.object({
@@ -50,6 +52,7 @@ const myPendingRequestSchema = z.object({
 const cardSchema = z.object({
   id: intWithDefault(0),
   kind: cardKindSchema,
+  source: cardSourceSchema,
   knipjes_remaining: intWithDefault(0),
   created_at: stringWithDefault(''),
 })
@@ -130,6 +133,7 @@ export const registeredCountResponseSchema = z.object({
 const operatorCardRowSchema = z.object({
   id: intWithDefault(0),
   kind: cardKindSchema,
+  source: cardSourceSchema,
   knipjes_remaining: intWithDefault(0),
   created_at: stringWithDefault(''),
   owner_name: stringWithDefault(''),
@@ -139,6 +143,16 @@ const operatorCardRowSchema = z.object({
 
 export const operatorCardsResponseSchema = z.object({
   cards: z.array(operatorCardRowSchema).catch([]),
+})
+
+const operatorMemberSchema = z.object({
+  id: intWithDefault(0),
+  name: stringWithDefault(''),
+  email: stringWithDefault(''),
+})
+
+export const operatorMembersResponseSchema = z.object({
+  members: z.array(operatorMemberSchema).catch([]),
 })
 
 const tostiBreadSchema = z.enum(['wit', 'bruin']).catch('wit')
@@ -160,6 +174,7 @@ export const tostiOrderSchema = z.object({
   user_id: intWithDefault(0),
   card_id: optionalCardIdSchema,
   quantity: tostiOrderQuantitySchema,
+  is_physical_card: booleanLike,
   bread: tostiBreadSchema,
   filling: tostiFillingSchema,
   status: tostiOrderStatusSchema,
@@ -174,6 +189,7 @@ const tostiQueueEntrySchema = z.object({
   place: intWithDefault(0),
   id: intWithDefault(0),
   card_id: optionalCardIdSchema,
+  is_physical_card: booleanLike,
   quantity: tostiOrderQuantitySchema,
   bread: tostiBreadSchema,
   filling: tostiFillingSchema,
@@ -336,6 +352,7 @@ export const adminDashboardResponseSchema = z.object({
 const adminRequestSchema = z.object({
   id: intWithDefault(0),
   kind: cardKindSchema,
+  payment_method: paymentMethodSchema,
   user_name: stringWithDefault(''),
   user_email: stringWithDefault(''),
   created_at: stringWithDefault(''),
@@ -353,4 +370,8 @@ export const adminSettingsResponseSchema = z.object({
   tikkie_url_avondeten: stringWithDefault(''),
   tikkie_url_avondeten_effective: stringWithDefault(''),
   tikkie_url_avondeten_env_config: stringWithDefault(''),
+})
+
+export const operatorCardSaleResponseSchema = z.object({
+  request_id: intWithDefault(0),
 })

@@ -115,6 +115,11 @@ export function CardsPage() {
               <span className="rounded-md bg-slate-200/90 px-2 py-0.5 normal-case text-slate-800">
                 {c.kind === 'avondeten' ? 'Avondeten' : 'Tosti'}
               </span>
+              {c.source === 'physical' ? (
+                <span className="rounded-md bg-amber-100 px-2 py-0.5 normal-case text-amber-900">
+                  Fysieke kaart (schatting)
+                </span>
+              ) : null}
             </div>
             <p className="mt-3 text-3xl font-bold text-brand-800">
               {c.knipjes_remaining}
@@ -122,7 +127,9 @@ export function CardsPage() {
             </p>
             <p className="text-sm text-slate-600">knipjes over</p>
             <div className="mt-6 flex-1" />
-            {c.kind === 'avondeten' ? (
+            {c.source === 'physical' ? (
+              <p className="text-center text-sm text-slate-600">Alleen schatting, niet digitaal bruikbaar.</p>
+            ) : c.kind === 'avondeten' ? (
               c.knipjes_remaining > 0 ? (
                 <p className="text-center text-sm text-slate-600">Afboeken via de kraam.</p>
               ) : (

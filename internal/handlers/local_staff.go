@@ -260,6 +260,7 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 		out = append(out, map[string]any{
 			"id":                row.ID,
 			"kind":              row.Kind,
+			"source":            row.Source,
 			"knipjes_remaining": row.KnipjesRemaining,
 			"created_at":        row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			"owner_name":        row.OwnerName,
@@ -268,4 +269,21 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"cards": out})
+}
+
+func (d *Deps) APIOperatorMembers(w http.ResponseWriter, r *http.Request) {
+	rows, err := d.Store.ListOperatorMembers(r.Context())
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]any{
+			"id":    row.ID,
+			"name":  row.Name,
+			"email": row.Email,
+		})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"members": out})
 }
