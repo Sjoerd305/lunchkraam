@@ -84,10 +84,13 @@ export function AdminLocalUsersPage() {
 
   async function toggleMatroosJeugd(r: api.AdminUserRow, next: boolean) {
     setMatroosJeugdBusyId(r.id)
+    setRows((prev) => prev.map((row) => (row.id === r.id ? { ...row, is_matroos_jeugd: next } : row)))
     try {
       await api.patchUserMatroosJeugd(csrf, r.id, next)
-      await load()
     } catch (e) {
+      setRows((prev) =>
+        prev.map((row) => (row.id === r.id ? { ...row, is_matroos_jeugd: r.is_matroos_jeugd } : row)),
+      )
       const msg = e instanceof api.ApiError ? e.message : 'Opslaan mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
     } finally {
@@ -244,7 +247,7 @@ export function AdminLocalUsersPage() {
                         type="checkbox"
                         className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
                         checked={r.is_matroos_jeugd}
-                        disabled={matroosJeugdBusyId !== null}
+                        disabled={matroosJeugdBusyId === r.id}
                         onChange={(e) => void toggleMatroosJeugd(r, e.target.checked)}
                         aria-label={`Matroos jeugd voor ${r.name}`}
                       />
