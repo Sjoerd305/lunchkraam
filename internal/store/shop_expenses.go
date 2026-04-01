@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
 )
 
 // ShopExpense is a manual grocery / supply cost entry (amount on calendar date spent_on).
@@ -16,6 +15,12 @@ type ShopExpense struct {
 	Description string
 	Purpose     string
 	CreatedAt   time.Time
+}
+
+// AdminExpenseMonthAgg is the monthly expense split by purpose.
+type AdminExpenseMonthAgg struct {
+	LunchkraamEUR float64
+	AvondetenEUR  float64
 }
 
 // InsertShopExpense records a positive expense; spentOn is the calendar date (time-of-day ignored).
@@ -75,12 +80,14 @@ ORDER BY spent_on DESC, id DESC`,
 	return out, rows.Err()
 }
 
-// AdminExpensesByMonth sums expenses per calendar month for spent_on in the given year (indices 0–11 = Jan–Dec).
-func (s *Store) AdminExpensesByMonth(ctx context.Context, year int) ([12]float64, error) {
-	var buckets [12]float64
+// AdminExpensesByMonth sums expenses per calendar month and purpose for spent_on in the given year.
+// Indices 0–11 represent Jan–Dec.
+func (s *Store) AdminExpensesByMonth(ctx context.Context, year int) ([12]AdminExpenseMonthAgg, error) {
+	var buckets [12]AdminExpenseMonthAgg
 	rows, err := s.pool.Query(ctx, `
 SELECT (EXTRACT(MONTH FROM spent_on))::int AS m,
-       COALESCE(SUM(amount_eur), 0)::float8 AS total
+       COALESCE(SUM(amount_eur) FILTER (WHERE purpose = 'lunchkraam'), 0)::float8 AS lunchkraam_total,
+       COALESCE(SUM(amount_eur) FILTER (WHERE purpose = 'avondeten'), 0)::float8 AS avondeten_total
 FROM shop_expenses
 WHERE (EXTRACT(YEAR FROM spent_on))::int = $1
 GROUP BY 1
@@ -93,13 +100,17 @@ ORDER BY 1`,
 	defer rows.Close()
 	for rows.Next() {
 		var m int
-		var total float64
-		if err := rows.Scan(&m, &total); err != nil {
+		var lunchkraamTotal float64
+		var avondetenTotal float64
+		if err := rows.Scan(&m, &lunchkraamTotal, &avondetenTotal); err != nil {
 			return buckets, err
 		}
 		idx := m - 1
 		if idx >= 0 && idx < 12 {
-			buckets[idx] = total
+			buckets[idx] = AdminExpenseMonthAgg{
+				LunchkraamEUR: lunchkraamTotal,
+				AvondetenEUR:  avondetenTotal,
+			}
 		}
 	}
 	return buckets, rows.Err()

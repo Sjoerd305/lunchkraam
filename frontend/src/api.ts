@@ -111,6 +111,40 @@ export type AdminSalesMonthBucket = {
   label_nl: string
 }
 
+export type AdminCardsSoldBreakdown = {
+  tosti: number
+  avondeten: number
+  total: number
+}
+
+export type AdminRevenueBreakdown = {
+  tosti: number
+  avondeten: number
+  total: number
+}
+
+export type AdminExpensesBreakdown = {
+  lunchkraam: number
+  avondeten: number
+  total: number
+}
+
+export type AdminSalesBreakdownBucket = {
+  month: number
+  cards_sold: AdminCardsSoldBreakdown
+  revenue_eur: AdminRevenueBreakdown
+  expenses_eur: AdminExpensesBreakdown
+  net_eur: number
+  label_nl: string
+}
+
+export type AdminSalesYearBreakdown = {
+  cards_sold: AdminCardsSoldBreakdown
+  revenue_eur: AdminRevenueBreakdown
+  expenses_eur: AdminExpensesBreakdown
+  net_eur: number
+}
+
 export type AdminTostiMonthBucket = {
   month: number
   quantity: number
@@ -128,10 +162,12 @@ export type AdminSalesStats = {
   timezone: string
   payment_amount_eur: string
   monthly: AdminSalesMonthBucket[]
+  monthly_breakdown: AdminSalesBreakdownBucket[]
   year_fulfilled_count: number
   year_revenue_eur: number
   year_expenses_eur: number
   year_net_eur: number
+  year_breakdown: AdminSalesYearBreakdown
   year_tosti_quantity: number
   tosti_monthly: AdminTostiMonthBucket[]
   tosti_by_kind: AdminTostiKindBucket[]

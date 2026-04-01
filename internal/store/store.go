@@ -112,8 +112,12 @@ type CardRequestRow struct {
 
 // AdminSalesMonthAgg is fulfilled card count and revenue for one calendar month (Europe/Amsterdam).
 type AdminSalesMonthAgg struct {
-	FulfilledCount int64
-	RevenueEUR     float64
+	FulfilledCount          int64
+	RevenueEUR              float64
+	FulfilledCountTosti     int64
+	FulfilledCountAvondeten int64
+	RevenueEURTosti         float64
+	RevenueEURAvondeten     float64
 }
 
 type Store struct {
@@ -938,7 +942,11 @@ func (s *Store) AdminSalesByMonth(ctx context.Context, year int) ([12]AdminSales
 	const q = `
 SELECT (EXTRACT(MONTH FROM fulfilled_at AT TIME ZONE $2))::int AS m,
        COUNT(*)::bigint AS n,
-       COALESCE(SUM(sale_price_eur), 0)::float8 AS rev
+       COALESCE(SUM(sale_price_eur), 0)::float8 AS rev,
+       COUNT(*) FILTER (WHERE kind = 'tosti')::bigint AS n_tosti,
+       COUNT(*) FILTER (WHERE kind = 'avondeten')::bigint AS n_avondeten,
+       COALESCE(SUM(sale_price_eur) FILTER (WHERE kind = 'tosti'), 0)::float8 AS rev_tosti,
+       COALESCE(SUM(sale_price_eur) FILTER (WHERE kind = 'avondeten'), 0)::float8 AS rev_avondeten
 FROM card_requests
 WHERE status = 'fulfilled'
   AND fulfilled_at IS NOT NULL
@@ -954,13 +962,21 @@ ORDER BY 1`
 		var m int
 		var n int64
 		var rev float64
-		if err := rows.Scan(&m, &n, &rev); err != nil {
+		var nTosti int64
+		var nAvondeten int64
+		var revTosti float64
+		var revAvondeten float64
+		if err := rows.Scan(&m, &n, &rev, &nTosti, &nAvondeten, &revTosti, &revAvondeten); err != nil {
 			return buckets, err
 		}
 		idx := m - 1
 		if idx >= 0 && idx < len(buckets) {
 			buckets[idx].FulfilledCount = n
 			buckets[idx].RevenueEUR = rev
+			buckets[idx].FulfilledCountTosti = nTosti
+			buckets[idx].FulfilledCountAvondeten = nAvondeten
+			buckets[idx].RevenueEURTosti = revTosti
+			buckets[idx].RevenueEURAvondeten = revAvondeten
 		}
 	}
 	return buckets, rows.Err()

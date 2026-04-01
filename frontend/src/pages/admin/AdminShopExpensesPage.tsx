@@ -79,16 +79,6 @@ export function AdminShopExpensesPage() {
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const expenseSubtotals = useMemo(() => {
-    let lunchkraam = 0
-    let avondeten = 0
-    for (const r of rows) {
-      if (r.purpose === 'avondeten') avondeten += r.amount_eur
-      else lunchkraam += r.amount_eur
-    }
-    return { lunchkraam, avondeten }
-  }, [rows])
-
   useEffect(() => {
     if (!user) return
     void (async () => {
@@ -242,26 +232,42 @@ export function AdminShopExpensesPage() {
             <p className="text-sm text-slate-600">Cijfers laden…</p>
           ) : salesStats ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <FinanceStatCard
+                  label="Kaarten dit jaar"
+                  value={String(salesStats.year_breakdown.cards_sold.total)}
+                  tone="default"
+                  hint={`${salesStats.year_breakdown.cards_sold.tosti} tosti · ${salesStats.year_breakdown.cards_sold.avondeten} avondeten`}
+                />
                 <FinanceStatCard
                   label="Omzet dit jaar"
                   value={formatEUR(salesStats.year_revenue_eur)}
                   tone="emerald"
+                  hint={`Tosti ${formatEUR(salesStats.year_breakdown.revenue_eur.tosti)} · Avondeten ${formatEUR(
+                    salesStats.year_breakdown.revenue_eur.avondeten,
+                  )}`}
                 />
                 <FinanceStatCard
                   label="Uitgaven dit jaar"
                   value={formatEUR(salesStats.year_expenses_eur)}
                   tone="slate"
-                  hint={
-                    rows.length > 0
-                      ? `Lunchkraam ${formatEUR(expenseSubtotals.lunchkraam)} · Avondeten ${formatEUR(expenseSubtotals.avondeten)}`
-                      : undefined
-                  }
+                  hint={`Lunchkraam ${formatEUR(salesStats.year_breakdown.expenses_eur.lunchkraam)} · Avondeten ${formatEUR(
+                    salesStats.year_breakdown.expenses_eur.avondeten,
+                  )}`}
                 />
                 <FinanceStatCard
                   label="Saldo (omzet − uitgaven)"
                   value={formatEUR(salesStats.year_net_eur)}
                   tone={salesStats.year_net_eur >= 0 ? 'emerald' : 'amber'}
+                />
+                <FinanceStatCard
+                  label="Omzet per kaart"
+                  value={
+                    salesStats.year_breakdown.cards_sold.total > 0
+                      ? formatEUR(salesStats.year_breakdown.revenue_eur.total / salesStats.year_breakdown.cards_sold.total)
+                      : formatEUR(0)
+                  }
+                  tone="default"
                 />
               </div>
               <div className="surface-card overflow-x-auto">

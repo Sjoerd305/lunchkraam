@@ -26,14 +26,22 @@ type Granularity = 'month' | 'quarter'
 type ChartRow = {
   name: string
   kaarten: number
+  kaartenTosti: number
+  kaartenAvondeten: number
   omzet: number
+  omzetTosti: number
+  omzetAvondeten: number
   uitgaven: number
+  uitgavenLunchkraam: number
+  uitgavenAvondeten: number
   netto: number
   cumulatief: number
   cumulatiefNet: number
 }
 
-function monthlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
+function monthlyRows(stats: api.AdminSalesStats): ChartRow[] {
+  const monthly = stats.monthly
+  const breakdownByMonth = new Map(stats.monthly_breakdown.map((x) => [x.month, x]))
   const ordered =
     monthly.length === 12
       ? monthly
@@ -54,16 +62,29 @@ function monthlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
   let cumRev = 0
   let cumNet = 0
   return ordered.map((x) => {
+    const breakdown = breakdownByMonth.get(x.month)
     const omzet = Math.round(x.revenue_eur * 100) / 100
     const uitgaven = Math.round(x.expenses_eur * 100) / 100
     const netto = Math.round(x.net_eur * 100) / 100
+    const kaartenTosti = breakdown?.cards_sold.tosti ?? 0
+    const kaartenAvondeten = breakdown?.cards_sold.avondeten ?? 0
+    const omzetTosti = Math.round((breakdown?.revenue_eur.tosti ?? 0) * 100) / 100
+    const omzetAvondeten = Math.round((breakdown?.revenue_eur.avondeten ?? 0) * 100) / 100
+    const uitgavenLunchkraam = Math.round((breakdown?.expenses_eur.lunchkraam ?? 0) * 100) / 100
+    const uitgavenAvondeten = Math.round((breakdown?.expenses_eur.avondeten ?? 0) * 100) / 100
     cumRev += omzet
     cumNet += netto
     return {
       name: x.label_nl || MONTH_SHORT[x.month - 1] || `M${x.month}`,
       kaarten: x.fulfilled_count,
+      kaartenTosti,
+      kaartenAvondeten,
       omzet,
+      omzetTosti,
+      omzetAvondeten,
       uitgaven,
+      uitgavenLunchkraam,
+      uitgavenAvondeten,
       netto,
       cumulatief: Math.round(cumRev * 100) / 100,
       cumulatiefNet: Math.round(cumNet * 100) / 100,
@@ -71,8 +92,8 @@ function monthlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
   })
 }
 
-function quarterlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
-  const m = monthlyRows(monthly)
+function quarterlyRows(stats: api.AdminSalesStats): ChartRow[] {
+  const m = monthlyRows(stats)
   const chunks: { name: string; range: number[] }[] = [
     { name: 'Q1', range: [0, 1, 2] },
     { name: 'Q2', range: [3, 4, 5] },
@@ -83,13 +104,25 @@ function quarterlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
   let cumNet = 0
   return chunks.map(({ name, range }) => {
     let kaarten = 0
+    let kaartenTosti = 0
+    let kaartenAvondeten = 0
     let omzet = 0
+    let omzetTosti = 0
+    let omzetAvondeten = 0
     let uitgaven = 0
+    let uitgavenLunchkraam = 0
+    let uitgavenAvondeten = 0
     let netto = 0
     for (const i of range) {
       kaarten += m[i]?.kaarten ?? 0
+      kaartenTosti += m[i]?.kaartenTosti ?? 0
+      kaartenAvondeten += m[i]?.kaartenAvondeten ?? 0
       omzet += m[i]?.omzet ?? 0
+      omzetTosti += m[i]?.omzetTosti ?? 0
+      omzetAvondeten += m[i]?.omzetAvondeten ?? 0
       uitgaven += m[i]?.uitgaven ?? 0
+      uitgavenLunchkraam += m[i]?.uitgavenLunchkraam ?? 0
+      uitgavenAvondeten += m[i]?.uitgavenAvondeten ?? 0
       netto += m[i]?.netto ?? 0
     }
     omzet = Math.round(omzet * 100) / 100
@@ -100,8 +133,14 @@ function quarterlyRows(monthly: api.AdminSalesMonthBucket[]): ChartRow[] {
     return {
       name,
       kaarten,
+      kaartenTosti,
+      kaartenAvondeten,
       omzet,
+      omzetTosti: Math.round(omzetTosti * 100) / 100,
+      omzetAvondeten: Math.round(omzetAvondeten * 100) / 100,
       uitgaven,
+      uitgavenLunchkraam: Math.round(uitgavenLunchkraam * 100) / 100,
+      uitgavenAvondeten: Math.round(uitgavenAvondeten * 100) / 100,
       netto,
       cumulatief: Math.round(cumRev * 100) / 100,
       cumulatiefNet: Math.round(cumNet * 100) / 100,
@@ -121,10 +160,14 @@ function PeriodFinanceTooltip({
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
       <p className="font-semibold text-slate-900">{p.name}</p>
-      <p className="text-slate-600">Omzet: {formatEUR(p.omzet)}</p>
-      <p className="text-slate-600">Uitgaven: {formatEUR(p.uitgaven)}</p>
+      <p className="text-slate-600">Omzet tosti: {formatEUR(p.omzetTosti)}</p>
+      <p className="text-slate-600">Omzet avondeten: {formatEUR(p.omzetAvondeten)}</p>
+      <p className="text-slate-600">Omzet totaal: {formatEUR(p.omzet)}</p>
+      <p className="text-slate-600">Uitgaven lunchkraam: {formatEUR(p.uitgavenLunchkraam)}</p>
+      <p className="text-slate-600">Uitgaven avondeten: {formatEUR(p.uitgavenAvondeten)}</p>
+      <p className="text-slate-600">Uitgaven totaal: {formatEUR(p.uitgaven)}</p>
       <p className="text-slate-600">Netto: {formatEUR(p.netto)}</p>
-      <p className="text-slate-600">Kaarten: {p.kaarten}</p>
+      <p className="text-slate-600">Kaarten: {p.kaartenTosti} tosti · {p.kaartenAvondeten} avondeten</p>
     </div>
   )
 }
@@ -208,7 +251,7 @@ export function AdminSalesCharts() {
 
   const chartData = useMemo(() => {
     if (!stats?.monthly.length) return []
-    return granularity === 'month' ? monthlyRows(stats.monthly) : quarterlyRows(stats.monthly)
+    return granularity === 'month' ? monthlyRows(stats) : quarterlyRows(stats)
   }, [stats, granularity])
 
   const yearSelectOptions = useMemo(() => {
@@ -298,6 +341,9 @@ export function AdminSalesCharts() {
                 {stats.year_fulfilled_count}
               </p>
               <p className="mt-1 text-sm text-slate-600">geaccordeerd</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {stats.year_breakdown.cards_sold.tosti} tosti · {stats.year_breakdown.cards_sold.avondeten} avondeten
+              </p>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Omzet</p>
@@ -309,6 +355,10 @@ export function AdminSalesCharts() {
                   ? 'Nog geen verkopen dit jaar.'
                   : `Gem. €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per kaart.`}
               </p>
+              <p className="mt-1 text-xs text-emerald-900/80">
+                Tosti {formatEUR(stats.year_breakdown.revenue_eur.tosti)} · Avondeten{' '}
+                {formatEUR(stats.year_breakdown.revenue_eur.avondeten)}
+              </p>
             </div>
             <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-rose-900">Uitgaven</p>
@@ -316,6 +366,10 @@ export function AdminSalesCharts() {
                 {formatEUR(stats.year_expenses_eur)}
               </p>
               <p className="mt-1 text-sm text-rose-900/80">Geboekte boodschappen</p>
+              <p className="mt-1 text-xs text-rose-900/80">
+                Lunchkraam {formatEUR(stats.year_breakdown.expenses_eur.lunchkraam)} · Avondeten{' '}
+                {formatEUR(stats.year_breakdown.expenses_eur.avondeten)}
+              </p>
             </div>
             <div
               className={`rounded-2xl border p-5 shadow-sm ${
@@ -370,8 +424,10 @@ export function AdminSalesCharts() {
                         cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }}
                       />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="omzet" name="Omzet" fill="#0f766e" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="uitgaven" name="Uitgaven" fill="#e11d48" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="omzetTosti" name="Omzet tosti" stackId="omzet" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="omzetAvondeten" name="Omzet avondeten" stackId="omzet" fill="#34d399" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="uitgavenLunchkraam" name="Uitgaven lunchkraam" stackId="uitgaven" fill="#e11d48" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="uitgavenAvondeten" name="Uitgaven avondeten" stackId="uitgaven" fill="#fb7185" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

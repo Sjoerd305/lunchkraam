@@ -226,6 +226,40 @@ const adminSalesMonthBucketSchema = z.object({
   label_nl: stringWithDefault(''),
 })
 
+const adminCardsSoldBreakdownSchema = z.object({
+  tosti: intWithDefault(0),
+  avondeten: intWithDefault(0),
+  total: intWithDefault(0),
+})
+
+const adminRevenueBreakdownSchema = z.object({
+  tosti: floatWithDefault(0),
+  avondeten: floatWithDefault(0),
+  total: floatWithDefault(0),
+})
+
+const adminExpensesBreakdownSchema = z.object({
+  lunchkraam: floatWithDefault(0),
+  avondeten: floatWithDefault(0),
+  total: floatWithDefault(0),
+})
+
+const adminSalesBreakdownBucketSchema = z.object({
+  month: intWithDefault(0),
+  cards_sold: adminCardsSoldBreakdownSchema,
+  revenue_eur: adminRevenueBreakdownSchema,
+  expenses_eur: adminExpensesBreakdownSchema,
+  net_eur: floatWithDefault(0),
+  label_nl: stringWithDefault(''),
+})
+
+const adminSalesYearBreakdownSchema = z.object({
+  cards_sold: adminCardsSoldBreakdownSchema,
+  revenue_eur: adminRevenueBreakdownSchema,
+  expenses_eur: adminExpensesBreakdownSchema,
+  net_eur: floatWithDefault(0),
+})
+
 const adminTostiMonthBucketSchema = z.object({
   month: intWithDefault(0),
   quantity: intWithDefault(0),
@@ -243,10 +277,17 @@ export const adminSalesStatsResponseSchema = z.object({
   timezone: stringWithDefault('Europe/Amsterdam'),
   payment_amount_eur: stringWithDefault(''),
   monthly: z.array(adminSalesMonthBucketSchema).catch([]),
+  monthly_breakdown: z.array(adminSalesBreakdownBucketSchema).catch([]),
   year_fulfilled_count: intWithDefault(0),
   year_revenue_eur: floatWithDefault(0),
   year_expenses_eur: floatWithDefault(0),
   year_net_eur: floatWithDefault(0),
+  year_breakdown: adminSalesYearBreakdownSchema.catch({
+    cards_sold: { tosti: 0, avondeten: 0, total: 0 },
+    revenue_eur: { tosti: 0, avondeten: 0, total: 0 },
+    expenses_eur: { lunchkraam: 0, avondeten: 0, total: 0 },
+    net_eur: 0,
+  }),
   year_tosti_quantity: intWithDefault(0),
   tosti_monthly: z.array(adminTostiMonthBucketSchema).catch([]),
   tosti_by_kind: z.array(adminTostiKindBucketSchema).catch([]),

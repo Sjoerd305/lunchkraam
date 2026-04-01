@@ -319,16 +319,33 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	monthly := make([]map[string]any, 0, 12)
+	monthlyBreakdown := make([]map[string]any, 0, 12)
 	var yearCount int64
+	var yearCountTosti int64
+	var yearCountAvondeten int64
 	var yearRevenue float64
+	var yearRevenueTosti float64
+	var yearRevenueAvondeten float64
 	var yearExpenses float64
+	var yearExpensesLunchkraam float64
+	var yearExpensesAvondeten float64
 	for i := 0; i < 12; i++ {
 		b := buckets[i]
 		yearCount += b.FulfilledCount
+		yearCountTosti += b.FulfilledCountTosti
+		yearCountAvondeten += b.FulfilledCountAvondeten
 		rev := math.Round(b.RevenueEUR*100) / 100
-		exp := math.Round(expenseBuckets[i]*100) / 100
+		revTosti := math.Round(b.RevenueEURTosti*100) / 100
+		revAvondeten := math.Round(b.RevenueEURAvondeten*100) / 100
+		expLunchkraam := math.Round(expenseBuckets[i].LunchkraamEUR*100) / 100
+		expAvondeten := math.Round(expenseBuckets[i].AvondetenEUR*100) / 100
+		exp := math.Round((expLunchkraam+expAvondeten)*100) / 100
 		yearRevenue += rev
+		yearRevenueTosti += revTosti
+		yearRevenueAvondeten += revAvondeten
 		yearExpenses += exp
+		yearExpensesLunchkraam += expLunchkraam
+		yearExpensesAvondeten += expAvondeten
 		net := math.Round((rev-exp)*100) / 100
 		monthly = append(monthly, map[string]any{
 			"month":           i + 1,
@@ -338,9 +355,33 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 			"net_eur":         net,
 			"label_nl":        monthLabelNL(i + 1),
 		})
+		monthlyBreakdown = append(monthlyBreakdown, map[string]any{
+			"month": i + 1,
+			"cards_sold": map[string]any{
+				"tosti":     b.FulfilledCountTosti,
+				"avondeten": b.FulfilledCountAvondeten,
+				"total":     b.FulfilledCount,
+			},
+			"revenue_eur": map[string]any{
+				"tosti":     revTosti,
+				"avondeten": revAvondeten,
+				"total":     rev,
+			},
+			"expenses_eur": map[string]any{
+				"lunchkraam": expLunchkraam,
+				"avondeten":  expAvondeten,
+				"total":      exp,
+			},
+			"net_eur":  net,
+			"label_nl": monthLabelNL(i + 1),
+		})
 	}
 	yearRevenue = math.Round(yearRevenue*100) / 100
+	yearRevenueTosti = math.Round(yearRevenueTosti*100) / 100
+	yearRevenueAvondeten = math.Round(yearRevenueAvondeten*100) / 100
 	yearExpenses = math.Round(yearExpenses*100) / 100
+	yearExpensesLunchkraam = math.Round(yearExpensesLunchkraam*100) / 100
+	yearExpensesAvondeten = math.Round(yearExpensesAvondeten*100) / 100
 	yearNet := math.Round((yearRevenue-yearExpenses)*100) / 100
 
 	tostiMonthly, err := d.Store.AdminTostiDeliveredQuantitiesByMonth(r.Context(), year)
@@ -381,13 +422,32 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		"timezone":             "Europe/Amsterdam",
 		"payment_amount_eur":   d.Config.PaymentAmountEUR,
 		"monthly":              monthly,
+		"monthly_breakdown":    monthlyBreakdown,
 		"year_fulfilled_count": yearCount,
 		"year_revenue_eur":     yearRevenue,
 		"year_expenses_eur":    yearExpenses,
 		"year_net_eur":         yearNet,
-		"year_tosti_quantity":  yearTostiQty,
-		"tosti_monthly":        tostiMonthlyJSON,
-		"tosti_by_kind":        tostiByKindJSON,
+		"year_breakdown": map[string]any{
+			"cards_sold": map[string]any{
+				"tosti":     yearCountTosti,
+				"avondeten": yearCountAvondeten,
+				"total":     yearCount,
+			},
+			"revenue_eur": map[string]any{
+				"tosti":     yearRevenueTosti,
+				"avondeten": yearRevenueAvondeten,
+				"total":     yearRevenue,
+			},
+			"expenses_eur": map[string]any{
+				"lunchkraam": yearExpensesLunchkraam,
+				"avondeten":  yearExpensesAvondeten,
+				"total":      yearExpenses,
+			},
+			"net_eur": yearNet,
+		},
+		"year_tosti_quantity": yearTostiQty,
+		"tosti_monthly":       tostiMonthlyJSON,
+		"tosti_by_kind":       tostiByKindJSON,
 	})
 }
 
