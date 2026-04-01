@@ -40,9 +40,17 @@ export type User = {
 export type MeResponse = {
   user: User | null
   pending_card_requests: number
+  tikkie_warnings: TikkieWarning[]
   csrf_token: string
   payment_amount_eur: string
   payment_amount_avondeten_eur: string
+}
+
+export type TikkieWarning = {
+  kind: CardKind
+  expires_at: string
+  days_remaining: number
+  message: string
 }
 
 export type Card = {

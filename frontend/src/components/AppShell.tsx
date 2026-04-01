@@ -1,9 +1,12 @@
+import { useEffect } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import * as api from '../api'
+import { useAlertDialog } from './AlertDialogProvider'
 
 export function AppShell() {
-  const { user, csrf, refresh } = useAuth()
+  const { user, csrf, refresh, tikkieWarnings } = useAuth()
+  const { alert } = useAlertDialog()
   const navigate = useNavigate()
   const appVersion = (import.meta.env.VITE_APP_VERSION as string | undefined)?.trim() || 'dev'
 
@@ -16,6 +19,29 @@ export function AppShell() {
       navigate('/login', { replace: true })
     }
   }
+
+  useEffect(() => {
+    if (!user || (!user.is_admin && !user.is_operator)) return
+    if (tikkieWarnings.length === 0) return
+    const warningSignature = JSON.stringify(
+      tikkieWarnings.map((warning) => `${warning.kind}:${warning.expires_at}:${warning.days_remaining}`),
+    )
+    const shownKey = `tikkie-warning-shown:${warningSignature}`
+    if (window.sessionStorage.getItem(shownKey) === '1') return
+
+    window.sessionStorage.setItem(shownKey, '1')
+    const message = tikkieWarnings
+      .map((warning) => {
+        const dayLabel = warning.days_remaining === 1 ? 'dag' : 'dagen'
+        return `- ${warning.message} (nog ${warning.days_remaining} ${dayLabel})`
+      })
+      .join('\n')
+    void alert({
+      title: 'Tikkie verloopt binnenkort',
+      message: `Een of meer tikkie-links moeten vernieuwd worden:\n${message}`,
+      variant: 'error',
+    })
+  }, [alert, tikkieWarnings, user])
 
   return (
     <div className="min-h-screen bg-linear-to-b from-brand-50 via-white to-slate-50 text-slate-800">

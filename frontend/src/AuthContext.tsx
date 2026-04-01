@@ -11,6 +11,7 @@ import * as api from './api'
 type AuthState = {
   user: api.User | null
   pendingCardRequests: number
+  tikkieWarnings: api.TikkieWarning[]
   paymentAmountEUR: string
   csrf: string
   loading: boolean
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<api.User | null>(null)
   const [pendingCardRequests, setPendingCardRequests] = useState(0)
+  const [tikkieWarnings, setTikkieWarnings] = useState<api.TikkieWarning[]>([])
   const [paymentAmountEUR, setPaymentAmountEUR] = useState('15')
   const [csrf, setCsrf] = useState('')
   const [loading, setLoading] = useState(true)
@@ -30,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await api.getMe()
     setUser(data.user)
     setPendingCardRequests(data.pending_card_requests)
+    setTikkieWarnings(data.tikkie_warnings)
     if (data.payment_amount_eur) setPaymentAmountEUR(data.payment_amount_eur)
     setCsrf(data.csrf_token)
     setLoading(false)
@@ -39,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh().catch(() => {
       setUser(null)
       setPendingCardRequests(0)
+      setTikkieWarnings([])
       setCsrf('')
       setLoading(false)
     })
@@ -47,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthState = {
     user,
     pendingCardRequests,
+    tikkieWarnings,
     paymentAmountEUR,
     csrf,
     loading,

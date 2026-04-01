@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"lunchkraam/internal/httpx"
 	"lunchkraam/internal/store"
@@ -39,12 +40,12 @@ func (d *Deps) APIAdminSettingsGet(w http.ResponseWriter, r *http.Request) {
 	effective := store.EffectiveTikkieURL(dbVal, d.Config.TikkieURL)
 	effectiveAvondeten := store.EffectiveTikkieURL(dbAvondeten, d.Config.TikkieURLAvondeten)
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"tikkie_url":                        dbVal,
-		"tikkie_url_effective":              effective,
-		"tikkie_url_env_config":             env,
-		"tikkie_url_avondeten":              dbAvondeten,
-		"tikkie_url_avondeten_effective":    effectiveAvondeten,
-		"tikkie_url_avondeten_env_config":   envAvondeten,
+		"tikkie_url":                      dbVal,
+		"tikkie_url_effective":            effective,
+		"tikkie_url_env_config":           env,
+		"tikkie_url_avondeten":            dbAvondeten,
+		"tikkie_url_avondeten_effective":  effectiveAvondeten,
+		"tikkie_url_avondeten_env_config": envAvondeten,
 	})
 }
 
@@ -68,7 +69,7 @@ func (d *Deps) APIAdminSettingsPatch(w http.ResponseWriter, r *http.Request) {
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_url", "Tostikaart-Tikkie: "+err.Error())
 			return
 		}
-		if err := d.Store.SetAppSetting(r.Context(), store.SettingKeyTikkieURL, normalized); err != nil {
+		if err := d.setTikkieURLIfChanged(r, store.SettingKeyTikkieURL, store.SettingKeyTikkieURLSetAt, normalized); err != nil {
 			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan mislukt.")
 			return
 		}
@@ -79,7 +80,7 @@ func (d *Deps) APIAdminSettingsPatch(w http.ResponseWriter, r *http.Request) {
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_url", "Avondeten-Tikkie: "+err.Error())
 			return
 		}
-		if err := d.Store.SetAppSetting(r.Context(), store.SettingKeyTikkieURLAvondeten, normalized); err != nil {
+		if err := d.setTikkieURLIfChanged(r, store.SettingKeyTikkieURLAvondeten, store.SettingKeyTikkieURLAvondetenSetAt, normalized); err != nil {
 			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan mislukt.")
 			return
 		}
@@ -107,4 +108,26 @@ func (d *Deps) APIAdminSettingsPatch(w http.ResponseWriter, r *http.Request) {
 		"tikkie_url_avondeten_effective":  effectiveAvondeten,
 		"tikkie_url_avondeten_env_config": envAvondeten,
 	})
+}
+
+func (d *Deps) setTikkieURLIfChanged(r *http.Request, urlKey, setAtKey, nextValue string) error {
+	currentValue, err := d.Store.GetAppSetting(r.Context(), urlKey)
+	if err != nil {
+		return err
+	}
+	if !shouldUpdateTikkieTimestamp(currentValue, nextValue) {
+		return nil
+	}
+	if err := d.Store.SetAppSetting(r.Context(), urlKey, nextValue); err != nil {
+		return err
+	}
+	nowUTC := time.Now().UTC().Format(time.RFC3339)
+	if err := d.Store.SetAppSetting(r.Context(), setAtKey, nowUTC); err != nil {
+		return err
+	}
+	return nil
+}
+
+func shouldUpdateTikkieTimestamp(currentValue, nextValue string) bool {
+	return currentValue != nextValue
 }

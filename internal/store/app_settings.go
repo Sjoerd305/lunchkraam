@@ -13,6 +13,12 @@ const SettingKeyTikkieURL = "tikkie_url"
 // SettingKeyTikkieURLAvondeten is the payment link for avondetenkaarten (separate amount).
 const SettingKeyTikkieURLAvondeten = "tikkie_url_avondeten"
 
+// SettingKeyTikkieURLSetAt stores when the tosti tikkie URL was last changed (RFC3339 UTC).
+const SettingKeyTikkieURLSetAt = "tikkie_url_set_at"
+
+// SettingKeyTikkieURLAvondetenSetAt stores when the avondeten tikkie URL was last changed (RFC3339 UTC).
+const SettingKeyTikkieURLAvondetenSetAt = "tikkie_url_avondeten_set_at"
+
 func (s *Store) GetAppSetting(ctx context.Context, key string) (string, error) {
 	var v string
 	err := s.pool.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = $1`, key).Scan(&v)

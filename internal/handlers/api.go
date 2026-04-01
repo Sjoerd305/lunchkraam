@@ -31,6 +31,13 @@ type userPublicJSON struct {
 	LocalUsername      *string `json:"local_username,omitempty"`
 }
 
+type tikkieWarningJSON struct {
+	Kind          string `json:"kind"`
+	ExpiresAt     string `json:"expires_at"`
+	DaysRemaining int    `json:"days_remaining"`
+	Message       string `json:"message"`
+}
+
 type cardJSON struct {
 	ID               int64  `json:"id"`
 	Kind             string `json:"kind"`
@@ -73,14 +80,17 @@ func toUserPublic(u *store.User) userPublicJSON {
 func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
 	var user any
 	pending := 0
+	warnings := []tikkieWarningJSON{}
 	if u, ok := auth.UserFromContext(r.Context()); ok {
 		user = toUserPublic(u)
 		n, _ := d.Store.PendingCardRequestsByUser(r.Context(), u.ID)
 		pending = n
+		warnings = d.tikkieWarningsForUser(r.Context(), u, time.Now().UTC())
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"user":                         user,
 		"pending_card_requests":        pending,
+		"tikkie_warnings":              warnings,
 		"csrf_token":                   "",
 		"payment_amount_eur":           d.Config.PaymentAmountEUR,
 		"payment_amount_avondeten_eur": d.Config.AvondetenPaymentAmountEUR,

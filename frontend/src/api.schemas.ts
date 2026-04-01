@@ -57,6 +57,16 @@ const cardSchema = z.object({
 export const meResponseSchema = z.object({
   user: userSchema.nullable().catch(null),
   pending_card_requests: intWithDefault(0),
+  tikkie_warnings: z
+    .array(
+      z.object({
+        kind: cardKindSchema,
+        expires_at: stringWithDefault(''),
+        days_remaining: intWithDefault(0),
+        message: stringWithDefault(''),
+      }),
+    )
+    .catch([]),
   csrf_token: stringWithDefault(''),
   payment_amount_eur: stringWithDefault('15'),
   payment_amount_avondeten_eur: stringWithDefault('12'),
