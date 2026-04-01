@@ -128,10 +128,20 @@ fi | docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" 
 
 if [[ "$SKIP_RECEIPTS" -ne 1 && -n "$RECEIPTS_ARCHIVE" ]]; then
   RECEIPTS_DIR="${RECEIPTS_DIR:-data/receipts}"
-  mkdir -p "$RECEIPTS_DIR"
-  find "$RECEIPTS_DIR" -mindepth 1 -delete
-  tar -xzf "$RECEIPTS_ARCHIVE" -C "$RECEIPTS_DIR"
-  echo "Bonfoto's hersteld in ${RECEIPTS_DIR} vanuit ${RECEIPTS_ARCHIVE}."
+  # Prefer Docker app volume restore; fallback to host path for non-Docker usage.
+  if docker compose config --services 2>/dev/null | awk '$0=="app"{found=1} END{exit(found?0:1)}'; then
+    RECEIPTS_DIR_IN_APP="$(docker compose run --rm --no-deps --entrypoint sh app -lc 'printf "%s" "${RECEIPTS_DIR:-/app/data/receipts}"')"
+    docker compose run --rm --no-deps --entrypoint sh app -lc \
+      "mkdir -p \"$RECEIPTS_DIR_IN_APP\" && find \"$RECEIPTS_DIR_IN_APP\" -mindepth 1 -delete"
+    cat "$RECEIPTS_ARCHIVE" | docker compose run --rm --no-deps --entrypoint sh app -lc \
+      "tar -xzf - -C \"$RECEIPTS_DIR_IN_APP\""
+    echo "Bonfoto's hersteld in app-volume (${RECEIPTS_DIR_IN_APP}) vanuit ${RECEIPTS_ARCHIVE}."
+  else
+    mkdir -p "$RECEIPTS_DIR"
+    find "$RECEIPTS_DIR" -mindepth 1 -delete
+    tar -xzf "$RECEIPTS_ARCHIVE" -C "$RECEIPTS_DIR"
+    echo "Bonfoto's hersteld in ${RECEIPTS_DIR} vanuit ${RECEIPTS_ARCHIVE}."
+  fi
 fi
 
 echo "Klaar. Database '${POSTGRES_DB}' is hersteld vanuit ${DUMP}."
