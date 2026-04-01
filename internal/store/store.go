@@ -195,34 +195,6 @@ FROM cards WHERE user_id = $1 ORDER BY created_at DESC`
 	return out, rows.Err()
 }
 
-func (s *Store) useKnipjeOwnCard(ctx context.Context, cardID, ownerUserID int64) error {
-	const q = `
-UPDATE cards SET knipjes_remaining = knipjes_remaining - 1
-WHERE id = $1 AND user_id = $2 AND knipjes_remaining > 0`
-	tag, err := s.pool.Exec(ctx, q, cardID, ownerUserID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		var rem int
-		err := s.pool.QueryRow(ctx,
-			`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2`,
-			cardID, ownerUserID,
-		).Scan(&rem)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if rem == 0 {
-			return ErrNoKnipjes
-		}
-		return ErrForbidden
-	}
-	return nil
-}
-
 func (s *Store) useKnipjeAnyCard(ctx context.Context, cardID int64) error {
 	const q = `
 UPDATE cards SET knipjes_remaining = knipjes_remaining - 1
@@ -248,9 +220,12 @@ WHERE id = $1 AND knipjes_remaining > 0`
 	return nil
 }
 
-// UseKnipje lets the card owner use a punch, or an admin/operator on any card.
+// UseKnipje lets an admin/operator use one punch on any tosti card.
 // Avondeten cards are excluded: debits only via RegisterAvondetenMealsForDate (kraam ochtendlijst).
 func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
+	if !actor.IsAdmin && !actor.IsOperator {
+		return ErrForbidden
+	}
 	var kind string
 	err := s.pool.QueryRow(ctx, `SELECT kind::text FROM cards WHERE id = $1`, cardID).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -262,10 +237,7 @@ func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error 
 	if kind == CardKindAvondeten {
 		return ErrAvondetenManualUseDisabled
 	}
-	if actor.IsAdmin || actor.IsOperator {
-		return s.useKnipjeAnyCard(ctx, cardID)
-	}
-	return s.useKnipjeOwnCard(ctx, cardID, actor.ID)
+	return s.useKnipjeAnyCard(ctx, cardID)
 }
 
 func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string) (int64, error) {

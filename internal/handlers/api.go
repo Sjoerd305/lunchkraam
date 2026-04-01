@@ -127,6 +127,10 @@ func (d *Deps) APICards(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) APICardUse(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.UserFromContext(r.Context())
+	if !u.IsAdmin && !u.IsOperator {
+		httpx.JSONError(w, http.StatusForbidden, "operator_or_admin_required", "Alleen admin of operator kan handmatig een knipje gebruiken.")
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	cardID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {

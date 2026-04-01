@@ -5,12 +5,13 @@ import { useAuth } from '../AuthContext'
 import { useAlertDialog } from '../components/AlertDialogProvider'
 
 export function CardsPage() {
-  const { csrf, refresh } = useAuth()
+  const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
   const [cards, setCards] = useState<api.Card[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
+  const canUseManualKnipje = Boolean(user?.is_admin || user?.is_operator)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -33,6 +34,14 @@ export function CardsPage() {
   }, [load])
 
   async function onUse(card: api.Card) {
+    if (!canUseManualKnipje) {
+      await alert({
+        title: 'Geen toegang',
+        message: 'Alleen admin of operator kan handmatig een knipje gebruiken.',
+        variant: 'error',
+      })
+      return
+    }
     const ok = await confirm({
       title: 'Knipje gebruiken?',
       message: 'Wil je 1 knipje gebruiken voor een tosti?',
@@ -120,14 +129,16 @@ export function CardsPage() {
                 <p className="text-center text-sm text-slate-500">Deze kaart is op.</p>
               )
             ) : c.knipjes_remaining > 0 ? (
-              <button
-                type="button"
-                disabled={busyId !== null}
-                onClick={() => void onUse(c)}
-                className="min-h-12 w-full rounded-xl bg-brand-700 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-brand-800 disabled:opacity-50"
-              >
-                {busyId === c.id ? 'Bezig…' : '1 knipje gebruiken'}
-              </button>
+              canUseManualKnipje ? (
+                <button
+                  type="button"
+                  disabled={busyId !== null}
+                  onClick={() => void onUse(c)}
+                  className="min-h-12 w-full rounded-xl bg-brand-700 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-brand-800 disabled:opacity-50"
+                >
+                  {busyId === c.id ? 'Bezig…' : '1 knipje gebruiken'}
+                </button>
+              ) : null
             ) : (
               <p className="text-center text-sm text-slate-500">Deze kaart is op.</p>
             )}
