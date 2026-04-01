@@ -147,8 +147,6 @@ func (d *Deps) APICardUse(w http.ResponseWriter, r *http.Request) {
 			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Deze kaart heeft geen knipjes meer.")
 		case store.ErrNotFound:
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Kaart niet gevonden.")
-		case store.ErrAvondetenManualUseDisabled:
-			httpx.JSONError(w, http.StatusBadRequest, "avondeten_use_disabled", err.Error())
 		case store.ErrCardPhysicalReadonly:
 			httpx.JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Fysieke kaarten zijn read-only in de app.")
 		default:
@@ -291,41 +289,6 @@ func (d *Deps) APIOperatorCardSale(w http.ResponseWriter, r *http.Request) {
 	}
 	d.notifyPaymentRequestsMutation()
 	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true, "request_id": reqID})
-}
-
-func (d *Deps) APIOperatorCardEstimateSet(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
-	if !u.IsAdmin && !u.IsOperator {
-		httpx.JSONError(w, http.StatusForbidden, "operator_or_admin_required", "Alleen admin of operator kan de fysieke schatting bijwerken.")
-		return
-	}
-	idStr := chi.URLParam(r, "id")
-	cardID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige kaart.")
-		return
-	}
-	var body struct {
-		KnipjesRemaining int `json:"knipjes_remaining"`
-	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
-		return
-	}
-	err = d.Store.SetPhysicalCardKnipjesEstimate(r.Context(), cardID, body.KnipjesRemaining)
-	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrInvalidKnipjesRange):
-			httpx.JSONError(w, http.StatusBadRequest, "invalid_knipjes_range", "Schatting moet tussen 0 en 10 liggen.")
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Fysieke kaart niet gevonden.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bijwerken van schatting mislukt.")
-		}
-		return
-	}
-	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (d *Deps) APICancelMyRequest(w http.ResponseWriter, r *http.Request) {

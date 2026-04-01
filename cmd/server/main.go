@@ -121,7 +121,6 @@ func main() {
 					r.Get("/operator/cards", h.APIOperatorCards)
 					r.Get("/operator/members", h.APIOperatorMembers)
 					r.Post("/operator/card-sales", h.APIOperatorCardSale)
-					r.Post("/operator/cards/{id}/estimate", h.APIOperatorCardEstimateSet)
 					r.Get("/operator/tosti-orders", h.APIOperatorTostiOrders)
 					r.Get("/operator/tosti-sold-today", h.APIOperatorTostiSoldToday)
 					r.Post("/operator/tosti-orders/{id}/deliver", h.APIOperatorTostiOrderDeliver)

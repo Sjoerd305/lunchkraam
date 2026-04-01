@@ -39,6 +39,16 @@ function formatAmsterdamDateLong(yyyyMMdd: string): string {
   })
 }
 
+function cardKindLabel(kind: api.CardKind): string {
+  return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
+}
+
+function cardKindBadgeClass(kind: api.CardKind): string {
+  return kind === 'avondeten'
+    ? 'ml-1 rounded bg-amber-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-950'
+    : 'ml-1 rounded bg-indigo-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-indigo-950'
+}
+
 export function KraamPage() {
   const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
@@ -65,7 +75,6 @@ export function KraamPage() {
   const [saleKind, setSaleKind] = useState<api.CardKind>('tosti')
   const [salePaymentMethod, setSalePaymentMethod] = useState<api.PaymentMethod>('tikkie')
   const [saleSubmitting, setSaleSubmitting] = useState(false)
-  const [estimateBusyId, setEstimateBusyId] = useState<number | null>(null)
 
   const loadPayments = useCallback(async () => {
     setPaymentLoading(true)
@@ -353,7 +362,7 @@ export function KraamPage() {
     if (c.knipjes_remaining <= 0) return
     const ok = await confirm({
       title: 'Knipje afnemen?',
-      message: `1 knipje voor ${c.owner_name} (kaart #${c.id})?`,
+      message: `1 knipje afboeken voor ${c.owner_name} (kaart #${c.id})?`,
       confirmLabel: 'Ja, knipje gebruiken',
       cancelLabel: 'Annuleren',
       tone: 'brand',
@@ -374,22 +383,6 @@ export function KraamPage() {
       await alert({ title: 'Kon geen knipje gebruiken', message: msg, variant: 'error' })
     } finally {
       setBusyId(null)
-    }
-  }
-
-  async function onAdjustPhysicalEstimate(c: api.OperatorCardRow, delta: number) {
-    const nextValue = Math.max(0, Math.min(10, c.knipjes_remaining + delta))
-    if (nextValue === c.knipjes_remaining) return
-    setEstimateBusyId(c.id)
-    try {
-      await api.setOperatorPhysicalCardEstimate(csrf, c.id, nextValue)
-      await load()
-      await refresh()
-    } catch (e) {
-      const msg = e instanceof api.ApiError ? e.message : 'Bijwerken mislukt.'
-      await alert({ title: 'Schatting bijwerken mislukt', message: msg, variant: 'error' })
-    } finally {
-      setEstimateBusyId(null)
     }
   }
 
@@ -710,9 +703,7 @@ export function KraamPage() {
                 <div>
                   <p className="font-mono text-xs text-slate-500">
                     Kaart #{c.id}{' '}
-                    <span className="ml-1 rounded bg-slate-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-slate-800">
-                      {c.kind === 'avondeten' ? 'Avondeten' : 'Tosti'}
-                    </span>
+                    <span className={cardKindBadgeClass(c.kind)}>{cardKindLabel(c.kind)}</span>
                     {c.source === 'physical' ? (
                       <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900">
                         Fysiek (schatting)
@@ -725,31 +716,12 @@ export function KraamPage() {
                     <strong>{c.knipjes_remaining}</strong> / 10 knipjes
                   </p>
                 </div>
-                {c.source === 'physical' ? (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={estimateBusyId !== null || c.knipjes_remaining <= 0}
-                      onClick={() => void onAdjustPhysicalEstimate(c, -1)}
-                      className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      -1
-                    </button>
-                    <button
-                      type="button"
-                      disabled={estimateBusyId !== null || c.knipjes_remaining >= 10}
-                      onClick={() => void onAdjustPhysicalEstimate(c, +1)}
-                      className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      +1
-                    </button>
-                  </div>
-                ) : c.kind === 'avondeten' ? (
-                  <span className="text-sm text-slate-400">—</span>
+                {c.knipjes_remaining <= 0 ? (
+                  <span className="text-sm text-slate-400">Op</span>
                 ) : (
                   <button
                     type="button"
-                    disabled={busyId !== null || c.knipjes_remaining <= 0}
+                    disabled={busyId !== null}
                     onClick={() => void onUseKnipje(c)}
                     className="min-h-11 shrink-0 rounded-xl bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
                   >

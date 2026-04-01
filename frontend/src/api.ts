@@ -440,23 +440,6 @@ export async function createOperatorCardSale(
   return payload.request_id
 }
 
-export async function setOperatorPhysicalCardEstimate(
-  csrf: string,
-  cardId: number,
-  knipjesRemaining: number,
-): Promise<void> {
-  const res = await fetch(`/api/operator/cards/${cardId}/estimate`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ knipjes_remaining: knipjesRemaining }),
-  })
-  if (!res.ok) throw await parseError(res)
-}
-
 export type TostiBread = 'wit' | 'bruin'
 export type TostiFilling = 'ham' | 'kaas' | 'ham_kaas'
 export type TostiOrderStatus = 'pending' | 'delivered' | 'cancelled'

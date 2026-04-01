@@ -4,6 +4,16 @@ import * as api from '../api'
 import { useAuth } from '../AuthContext'
 import { useAlertDialog } from '../components/AlertDialogProvider'
 
+function cardKindLabel(kind: api.CardKind): string {
+  return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
+}
+
+function cardKindBadgeClass(kind: api.CardKind): string {
+  return kind === 'avondeten'
+    ? 'rounded-md bg-amber-200 px-2 py-0.5 normal-case text-amber-950'
+    : 'rounded-md bg-indigo-200 px-2 py-0.5 normal-case text-indigo-950'
+}
+
 export function CardsPage() {
   const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
@@ -44,7 +54,7 @@ export function CardsPage() {
     }
     const ok = await confirm({
       title: 'Knipje gebruiken?',
-      message: 'Wil je 1 knipje gebruiken voor een tosti?',
+      message: 'Wil je 1 knipje afboeken?',
       confirmLabel: 'Ja, gebruiken',
       cancelLabel: 'Annuleren',
       tone: 'brand',
@@ -112,9 +122,7 @@ export function CardsPage() {
           >
             <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <span>Kaart #{c.id}</span>
-              <span className="rounded-md bg-slate-200/90 px-2 py-0.5 normal-case text-slate-800">
-                {c.kind === 'avondeten' ? 'Avondeten' : 'Tosti'}
-              </span>
+              <span className={cardKindBadgeClass(c.kind)}>{cardKindLabel(c.kind)}</span>
               {c.source === 'physical' ? (
                 <span className="rounded-md bg-amber-100 px-2 py-0.5 normal-case text-amber-900">
                   Fysieke kaart (schatting)
@@ -127,15 +135,7 @@ export function CardsPage() {
             </p>
             <p className="text-sm text-slate-600">knipjes over</p>
             <div className="mt-6 flex-1" />
-            {c.source === 'physical' ? (
-              <p className="text-center text-sm text-slate-600">Alleen schatting, niet digitaal bruikbaar.</p>
-            ) : c.kind === 'avondeten' ? (
-              c.knipjes_remaining > 0 ? (
-                <p className="text-center text-sm text-slate-600">Afboeken via de kraam.</p>
-              ) : (
-                <p className="text-center text-sm text-slate-500">Deze kaart is op.</p>
-              )
-            ) : c.knipjes_remaining > 0 ? (
+            {c.knipjes_remaining > 0 ? (
               canUseManualKnipje ? (
                 <button
                   type="button"

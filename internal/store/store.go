@@ -30,10 +30,8 @@ var ErrInvalidCredentials = errors.New("ongeldige gebruikersnaam of wachtwoord")
 var ErrUsernameTaken = errors.New("gebruikersnaam bestaat al")
 var ErrCardNotForTosti = errors.New("deze kaart is geen tostikaart")
 var ErrCardPhysicalReadonly = errors.New("fysieke kaart is alleen read-only in de app")
-var ErrAvondetenManualUseDisabled = errors.New("avondetenkaart: gebruik de ochtendregistratie op de kraampagina")
 var ErrInvalidCurrentPassword = errors.New("huidig wachtwoord is onjuist")
 var ErrNotLocalAccount = errors.New("account gebruikt geen lokaal wachtwoord")
-var ErrInvalidKnipjesRange = errors.New("knipjes moeten tussen 0 en 10 liggen")
 
 type User struct {
 	ID                 int64
@@ -237,8 +235,7 @@ func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error 
 		return ErrForbidden
 	}
 	var kind string
-	var source string
-	err := s.pool.QueryRow(ctx, `SELECT kind::text, source::text FROM cards WHERE id = $1`, cardID).Scan(&kind, &source)
+	err := s.pool.QueryRow(ctx, `SELECT kind::text FROM cards WHERE id = $1`, cardID).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -246,30 +243,9 @@ func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error 
 		return err
 	}
 	if kind == CardKindAvondeten {
-		return ErrAvondetenManualUseDisabled
-	}
-	if source == "physical" {
-		return ErrCardPhysicalReadonly
+		return s.useKnipjeAnyCard(ctx, cardID)
 	}
 	return s.useKnipjeAnyCard(ctx, cardID)
-}
-
-func (s *Store) SetPhysicalCardKnipjesEstimate(ctx context.Context, cardID int64, knipjesRemaining int) error {
-	if knipjesRemaining < 0 || knipjesRemaining > 10 {
-		return ErrInvalidKnipjesRange
-	}
-	tag, err := s.pool.Exec(ctx, `
-UPDATE cards
-SET knipjes_remaining = $2
-WHERE id = $1
-  AND source = 'physical'::card_source`, cardID, knipjesRemaining)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
 }
 
 func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string) (int64, error) {
