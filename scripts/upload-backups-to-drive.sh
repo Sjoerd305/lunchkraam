@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Maakt een Postgres-dump (docker compose), uploadt naar rclone (bijv. Google Drive),
-# en uploadt optioneel bonfoto's uit RECEIPTS_DIR naar <RCLONE_DEST>/receipts.
+# en maakt/üploadt optioneel een receipts-archive met dezelfde timestamp.
 # en houdt op de remote maximaal REMOTE_BACKUP_KEEP bestanden (standaard 30).
 # De dump staat alleen tijdelijk op schijf (/tmp); na afloop wordt die verwijderd.
 #
@@ -74,6 +74,7 @@ trap 'rm -rf "${TMP_WORK}"' EXIT
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${TMP_WORK}/lunchkraam-${STAMP}.sql"
+RECEIPTS_OUT="${TMP_WORK}/lunchkraam-${STAMP}-receipts.tar.gz"
 
 docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" --no-owner --no-acl "$POSTGRES_DB"' >"$OUT"
 gzip -f "$OUT"
@@ -81,20 +82,30 @@ gzip -f "$OUT"
 DUMP_GZ="${OUT}.gz"
 echo "Dump: ${DUMP_GZ} ($(du -h "$DUMP_GZ" | cut -f1))"
 
+if [ -d "$RECEIPTS_DIR" ]; then
+  tar -C "$RECEIPTS_DIR" -czf "$RECEIPTS_OUT" .
+  echo "Receipts-archive (host): ${RECEIPTS_OUT} ($(du -h "$RECEIPTS_OUT" | cut -f1))"
+elif [ -n "$(docker compose ps -q app 2>/dev/null)" ]; then
+  RECEIPTS_DIR_IN_APP="$(docker compose exec -T app sh -lc 'printf "%s" "${RECEIPTS_DIR:-/app/data/receipts}"')"
+  if docker compose exec -T app sh -lc "test -d \"$RECEIPTS_DIR_IN_APP\""; then
+    docker compose exec -T app sh -lc "tar -C \"$RECEIPTS_DIR_IN_APP\" -czf - ." >"$RECEIPTS_OUT"
+    echo "Receipts-archive (app): ${RECEIPTS_OUT} ($(du -h "$RECEIPTS_OUT" | cut -f1))"
+  else
+    echo "Bonfoto-map niet gevonden (host: ${RECEIPTS_DIR}, app: ${RECEIPTS_DIR_IN_APP}); receipts-archive overgeslagen."
+  fi
+else
+  echo "Bonfoto-map niet gevonden (${RECEIPTS_DIR}) en app-container draait niet; receipts-archive overgeslagen."
+fi
+
 # shellcheck disable=SC2206
 extra=( ${RCLONE_EXTRA_FLAGS:-} )
 
 rclone copy "$TMP_WORK" "$RCLONE_DEST" \
   --include 'lunchkraam-*.sql.gz' \
+  --include 'lunchkraam-*-receipts.tar.gz' \
   --include 'tostikaart-*.sql.gz' \
   --fast-list \
   "${extra[@]}"
-
-if [ -d "$RECEIPTS_DIR" ]; then
-  rclone sync "$RECEIPTS_DIR" "${RCLONE_DEST%/}/receipts" \
-    --fast-list \
-    "${extra[@]}"
-fi
 
 REMOTE_RETENTION_KEEP="$REMOTE_BACKUP_KEEP" RCLONE_DEST="$RCLONE_DEST" python3 - <<'PY'
 import json, os, subprocess
@@ -123,7 +134,10 @@ items = [
         x["Name"].startswith("lunchkraam-")
         or x["Name"].startswith("tostikaart-")
     )
-    and x["Name"].endswith(".sql.gz")
+    and (
+        x["Name"].endswith(".sql.gz")
+        or x["Name"].endswith("-receipts.tar.gz")
+    )
 ]
 items.sort(key=lambda x: (x["ModTime"], x["Path"]))
 while len(items) > keep:
@@ -133,6 +147,6 @@ while len(items) > keep:
 PY
 
 echo "Klaar: upload naar ${RCLONE_DEST}, max. ${REMOTE_BACKUP_KEEP} dumps op de remote."
-if [ -d "$RECEIPTS_DIR" ]; then
-  echo "Bonfoto's gesynchroniseerd vanuit ${RECEIPTS_DIR}."
+if [ -f "$RECEIPTS_OUT" ]; then
+  echo "Bonfoto-archive geüpload met dezelfde retentie."
 fi
