@@ -5,6 +5,7 @@ import * as api from '../api'
 export function AppShell() {
   const { user, csrf, refresh } = useAuth()
   const navigate = useNavigate()
+  const appVersion = (import.meta.env.VITE_APP_VERSION as string | undefined)?.trim() || 'dev'
 
   async function onLogout() {
     try {
@@ -66,7 +67,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 text-center text-sm text-slate-500 sm:px-5 sm:pb-10">
-        10 knipjes per kaart · 1 tosti = 1 knipje
+        10 knipjes per kaart · 1 tosti = 1 knipje · versie {appVersion}
       </footer>
     </div>
   )

@@ -40,6 +40,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
+Tip: geef bij een handmatige productiebuild een versie mee, zodat de footer de commit toont:
+
+```bash
+APP_VERSION="$(git rev-parse --short HEAD)" docker compose up -d --build
+```
+
 ## Productie achter HTTPS (bijv. Cloudflare Tunnel)
 
 Zet minimaal:

@@ -63,4 +63,4 @@ jobs:
           cp "$SRC" .env
 
       - name: Build and start stack
-        run: docker compose up -d --build
+        run: APP_VERSION="${GITHUB_SHA::7}" docker compose up -d --build
