@@ -174,7 +174,6 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bijwerken mislukt.")
 		return
 	}
-	d.notifyUserProfileMutation(uid)
 	u, err := d.Store.UserByID(r.Context(), uid)
 	if err != nil {
 		httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -244,7 +243,6 @@ func (d *Deps) APIAdminPatchUserMatroosJeugd(w http.ResponseWriter, r *http.Requ
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bijwerken mislukt.")
 		return
 	}
-	d.notifyUserProfileMutation(uid)
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

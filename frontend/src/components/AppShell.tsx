@@ -1,16 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import * as api from '../api'
 import { useAlertDialog } from './AlertDialogProvider'
-import { useTostiRealtime } from '../useTostiRealtime'
 
 export function AppShell() {
   const { user, csrf, refresh, tikkieWarnings } = useAuth()
   const { alert } = useAlertDialog()
   const navigate = useNavigate()
   const appVersion = (import.meta.env.VITE_APP_VERSION as string | undefined)?.trim() || 'dev'
-  const lastProfileRefreshAtRef = useRef(0)
 
   async function onLogout() {
     try {
@@ -44,19 +42,6 @@ export function AppShell() {
       variant: 'error',
     })
   }, [alert, tikkieWarnings, user])
-
-  useTostiRealtime(
-    '/ws/mijn-tosti',
-    Boolean(user),
-    (reason) => {
-      if (reason !== 'user_profile_updated') return
-      const now = Date.now()
-      if (now - lastProfileRefreshAtRef.current < 1500) return
-      lastProfileRefreshAtRef.current = now
-      void refresh()
-    },
-    ['user_profile_updated'],
-  )
 
   return (
     <div className="min-h-screen bg-linear-to-b from-brand-50 via-white to-slate-50 text-slate-800">
