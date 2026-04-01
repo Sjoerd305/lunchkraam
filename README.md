@@ -1,6 +1,6 @@
 # Lunchkraam
 
-Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de kaart). Leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, beheren kaarten via het dashboard en **Kaart kopen** (`/buy`), en kunnen **tosti’s bestellen** (1 tosti = 1 knipje; meerdere stuks per bestelling mogelijk). Zonder vrije digitale knipjes kan iemand met een **fysieke tostikaart** bestellen; de kraam knipt dan op de kaart (geen afboeking in de app). Betaling verloopt handmatig (Tikkie/overschrijving); een **admin** accordeert aanvragen en beheert gebruikers. Operators zien de tosti-wachtrij op de **kraampagina** en kunnen daar ook **avondeten per datum** afboeken.
+Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de kaart). Leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, beheren kaarten via het dashboard en **Kaart kopen** (`/buy`), en kunnen **tosti’s bestellen** (1 tosti = 1 knipje; meerdere stuks per bestelling mogelijk). Zonder vrije digitale knipjes kan iemand met een **fysieke tostikaart** bestellen; de kraam knipt dan op de kaart en de app houdt een **schatting** van resterende knipjes bij. Fysieke kaarten zijn in de app **read-only** en niet digitaal bruikbaar. Betaling verloopt handmatig (Tikkie/overschrijving), en fysieke kaartverkoop kan bij de kraam met **tikkie** of **contant** worden geregistreerd. Een **admin** accordeert aanvragen en beheert gebruikers. Operators zien de tosti-wachtrij op de **kraampagina** en kunnen daar ook **avondeten per datum** afboeken.
 
 - **PostgreSQL** + migraties (goose)
 - **SPA** (React/Vite), in productie door de Go-server geserveerd
@@ -60,9 +60,18 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 
 - **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, **betalingswachtrij**, **boodschappen & uitgaven**). In instellingen kun je o.a. een aparte Tikkie voor de avondetenkaart zetten (aanvullend op `.env`).
 - **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
+- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Kan ook **fysieke kaartverkoop registreren** (tikkie/contant) en de **fysieke knipjesschatting** bijstellen. Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
 - **Matroos jeugd** (vlag op gebruiker): alleen wie deze vlag heeft ziet de **avondetenkaart** op Kaart kopen. Admins zetten dat bij **lokale** gebruikers in de UI; voor Google-accounts geldt hetzelfde patroon als bij operator (zo nodig handmatig in de database).
 
 Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYMENT_AMOUNT_EUR` / admin-tarieven de historische omzet niet verstoren.
+
+## Fysieke kaarten
+
+- Fysieke kaarten worden bij verkoop aan de kraam geregistreerd met betaalmiddel `tikkie` of `contant`.
+- De app toont fysieke kaarten als **read-only** met een schatting van resterende knipjes.
+- Digitale acties gebruiken alleen online kaarten; fysieke kaarten zijn niet digitaal inzetbaar.
+- Bij fysieke tosti-bestellingen boekt de app de schatting af bij leveren door de kraam.
+- Operator/admin kan de schatting handmatig corrigeren in de kraampagina.
 
 ## Databasebackups
 
