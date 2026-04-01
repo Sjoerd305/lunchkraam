@@ -16,6 +16,7 @@ import {
   operatorTostiSoldTodaySchema,
   registeredCountResponseSchema,
   shopExpenseSchema,
+  shopExpenseReceiptSchema,
   shopExpensesResponseSchema,
   tostiOrdersResponseSchema,
   tostiQueueResponseSchema,
@@ -182,6 +183,16 @@ export type AdminShopExpense = {
   description: string
   purpose: ShopExpensePurpose
   created_at: string
+}
+
+export type ShopExpenseReceipt = {
+  id: number
+  shop_expense_id: number
+  content_type: string
+  size_bytes: number
+  sha256: string
+  created_at: string
+  image_url: string
 }
 
 export class ApiError extends Error {
@@ -682,6 +693,41 @@ export async function createShopExpense(
 
 export async function deleteShopExpense(csrf: string, id: number): Promise<void> {
   const res = await fetch(`/api/admin/shop-expenses/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
+export async function getShopExpenseReceipt(id: number, isOperatorOnly: boolean): Promise<ShopExpenseReceipt> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/shop-expenses/${id}/receipt`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(shopExpenseReceiptSchema, await res.json())
+}
+
+export async function uploadShopExpenseReceipt(
+  csrf: string,
+  id: number,
+  file: File,
+  isOperatorOnly: boolean,
+): Promise<ShopExpenseReceipt> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const form = new FormData()
+  form.append('receipt', file)
+  const res = await fetch(`${prefix}/shop-expenses/${id}/receipt`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+    body: form,
+  })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(shopExpenseReceiptSchema, await res.json())
+}
+
+export async function deleteShopExpenseReceipt(csrf: string, id: number): Promise<void> {
+  const res = await fetch(`/api/admin/shop-expenses/${id}/receipt`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrf },

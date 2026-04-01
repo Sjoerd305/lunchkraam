@@ -24,6 +24,7 @@ WORKDIR /app
 COPY --from=gobuild /out/server /app/server
 COPY migrations ./migrations
 COPY --from=frontend /f/dist ./frontend/dist
+RUN mkdir -p /app/data/receipts && chown -R nobody:nobody /app/data
 ENV MIGRATIONS_DIR=/app/migrations
 ENV FRONTEND_DIST=/app/frontend/dist
 EXPOSE 8080

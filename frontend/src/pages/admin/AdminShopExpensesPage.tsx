@@ -78,6 +78,8 @@ export function AdminShopExpensesPage() {
   const [purpose, setPurpose] = useState<api.ShopExpensePurpose>('lunchkraam')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [receiptsByExpenseId, setReceiptsByExpenseId] = useState<Record<number, api.ShopExpenseReceipt | null>>({})
+  const [uploadingReceiptId, setUploadingReceiptId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -111,8 +113,20 @@ export function AdminShopExpensesPage() {
           ? await api.getOperatorShopExpenses(y)
           : await api.getAdminShopExpenses(y)
         setRows(list)
+        const receiptEntries = await Promise.all(
+          list.map(async (row) => {
+            try {
+              const receipt = await api.getShopExpenseReceipt(row.id, isOperatorOnly)
+              return [row.id, receipt] as const
+            } catch {
+              return [row.id, null] as const
+            }
+          }),
+        )
+        setReceiptsByExpenseId(Object.fromEntries(receiptEntries))
       } catch (e) {
         setRows([])
+        setReceiptsByExpenseId({})
         const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
         void alert({ title: 'Uitgaven laden mislukt', message: msg, variant: 'error' })
       } finally {
@@ -208,6 +222,39 @@ export function AdminShopExpensesPage() {
       await api.deleteShopExpense(csrf, id)
       await loadList(year)
       await loadStats(year)
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Verwijderen mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    }
+  }
+
+  async function onUploadReceipt(expenseId: number, file: File | null) {
+    if (!file || year === null) return
+    setUploadingReceiptId(expenseId)
+    try {
+      const receipt = await api.uploadShopExpenseReceipt(csrf, expenseId, file, isOperatorOnly)
+      setReceiptsByExpenseId((prev) => ({ ...prev, [expenseId]: receipt }))
+      await alert({ title: 'Bonfoto opgeslagen', message: 'De bonfoto is toegevoegd.', variant: 'success' })
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Uploaden mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setUploadingReceiptId(null)
+    }
+  }
+
+  async function onDeleteReceipt(expenseId: number) {
+    if (year === null) return
+    const ok = await confirm({
+      title: 'Bonfoto verwijderen?',
+      message: 'Dit kan niet ongedaan worden gemaakt.',
+      tone: 'danger',
+      confirmLabel: 'Verwijderen',
+    })
+    if (!ok) return
+    try {
+      await api.deleteShopExpenseReceipt(csrf, expenseId)
+      setReceiptsByExpenseId((prev) => ({ ...prev, [expenseId]: null }))
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Verwijderen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -466,6 +513,7 @@ export function AdminShopExpensesPage() {
                   <th className="py-2 pr-4">Bedrag</th>
                   <th className="py-2 pr-4">Waarvoor</th>
                   <th className="py-2 pr-4">Omschrijving</th>
+                  <th className="py-2 pr-4">Bon</th>
                   {user?.is_admin ? <th className="py-2 text-right">Actie</th> : null}
                 </tr>
               </thead>
@@ -478,6 +526,48 @@ export function AdminShopExpensesPage() {
                     </td>
                     <td className="py-3 pr-4 text-slate-700">{shopExpensePurposeLabel(r.purpose)}</td>
                     <td className="py-3 pr-4 text-slate-700">{r.description || '—'}</td>
+                    <td className="py-3 pr-4 text-slate-700">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="btn-secondary inline-flex min-h-9 cursor-pointer items-center px-3 text-xs">
+                          {uploadingReceiptId === r.id ? 'Uploaden…' : 'Foto'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            disabled={uploadingReceiptId === r.id}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] ?? null
+                              void onUploadReceipt(r.id, file)
+                              e.currentTarget.value = ''
+                            }}
+                          />
+                        </label>
+                        {receiptsByExpenseId[r.id] ? (
+                          <>
+                            <a
+                              href={receiptsByExpenseId[r.id]?.image_url || '#'}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-semibold text-slate-700 underline"
+                            >
+                              Bekijk
+                            </a>
+                            {user?.is_admin ? (
+                              <button
+                                type="button"
+                                onClick={() => void onDeleteReceipt(r.id)}
+                                className="text-xs font-semibold text-red-700 hover:text-red-900"
+                              >
+                                Verwijder foto
+                              </button>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-500">Geen foto</span>
+                        )}
+                      </div>
+                    </td>
                     {user?.is_admin ? (
                       <td className="py-3 text-right">
                         <button

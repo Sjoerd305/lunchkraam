@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Maakt een Postgres-dump (docker compose), uploadt naar rclone (bijv. Google Drive),
+# en uploadt optioneel bonfoto's uit RECEIPTS_DIR naar <RCLONE_DEST>/receipts.
 # en houdt op de remote maximaal REMOTE_BACKUP_KEEP bestanden (standaard 30).
 # De dump staat alleen tijdelijk op schijf (/tmp); na afloop wordt die verwijderd.
 #
@@ -56,6 +57,7 @@ fi
 unset _rclone_from_env _rclone_override
 
 REMOTE_BACKUP_KEEP="${REMOTE_BACKUP_KEEP:-${RCLONE_BACKUP_KEEP:-30}}"
+RECEIPTS_DIR="${RECEIPTS_DIR:-data/receipts}"
 
 if [[ -z "${RCLONE_DEST:-}" ]]; then
   echo "Zet RCLONE_DEST in ${ENV_FILE} of exporteer het vóór dit script." >&2
@@ -87,6 +89,12 @@ rclone copy "$TMP_WORK" "$RCLONE_DEST" \
   --include 'tostikaart-*.sql.gz' \
   --fast-list \
   "${extra[@]}"
+
+if [ -d "$RECEIPTS_DIR" ]; then
+  rclone sync "$RECEIPTS_DIR" "${RCLONE_DEST%/}/receipts" \
+    --fast-list \
+    "${extra[@]}"
+fi
 
 REMOTE_RETENTION_KEEP="$REMOTE_BACKUP_KEEP" RCLONE_DEST="$RCLONE_DEST" python3 - <<'PY'
 import json, os, subprocess
@@ -125,3 +133,6 @@ while len(items) > keep:
 PY
 
 echo "Klaar: upload naar ${RCLONE_DEST}, max. ${REMOTE_BACKUP_KEEP} dumps op de remote."
+if [ -d "$RECEIPTS_DIR" ]; then
+  echo "Bonfoto's gesynchroniseerd vanuit ${RECEIPTS_DIR}."
+fi

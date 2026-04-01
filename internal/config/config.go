@@ -29,6 +29,7 @@ type Config struct {
 	TrustProxyHeaders bool
 	CsrfAuthKey       [32]byte
 	FrontendDist      string
+	ReceiptsDir       string
 }
 
 func Load() (*Config, error) {
@@ -90,6 +91,10 @@ func Load() (*Config, error) {
 	if frontendDist == "" {
 		frontendDist = "frontend/dist"
 	}
+	receiptsDir := strings.TrimSpace(os.Getenv("RECEIPTS_DIR"))
+	if receiptsDir == "" {
+		receiptsDir = "data/receipts"
+	}
 
 	cfg := &Config{
 		ListenAddr:               addr,
@@ -111,6 +116,7 @@ func Load() (*Config, error) {
 		TrustProxyHeaders:        trustProxy,
 		CsrfAuthKey:              csrfKey,
 		FrontendDist:             frontendDist,
+		ReceiptsDir:              receiptsDir,
 	}
 	return cfg, nil
 }

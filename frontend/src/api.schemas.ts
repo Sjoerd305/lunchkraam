@@ -306,6 +306,16 @@ export const shopExpensesResponseSchema = z.object({
   expenses: z.array(shopExpenseSchema).catch([]),
 })
 
+export const shopExpenseReceiptSchema = z.object({
+  id: intWithDefault(0),
+  shop_expense_id: intWithDefault(0),
+  content_type: stringWithDefault('image/jpeg'),
+  size_bytes: intWithDefault(0),
+  sha256: stringWithDefault(''),
+  created_at: stringWithDefault(''),
+  image_url: stringWithDefault(''),
+})
+
 export const adminDashboardResponseSchema = z.object({
   active_cards_total: intWithDefault(0),
   knipjes_remaining_total: intWithDefault(0),

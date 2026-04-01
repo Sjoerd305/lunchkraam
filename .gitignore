@@ -5,6 +5,7 @@
 
 # Local scratch (repo root)
 /tmp/
+/data/
 
 # Database dumps (scripts/backup-database.sh)
 /backups/

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // ShopExpense is a manual grocery / supply cost entry (amount on calendar date spent_on).
@@ -15,6 +17,16 @@ type ShopExpense struct {
 	Description string
 	Purpose     string
 	CreatedAt   time.Time
+}
+
+type ShopExpenseReceipt struct {
+	ID            int64
+	ShopExpenseID int64
+	StoragePath   string
+	ContentType   string
+	SizeBytes     int64
+	SHA256        string
+	CreatedAt     time.Time
 }
 
 // AdminExpenseMonthAgg is the monthly expense split by purpose.
@@ -47,6 +59,90 @@ RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, 
 // DeleteShopExpense removes a row by id.
 func (s *Store) DeleteShopExpense(ctx context.Context, id int64) error {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM shop_expenses WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) ShopExpenseByID(ctx context.Context, id int64) (*ShopExpense, error) {
+	row := s.pool.QueryRow(ctx, `
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at
+FROM shop_expenses
+WHERE id = $1`, id)
+	var e ShopExpense
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &e, nil
+}
+
+func (s *Store) UpsertShopExpenseReceipt(
+	ctx context.Context,
+	expenseID int64,
+	storagePath string,
+	contentType string,
+	sizeBytes int64,
+	sha256 string,
+) (*ShopExpenseReceipt, error) {
+	row := s.pool.QueryRow(ctx, `
+INSERT INTO shop_expense_receipts (shop_expense_id, storage_path, content_type, size_bytes, sha256)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (shop_expense_id) DO UPDATE SET
+    storage_path = EXCLUDED.storage_path,
+    content_type = EXCLUDED.content_type,
+    size_bytes = EXCLUDED.size_bytes,
+    sha256 = EXCLUDED.sha256,
+    created_at = now()
+RETURNING id, shop_expense_id, storage_path, content_type, size_bytes, sha256, created_at`,
+		expenseID, storagePath, contentType, sizeBytes, sha256,
+	)
+	var rec ShopExpenseReceipt
+	if err := row.Scan(
+		&rec.ID,
+		&rec.ShopExpenseID,
+		&rec.StoragePath,
+		&rec.ContentType,
+		&rec.SizeBytes,
+		&rec.SHA256,
+		&rec.CreatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func (s *Store) ShopExpenseReceiptByExpenseID(ctx context.Context, expenseID int64) (*ShopExpenseReceipt, error) {
+	row := s.pool.QueryRow(ctx, `
+SELECT id, shop_expense_id, storage_path, content_type, size_bytes, sha256, created_at
+FROM shop_expense_receipts
+WHERE shop_expense_id = $1`, expenseID)
+	var rec ShopExpenseReceipt
+	if err := row.Scan(
+		&rec.ID,
+		&rec.ShopExpenseID,
+		&rec.StoragePath,
+		&rec.ContentType,
+		&rec.SizeBytes,
+		&rec.SHA256,
+		&rec.CreatedAt,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func (s *Store) DeleteShopExpenseReceipt(ctx context.Context, expenseID int64) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM shop_expense_receipts WHERE shop_expense_id = $1`, expenseID)
 	if err != nil {
 		return err
 	}
