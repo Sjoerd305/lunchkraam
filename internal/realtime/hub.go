@@ -12,6 +12,7 @@ var (
 	msgMyTostiOrders    = []byte(`{"t":"my_tosti_orders"}`)
 	msgTostiPublicQueue = []byte(`{"t":"tosti_public_queue"}`)
 	msgPaymentRequests  = []byte(`{"t":"payment_requests"}`)
+	msgUserProfile      = []byte(`{"t":"user_profile_updated"}`)
 )
 
 const (
@@ -31,6 +32,7 @@ type Hub struct {
 	broadcastPaymentRequests  chan struct{}
 	broadcastMemberTostiQueue chan struct{}
 	notifyUserTosti           chan int64
+	notifyUserProfile         chan int64
 
 	mu    sync.Mutex
 	kraam map[*Client]struct{}
@@ -61,6 +63,7 @@ func NewHub() *Hub {
 		broadcastPaymentRequests:  make(chan struct{}, 64),
 		broadcastMemberTostiQueue: make(chan struct{}, 64),
 		notifyUserTosti:           make(chan int64, 256),
+		notifyUserProfile:         make(chan int64, 256),
 		kraam:                     make(map[*Client]struct{}),
 		users:                     make(map[int64]map[*Client]struct{}),
 	}
@@ -138,6 +141,19 @@ func (h *Hub) run() {
 			}
 			h.mu.Unlock()
 
+		case uid := <-h.notifyUserProfile:
+			if uid == 0 {
+				continue
+			}
+			h.mu.Lock()
+			for c := range h.users[uid] {
+				select {
+				case c.send <- msgUserProfile:
+				default:
+				}
+			}
+			h.mu.Unlock()
+
 		case <-h.broadcastMemberTostiQueue:
 			h.mu.Lock()
 			for _, m := range h.users {
@@ -184,6 +200,17 @@ func (h *Hub) NotifyUserTostiOrders(userID int64) {
 	}
 	select {
 	case h.notifyUserTosti <- userID:
+	default:
+	}
+}
+
+// NotifyUserProfile signals one user to refetch /api/me (non-blocking).
+func (h *Hub) NotifyUserProfile(userID int64) {
+	if userID == 0 {
+		return
+	}
+	select {
+	case h.notifyUserProfile <- userID:
 	default:
 	}
 }

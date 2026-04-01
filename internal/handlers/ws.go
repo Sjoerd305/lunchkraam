@@ -124,3 +124,11 @@ func (d *Deps) notifyAvondetenRegistration() {
 	}
 	d.Hub.BroadcastKraam()
 }
+
+// notifyUserProfileMutation tells one user's member websocket clients to refetch /api/me.
+func (d *Deps) notifyUserProfileMutation(userID int64) {
+	if d.Hub == nil {
+		return
+	}
+	d.Hub.NotifyUserProfile(userID)
+}
