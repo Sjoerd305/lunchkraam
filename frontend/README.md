@@ -24,5 +24,5 @@ Responses worden in de UI gevalideerd met Zod: `src/api.ts` en `src/api.schemas.
 
 ## Meer documentatie
 
-- Runbook, rollen, Docker: [README](../README.md)
-- Architectuur en Mermaid-diagrammen: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
+- **Start hier**: [README](../README.md) in de reporoot (volledige documentatie-index, runbook, beveiligingsbeleid).
+- **Architectuur**: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) (Mermaid-diagrammen en technische indeling).

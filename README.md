@@ -9,7 +9,10 @@ Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de
 
 ## Documentatie
 
-- Architectuur, code-indeling en Mermaid-diagrammen (runtime, CI/CD, OAuth, realtime, voorbeeldflow): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+Deze README is het startpunt (runbook, rollen, backups, API-conventies). Daarnaast:
+
+- **Architectuur** (code-indeling, Mermaid-diagrammen voor o.a. runtime, CI/CD, OAuth, realtime): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Overzicht van HTTP-routes staat in [`cmd/server/main.go`](cmd/server/main.go).
+- **Beveiliging** (kwetsbaarheden verantwoord melden): [SECURITY.md](SECURITY.md)
 
 ## Vereisten
 
@@ -113,3 +116,7 @@ scripts/restore-database.sh --skip-receipts backups/lunchkraam-20260401-031500.s
 
 Zie [.env.example](.env.example). Gebruik je de avondetenkaart, zet dan minimaal ook **TIKKIE_URL_AVONDETEN** en **AVONDETEN_PAYMENT_AMOUNT_EUR** (of de equivalenten in de admin-instellingen).
 Voor bonfoto-opslag kun je optioneel **RECEIPTS_DIR** aanpassen (default: `data/receipts`).
+
+## Licentie
+
+Er rust geen open-source-licentie op deze code. Hergebruik of distributie buiten de afgesproken context is niet toegestaan zonder schriftelijke toestemming van de maintainers.
