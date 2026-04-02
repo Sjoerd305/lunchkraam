@@ -71,7 +71,7 @@ const tostiQtyMin = 1
 const tostiQtyMax = 10
 
 // CreateTostiOrder inserts a pending order.
-// - cardID nil: use member's latest physical tostikaart estimate.
+// - cardID nil: physical order. During rollout this may be placed without a registered physical card.
 // - cardID set: must be an online tostikaart with enough free knipjes.
 func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int64, breadIn, fillingIn string, quantity int) (*TostiOrder, error) {
 	if quantity < tostiQtyMin || quantity > tostiQtyMax {
@@ -93,11 +93,7 @@ func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int6
 	defer tx.Rollback(ctx)
 
 	if cardID == nil {
-		physicalCardID, err := findPhysicalTostiCardForUser(ctx, tx, userID)
-		if err != nil {
-			return nil, err
-		}
-		o, err := insertTostiOrderRow(ctx, tx, userID, &physicalCardID, bread, filling, quantity)
+		o, err := insertTostiOrderRow(ctx, tx, userID, nil, bread, filling, quantity)
 		if err != nil {
 			return nil, err
 		}
@@ -358,20 +354,41 @@ func (s *Store) DeliverTostiOrder(ctx context.Context, orderID, deliveredByUserI
 		return ErrTostiInvalidQuantity
 	}
 
-	var cardID int64
+	var cardID *int64
 	if !cardIDScan.Valid {
 		physicalCardID, err := findPhysicalTostiCardForUser(ctx, tx, userID)
+		if errors.Is(err, ErrNotFound) {
+			cardID = nil
+		} else if err != nil {
+			return err
+		}
+		if err == nil {
+			cardID = &physicalCardID
+		}
+	} else {
+		existing := cardIDScan.Int64
+		cardID = &existing
+	}
+
+	if cardID == nil {
+		tag, err := tx.Exec(ctx, `
+UPDATE tosti_orders
+SET status = 'delivered', delivered_at = now(), delivered_by_user_id = $2
+WHERE id = $1 AND status = 'pending'`,
+			orderID, deliveredByUserID)
 		if err != nil {
 			return err
 		}
-		cardID = physicalCardID
-	} else {
-		cardID = cardIDScan.Int64
+		if tag.RowsAffected() == 0 {
+			return ErrTostiOrderNotPending
+		}
+		return tx.Commit(ctx)
 	}
+
 	var knip int
 	err = tx.QueryRow(ctx,
 		`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2 AND kind = $3::card_kind FOR UPDATE`,
-		cardID, userID, CardKindTosti,
+		*cardID, userID, CardKindTosti,
 	).Scan(&knip)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
@@ -386,7 +403,7 @@ func (s *Store) DeliverTostiOrder(ctx context.Context, orderID, deliveredByUserI
 	tag, err := tx.Exec(ctx, `
 UPDATE cards SET knipjes_remaining = knipjes_remaining - $3
 WHERE id = $1 AND user_id = $2 AND kind = $4::card_kind AND knipjes_remaining >= $3`,
-		cardID, userID, qty, CardKindTosti)
+		*cardID, userID, qty, CardKindTosti)
 	if err != nil {
 		return err
 	}
@@ -398,7 +415,7 @@ WHERE id = $1 AND user_id = $2 AND kind = $4::card_kind AND knipjes_remaining >=
 UPDATE tosti_orders
 SET status = 'delivered', delivered_at = now(), delivered_by_user_id = $2, card_id = $3
 WHERE id = $1 AND status = 'pending'`,
-		orderID, deliveredByUserID, cardID)
+		orderID, deliveredByUserID, *cardID)
 	if err != nil {
 		return err
 	}

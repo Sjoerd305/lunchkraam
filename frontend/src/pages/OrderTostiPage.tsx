@@ -102,10 +102,6 @@ export function OrderTostiPage() {
     () => cards.filter((c) => c.source === 'online' && freeKnipjesForCard(c, orders) > 0),
     [cards, orders],
   )
-  const hasPhysicalTostiCard = useMemo(
-    () => cards.some((c) => c.kind === 'tosti' && c.source === 'physical' && c.knipjes_remaining > 0),
-    [cards],
-  )
   const selectedCard = useMemo(
     () => (cardId !== '' ? cards.find((c) => c.id === cardId) : undefined),
     [cards, cardId],
@@ -143,14 +139,6 @@ export function OrderTostiPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (paymentMode === 'physical') {
-      if (!hasPhysicalTostiCard) {
-        void alert({
-          title: 'Geen fysieke kaart',
-          message: 'Nog geen fysieke tostikaart met knipjes.',
-          variant: 'error',
-        })
-        return
-      }
       if (quantity < 1 || quantity > 10) {
         void alert({
           title: 'Aantal',
