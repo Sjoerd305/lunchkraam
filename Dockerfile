@@ -30,3 +30,4 @@ ENV FRONTEND_DIST=/app/frontend/dist
 EXPOSE 8080
 USER nobody
 ENTRYPOINT ["/app/server"]
+
