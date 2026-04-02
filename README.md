@@ -7,6 +7,10 @@ Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de
 - **Realtime**: WebSocket-hints voor kraam en “mijn tosti” (lijsten verversen zonder polling)
 - **Instellingen**: o.a. Tikkie-URL’s en tarieven per kaartsoort via admin (of defaults in `.env`)
 
+## Documentatie
+
+- Architectuur, code-indeling en Mermaid-diagrammen (runtime, CI/CD, OAuth, realtime, voorbeeldflow): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
 ## Vereisten
 
 - **Go 1.25+** (in `go.mod` staat `toolchain go1.25.8`; oudere installs halen die toolchain zo nodig binnen)
@@ -59,8 +63,7 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 ## Rollen
 
 - **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, **betalingswachtrij**, **boodschappen & uitgaven**). In instellingen kun je o.a. een aparte Tikkie voor de avondetenkaart zetten (aanvullend op `.env`).
-- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
-- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Kan ook **fysieke kaartverkoop registreren** (tikkie/contant) en de **fysieke knipjesschatting** bijstellen. Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
+- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Kan **fysieke kaartverkoop registreren** (tikkie/contant) en de **fysieke knipjesschatting** bijstellen. Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
 - **Matroos jeugd** (vlag op gebruiker): alleen wie deze vlag heeft ziet de **avondetenkaart** op Kaart kopen. Admins zetten dat bij **lokale** gebruikers in de UI; voor Google-accounts geldt hetzelfde patroon als bij operator (zo nodig handmatig in de database).
 
 Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYMENT_AMOUNT_EUR` / admin-tarieven de historische omzet niet verstoren.
