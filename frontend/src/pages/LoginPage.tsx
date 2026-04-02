@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import * as api from '../api'
-import { useAuth } from '../AuthContext'
+import { useAuth } from '../useAuth'
 
 const loginErrors: Record<string, string> = {
   oauth: 'Inloggen bij Google is geannuleerd of mislukt.',

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import * as api from '../api'
-import { useAuth } from '../AuthContext'
+import { useAuth } from '../useAuth'
 import { PaymentRequestsPanel } from '../components/PaymentRequestsPanel'
-import { useAlertDialog } from '../components/AlertDialogProvider'
+import { useAlertDialog } from '../components/useAlertDialog'
 import { useTostiRealtime } from '../useTostiRealtime'
 
 function breadLabel(b: api.TostiBread): string {

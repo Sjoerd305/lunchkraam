@@ -7,8 +7,8 @@ import {
   type FormEvent,
 } from 'react'
 import * as api from '../api'
-import { useAuth } from '../AuthContext'
-import { useAlertDialog } from '../components/AlertDialogProvider'
+import { useAuth } from '../useAuth'
+import { useAlertDialog } from '../components/useAlertDialog'
 import { useTostiRealtime } from '../useTostiRealtime'
 
 function breadLabel(b: api.TostiBread): string {

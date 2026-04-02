@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { AdminRequest } from '../api'
 
-export function canRejectPaymentRequest(knipjesRemaining: number): boolean {
+function canRejectPaymentRequest(knipjesRemaining: number): boolean {
   return knipjesRemaining === 10
 }
 

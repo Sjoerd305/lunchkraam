@@ -13,7 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import * as api from '../../api'
-import { useAlertDialog } from '../../components/AlertDialogProvider'
+import { useAlertDialog } from '../../components/useAlertDialog'
 
 const MONTH_SHORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
 

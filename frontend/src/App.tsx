@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
-import { AuthProvider, useAuth } from './AuthContext'
+import { AuthProvider } from './AuthProvider'
+import { useAuth } from './useAuth'
 import { AlertDialogProvider } from './components/AlertDialogProvider'
 import { AppShell } from './components/AppShell'
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'

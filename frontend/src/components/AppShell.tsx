@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
-import { useAuth } from '../AuthContext'
+import { useAuth } from '../useAuth'
 import * as api from '../api'
-import { useAlertDialog } from './AlertDialogProvider'
+import { useAlertDialog } from './useAlertDialog'
 import { useTostiRealtime } from '../useTostiRealtime'
 
 export function AppShell() {

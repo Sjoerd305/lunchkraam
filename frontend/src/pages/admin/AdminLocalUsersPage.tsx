@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import * as api from '../../api'
-import { useAuth } from '../../AuthContext'
-import { useAlertDialog } from '../../components/AlertDialogProvider'
+import { useAuth } from '../../useAuth'
+import { useAlertDialog } from '../../components/useAlertDialog'
 
 export function AdminLocalUsersPage() {
   const { csrf } = useAuth()

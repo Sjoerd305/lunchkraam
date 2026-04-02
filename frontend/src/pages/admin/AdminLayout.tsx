@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom'
-import { useAuth } from '../../AuthContext'
+import { useAuth } from '../../useAuth'
 
 export function AdminLayout() {
   const { user } = useAuth()

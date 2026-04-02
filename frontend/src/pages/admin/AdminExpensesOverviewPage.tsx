@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as api from '../../api'
-import { useAuth } from '../../AuthContext'
-import { useAlertDialog } from '../../components/AlertDialogProvider'
+import { useAuth } from '../../useAuth'
+import { useAlertDialog } from '../../components/useAlertDialog'
 
 function formatEUR(n: number): string {
   return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)

@@ -22,8 +22,11 @@ export function useTostiRealtime(
 ) {
   const onHintRef = useRef(onHint)
   const filterRef = useRef(filterTypes)
-  onHintRef.current = onHint
-  filterRef.current = filterTypes
+
+  useEffect(() => {
+    onHintRef.current = onHint
+    filterRef.current = filterTypes
+  }, [onHint, filterTypes])
 
   useEffect(() => {
     if (!enabled) return

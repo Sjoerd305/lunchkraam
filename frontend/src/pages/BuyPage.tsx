@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../api'
-import { useAuth } from '../AuthContext'
-import { useAlertDialog } from '../components/AlertDialogProvider'
+import { useAuth } from '../useAuth'
+import { useAlertDialog } from '../components/useAlertDialog'
 
 function cardKindLabel(kind: api.CardKind): string {
   return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'

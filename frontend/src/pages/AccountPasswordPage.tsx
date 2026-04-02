@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as api from '../api'
-import { useAuth } from '../AuthContext'
-import { useAlertDialog } from '../components/AlertDialogProvider'
+import { useAuth } from '../useAuth'
+import { useAlertDialog } from '../components/useAlertDialog'
 
 export function AccountPasswordPage() {
   const navigate = useNavigate()

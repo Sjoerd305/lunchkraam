@@ -1,31 +1,11 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
-
-export type AlertVariant = 'success' | 'error'
-
-export type AlertOptions = {
-  title: string
-  message: string
-  variant?: AlertVariant
-}
-
-export type ConfirmTone = 'brand' | 'danger'
-
-export type ConfirmOptions = {
-  title: string
-  message: string
-  confirmLabel?: string
-  cancelLabel?: string
-  /** Primary button style */
-  tone?: ConfirmTone
-}
+  AlertDialogContext,
+  type AlertOptions,
+  type AlertVariant,
+  type ConfirmOptions,
+  type ConfirmTone,
+} from './alertDialogContext'
 
 type Panel =
   | { kind: 'alert'; title: string; message: string; variant: AlertVariant }
@@ -37,13 +17,6 @@ type Panel =
       cancelLabel: string
       tone: ConfirmTone
     }
-
-type DialogContextValue = {
-  alert: (opts: AlertOptions) => Promise<void>
-  confirm: (opts: ConfirmOptions) => Promise<boolean>
-}
-
-const DialogContext = createContext<DialogContextValue | null>(null)
 
 export function AlertDialogProvider({ children }: { children: ReactNode }) {
   const [panel, setPanel] = useState<Panel | null>(null)
@@ -113,7 +86,7 @@ export function AlertDialogProvider({ children }: { children: ReactNode }) {
   }, [panel, closeAlert, finishConfirm])
 
   return (
-    <DialogContext.Provider value={{ alert: alertFn, confirm: confirmFn }}>
+    <AlertDialogContext.Provider value={{ alert: alertFn, confirm: confirmFn }}>
       {children}
       {panel ? (
         <div
@@ -200,12 +173,6 @@ export function AlertDialogProvider({ children }: { children: ReactNode }) {
           )}
         </div>
       ) : null}
-    </DialogContext.Provider>
+    </AlertDialogContext.Provider>
   )
-}
-
-export function useAlertDialog(): DialogContextValue {
-  const ctx = useContext(DialogContext)
-  if (!ctx) throw new Error('useAlertDialog must be used within AlertDialogProvider')
-  return ctx
 }

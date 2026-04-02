@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../../api'
-import { useAuth } from '../../AuthContext'
+import { useAuth } from '../../useAuth'
 import { PaymentRequestsPanel } from '../../components/PaymentRequestsPanel'
-import { useAlertDialog } from '../../components/AlertDialogProvider'
+import { useAlertDialog } from '../../components/useAlertDialog'
 import { useTostiRealtime } from '../../useTostiRealtime'
 
 export function AdminRequestsPage() {

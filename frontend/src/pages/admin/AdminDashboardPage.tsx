@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
-import { useAlertDialog } from '../../components/AlertDialogProvider'
+import { useAlertDialog } from '../../components/useAlertDialog'
 const AdminSalesCharts = lazy(async () => {
   const m = await import('./AdminSalesCharts')
   return { default: m.AdminSalesCharts }
