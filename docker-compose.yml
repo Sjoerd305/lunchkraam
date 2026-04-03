@@ -36,7 +36,7 @@ services:
       LISTEN_ADDR: ":8080"
       TZ: Europe/Amsterdam
     volumes:
-      - ./data/receipts:/app/data/receipts
+      - /home/sjoerd/lunchkraam/data/receipts:/app/data/receipts
     depends_on:
       postgres:
         condition: service_healthy
