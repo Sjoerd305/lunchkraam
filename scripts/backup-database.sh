@@ -2,8 +2,8 @@
 # Maakt een gecomprimeerde SQL-dump van de Postgres-database uit docker-compose
 # en (indien aanwezig) een tar.gz van bonfoto's.
 # Bronvolgorde bonfoto's:
-#   1) lokale map RECEIPTS_DIR (host)
-#   2) app-container RECEIPTS_DIR (handig bij named volume in docker-compose)
+#   1) lokale map RECEIPTS_DIR (host; default data/receipts, zelfde pad als docker-compose bind mount)
+#   2) app-container RECEIPTS_DIR (fallback als host-map ontbreekt maar app draait)
 # Terugzetten: scripts/restore-database.sh backups/lunchkraam-....sql.gz
 # Vereist: draaiende stack (minstens postgres).
 set -euo pipefail

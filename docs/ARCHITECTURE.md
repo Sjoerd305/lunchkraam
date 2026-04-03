@@ -26,13 +26,13 @@ flowchart LR
   subgraph host [Host]
     app[Go_server_cmd_server]
     dist[FRONTEND_DIST_static]
-    vol[Volume_receiptdata]
+    receipts[Host_data_receipts_bind]
   end
   db[(PostgreSQL)]
   browser -->|"HTTPS_HTTP_REST_WebSocket"| app
   app --> dist
   app --> db
-  app --> vol
+  app --> receipts
 ```
 
 ## CI/CD

@@ -23,6 +23,8 @@ services:
       context: .
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+    # Bind mount is owned by the host user; the image default is nobody (65534) and cannot write there.
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -34,11 +36,10 @@ services:
       LISTEN_ADDR: ":8080"
       TZ: Europe/Amsterdam
     volumes:
-      - receiptdata:/app/data/receipts
+      - ./data/receipts:/app/data/receipts
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   pgdata:
-  receiptdata:

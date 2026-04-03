@@ -47,6 +47,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
+Bonfoto-upload schrijft naar `./data/receipts` op de host (bind mount). De image draait normaal als `nobody` (UID 65534), wat op die map geen schrijfrechten heeft. Compose zet daarom `user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"` — zet in `.env` dezelfde waarden als `id -u` / `id -g` van de gebruiker die eigenaar is van `data/receipts` (op veel Linux-desktops is dat 1000:1000). De deploy-workflow exporteert `DOCKER_UID`/`DOCKER_GID` automatisch van de runner.
+
 Tip: geef bij een handmatige productiebuild een versie mee, zodat de footer de commit toont:
 
 ```bash
@@ -83,8 +85,8 @@ Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYM
 
 - Lokaal dumpen (docker-compose Postgres): [`scripts/backup-database.sh`](scripts/backup-database.sh); terugzetten: [`scripts/restore-database.sh`](scripts/restore-database.sh) (zie commentaar in de scripts).
 - Optioneel: [`scripts/upload-backups-to-drive.sh`](scripts/upload-backups-to-drive.sh) — dump + upload via rclone met retentie op de remote (vereisten en omgevingsvariabelen staan in het script).
-- Bonfoto's voor boodschappen staan standaard in `RECEIPTS_DIR` (`data/receipts`) en worden in Docker persistent opgeslagen via volume `receiptdata`.
-- Het uploadscript sync't (indien aanwezig) ook `RECEIPTS_DIR` naar `${RCLONE_DEST}/receipts`.
+- Bonfoto's voor boodschappen staan op de host onder `data/receipts` (docker-compose bind mount naar `/app/data/receipts` in de app-container).
+- Het uploadscript zet (indien aanwezig) ook `lunchkraam-*-receipts.tar.gz` naast de SQL-dump op `RCLONE_DEST` (zelfde map, geen aparte `receipts/`-submap).
 
 ### Backup/restore voorbeelden
 
@@ -115,7 +117,7 @@ scripts/restore-database.sh --skip-receipts backups/lunchkraam-20260401-031500.s
 ## Milieuvariabelen
 
 Zie [.env.example](.env.example). Gebruik je de avondetenkaart, zet dan minimaal ook **TIKKIE_URL_AVONDETEN** en **AVONDETEN_PAYMENT_AMOUNT_EUR** (of de equivalenten in de admin-instellingen).
-Voor bonfoto-opslag kun je optioneel **RECEIPTS_DIR** aanpassen (default: `data/receipts`).
+Voor bonfoto-opslag: in Docker meestal `RECEIPTS_DIR=/app/data/receipts` (zoals in [.env.example](.env.example)); lokaal zonder Docker gelijk aan de default `data/receipts`. Pas het compose-volume-pad mee aan als je `RECEIPTS_DIR` in de container wijzigt. Zie **DOCKER_UID** / **DOCKER_GID** in [.env.example](.env.example) voor schrijfrechten op `./data/receipts`.
 
 ## Licentie
 

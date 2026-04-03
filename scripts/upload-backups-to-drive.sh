@@ -57,7 +57,7 @@ fi
 unset _rclone_from_env _rclone_override
 
 REMOTE_BACKUP_KEEP="${REMOTE_BACKUP_KEEP:-${RCLONE_BACKUP_KEEP:-30}}"
-RECEIPTS_DIR="${RECEIPTS_DIR:-/app/data/receipts}"
+RECEIPTS_DIR="${RECEIPTS_DIR:-data/receipts}"
 
 if [[ -z "${RCLONE_DEST:-}" ]]; then
   echo "Zet RCLONE_DEST in ${ENV_FILE} of exporteer het vóór dit script." >&2
@@ -82,7 +82,10 @@ gzip -f "$OUT"
 DUMP_GZ="${OUT}.gz"
 echo "Dump: ${DUMP_GZ} ($(du -h "$DUMP_GZ" | cut -f1))"
 
-if [ -n "$(docker compose ps -q app 2>/dev/null)" ]; then
+if [[ -d "$RECEIPTS_DIR" ]]; then
+  tar -C "$RECEIPTS_DIR" -czf "$RECEIPTS_OUT" .
+  echo "Receipts-archive (host): ${RECEIPTS_OUT} ($(du -h "$RECEIPTS_OUT" | cut -f1))"
+elif [ -n "$(docker compose ps -q app 2>/dev/null)" ]; then
   RECEIPTS_DIR_IN_APP="$(docker compose exec -T app sh -lc 'printf "%s" "${RECEIPTS_DIR:-/app/data/receipts}"')"
   if docker compose exec -T app sh -lc "test -d \"$RECEIPTS_DIR_IN_APP\""; then
     docker compose exec -T app sh -lc "tar -C \"$RECEIPTS_DIR_IN_APP\" -czf - ." >"$RECEIPTS_OUT"
@@ -90,9 +93,6 @@ if [ -n "$(docker compose ps -q app 2>/dev/null)" ]; then
   else
     echo "Bonfoto-map niet gevonden (host: ${RECEIPTS_DIR}, app: ${RECEIPTS_DIR_IN_APP}); receipts-archive overgeslagen."
   fi
-elif [ -d "$RECEIPTS_DIR" ]; then
-  tar -C "$RECEIPTS_DIR" -czf "$RECEIPTS_OUT" .
-  echo "Receipts-archive (host): ${RECEIPTS_OUT} ($(du -h "$RECEIPTS_OUT" | cut -f1))"
 else
   echo "Bonfoto-map niet gevonden (${RECEIPTS_DIR}) en app-container draait niet; receipts-archive overgeslagen."
 fi
