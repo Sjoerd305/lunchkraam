@@ -2,14 +2,18 @@
 
 @theme {
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
-  --color-brand-200: #a7f3d0;
-  --color-brand-500: #10b981;
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
-  --color-brand-800: #065f46;
-  --color-brand-900: #064e3b;
+  /* Huisstijl: anker #0B2154 (RGB 11, 33, 84) — afgeleide ladder */
+  --color-brand-50: #f0f4fa;
+  --color-brand-100: #dbe3f0;
+  --color-brand-200: #b8c5e0;
+  --color-brand-300: #8fa3d0;
+  --color-brand-400: #5c7eb8;
+  --color-brand-500: #355fa3;
+  --color-brand-600: #1f4789;
+  --color-brand-700: #153677;
+  --color-brand-800: #0e2860;
+  --color-brand-900: #0b2154;
+  --color-brand-950: #050d22;
 }
 
 body {

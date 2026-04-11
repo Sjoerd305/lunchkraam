@@ -26,13 +26,13 @@ function FinanceStatCard({
   label: string
   value: string
   hint?: string
-  tone?: 'default' | 'amber' | 'emerald' | 'slate'
+  tone?: 'default' | 'amber' | 'brand' | 'slate'
 }) {
   const ring =
     tone === 'amber'
       ? 'border-amber-200 bg-amber-50/80'
-      : tone === 'emerald'
-        ? 'border-emerald-200 bg-emerald-50/80'
+      : tone === 'brand'
+        ? 'border-brand-200 bg-brand-50/80'
         : tone === 'slate'
           ? 'border-slate-200 bg-slate-50/80'
           : 'border-slate-200 bg-white'
@@ -165,7 +165,7 @@ export function AdminExpensesOverviewPage() {
                 <FinanceStatCard
                   label="Omzet dit jaar"
                   value={formatEUR(salesStats.year_revenue_eur)}
-                  tone="emerald"
+                  tone="brand"
                   hint={`Tosti ${formatEUR(salesStats.year_breakdown.revenue_eur.tosti)} · Avondeten ${formatEUR(
                     salesStats.year_breakdown.revenue_eur.avondeten,
                   )}`}
@@ -181,7 +181,7 @@ export function AdminExpensesOverviewPage() {
                 <FinanceStatCard
                   label="Saldo (omzet − uitgaven)"
                   value={formatEUR(salesStats.year_net_eur)}
-                  tone={salesStats.year_net_eur >= 0 ? 'emerald' : 'amber'}
+                  tone={salesStats.year_net_eur >= 0 ? 'brand' : 'amber'}
                 />
                 <FinanceStatCard
                   label="Omzet per kaart"

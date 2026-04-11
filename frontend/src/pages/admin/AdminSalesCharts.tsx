@@ -345,17 +345,17 @@ export function AdminSalesCharts() {
                 {stats.year_breakdown.cards_sold.tosti} tosti · {stats.year_breakdown.cards_sold.avondeten} avondeten
               </p>
             </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Omzet</p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-emerald-950">
+            <div className="rounded-2xl border border-brand-200 bg-brand-50/80 p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-800">Omzet</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-brand-950">
                 {formatEUR(stats.year_revenue_eur)}
               </p>
-              <p className="mt-1 text-sm text-emerald-900/80">
+              <p className="mt-1 text-sm text-brand-900/80">
                 {stats.year_fulfilled_count === 0
                   ? 'Nog geen verkopen dit jaar.'
                   : `Gem. €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per kaart.`}
               </p>
-              <p className="mt-1 text-xs text-emerald-900/80">
+              <p className="mt-1 text-xs text-brand-900/80">
                 Tosti {formatEUR(stats.year_breakdown.revenue_eur.tosti)} · Avondeten{' '}
                 {formatEUR(stats.year_breakdown.revenue_eur.avondeten)}
               </p>
@@ -421,11 +421,11 @@ export function AdminSalesCharts() {
                       />
                       <Tooltip
                         content={<PeriodFinanceTooltip />}
-                        cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }}
+                        cursor={{ fill: 'rgba(11, 33, 84, 0.08)' }}
                       />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="omzetTosti" name="Omzet tosti" stackId="omzet" fill="#0f766e" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="omzetAvondeten" name="Omzet avondeten" stackId="omzet" fill="#34d399" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="omzetTosti" name="Omzet tosti" stackId="omzet" fill="#0b2154" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="omzetAvondeten" name="Omzet avondeten" stackId="omzet" fill="#5c7eb8" radius={[4, 4, 0, 0]} />
                       <Bar dataKey="uitgavenLunchkraam" name="Uitgaven lunchkraam" stackId="uitgaven" fill="#e11d48" radius={[4, 4, 0, 0]} />
                       <Bar dataKey="uitgavenAvondeten" name="Uitgaven avondeten" stackId="uitgaven" fill="#fb7185" radius={[4, 4, 0, 0]} />
                     </BarChart>

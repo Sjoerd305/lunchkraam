@@ -528,7 +528,7 @@ export function OrderTostiPage() {
                   </span>
                   {' — '}
                   {o.status === 'delivered' ? (
-                    <span className="text-green-700">geleverd</span>
+                    <span className="text-brand-700">geleverd</span>
                   ) : (
                     <span className="text-slate-500">geannuleerd</span>
                   )}
