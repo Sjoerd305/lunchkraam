@@ -536,6 +536,9 @@ export function KraamPage() {
                       </span>
                     ) : null}
                   </p>
+                  {o.remark ? (
+                    <p className="mt-1 text-sm italic text-slate-700">&ldquo;{o.remark}&rdquo;</p>
+                  ) : null}
                   <p className="text-xs text-slate-500">
                     {physical
                       ? new Date(o.created_at).toLocaleString('nl-NL')

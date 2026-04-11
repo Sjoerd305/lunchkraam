@@ -458,6 +458,7 @@ export type TostiOrder = {
   delivered_by_user_id?: number
   cancelled_at?: string
   cancelled_by_user_id?: number
+  remark?: string
 }
 
 export type OperatorTostiOrderRow = TostiOrder & {
@@ -499,6 +500,7 @@ export type CreateTostiOrderBody =
       bread: TostiBread
       filling: TostiFilling
       quantity: number
+      remark?: string
     }
   | {
       physical_card?: false
@@ -506,9 +508,11 @@ export type CreateTostiOrderBody =
       bread: TostiBread
       filling: TostiFilling
       quantity: number
+      remark?: string
     }
 
 export async function createTostiOrder(csrf: string, body: CreateTostiOrderBody): Promise<TostiOrder> {
+  const remark = typeof body.remark === 'string' ? body.remark.trim() : ''
   const payload =
     body.physical_card === true
       ? {
@@ -516,12 +520,14 @@ export async function createTostiOrder(csrf: string, body: CreateTostiOrderBody)
           bread: body.bread,
           filling: body.filling,
           quantity: body.quantity,
+          ...(remark !== '' ? { remark } : {}),
         }
       : {
           card_id: body.card_id,
           bread: body.bread,
           filling: body.filling,
           quantity: body.quantity,
+          ...(remark !== '' ? { remark } : {}),
         }
   const res = await fetch('/api/tosti-orders', {
     method: 'POST',

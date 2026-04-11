@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -15,6 +16,7 @@ var (
 	ErrTostiInvalidBread    = errors.New("ongeldig brood")
 	ErrTostiInvalidFilling  = errors.New("ongeldige vulling")
 	ErrTostiInvalidQuantity = errors.New("ongeldig aantal tosti's")
+	ErrTostiInvalidRemark   = errors.New("opmerking te lang")
 )
 
 // TostiOrder is a lunch order; CardID nil means physical tostikaart (no app balance).
@@ -32,6 +34,7 @@ type TostiOrder struct {
 	CancelledByUserID *int64
 	Quantity          int
 	IsPhysicalCard    bool
+	Remark            string
 }
 
 // TostiOrderOperatorRow is a pending order with customer name and email for operators.
@@ -69,11 +72,15 @@ func parseTostiFilling(s string) (string, error) {
 
 const tostiQtyMin = 1
 const tostiQtyMax = 10
+const tostiRemarkMaxRunes = 500
 
 // CreateTostiOrder inserts a pending order.
 // - cardID nil: physical order. During rollout this may be placed without a registered physical card.
 // - cardID set: must be an online tostikaart with enough free knipjes.
-func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int64, breadIn, fillingIn string, quantity int) (*TostiOrder, error) {
+func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int64, breadIn, fillingIn string, quantity int, remark string) (*TostiOrder, error) {
+	if utf8.RuneCountInString(remark) > tostiRemarkMaxRunes {
+		return nil, ErrTostiInvalidRemark
+	}
 	if quantity < tostiQtyMin || quantity > tostiQtyMax {
 		return nil, ErrTostiInvalidQuantity
 	}
@@ -85,6 +92,10 @@ func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int6
 	if err != nil {
 		return nil, err
 	}
+	var remarkNull sql.NullString
+	if remark != "" {
+		remarkNull = sql.NullString{String: remark, Valid: true}
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -93,7 +104,7 @@ func (s *Store) CreateTostiOrder(ctx context.Context, userID int64, cardID *int6
 	defer tx.Rollback(ctx)
 
 	if cardID == nil {
-		o, err := insertTostiOrderRow(ctx, tx, userID, nil, bread, filling, quantity)
+		o, err := insertTostiOrderRow(ctx, tx, userID, nil, bread, filling, quantity, remarkNull)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +147,7 @@ WHERE user_id = $1 AND card_id = $2 AND status = 'pending'`,
 		return nil, ErrNoKnipjes
 	}
 
-	o, err := insertTostiOrderRow(ctx, tx, userID, cardID, bread, filling, quantity)
+	o, err := insertTostiOrderRow(ctx, tx, userID, cardID, bread, filling, quantity, remarkNull)
 	if err != nil {
 		return nil, err
 	}
@@ -146,24 +157,28 @@ WHERE user_id = $1 AND card_id = $2 AND status = 'pending'`,
 	return o, nil
 }
 
-func insertTostiOrderRow(ctx context.Context, tx pgx.Tx, userID int64, cardID *int64, bread, filling string, quantity int) (*TostiOrder, error) {
+func insertTostiOrderRow(ctx context.Context, tx pgx.Tx, userID int64, cardID *int64, bread, filling string, quantity int, remark sql.NullString) (*TostiOrder, error) {
 	var o TostiOrder
 	var cardIDScan sql.NullInt64
+	var remarkScan sql.NullString
 	err := tx.QueryRow(ctx, `
-INSERT INTO tosti_orders (user_id, card_id, bread, filling, quantity)
-VALUES ($1, $2, $3::tosti_bread, $4::tosti_filling, $5)
+INSERT INTO tosti_orders (user_id, card_id, bread, filling, quantity, remark)
+VALUES ($1, $2, $3::tosti_bread, $4::tosti_filling, $5, $6)
 RETURNING id, user_id, card_id, bread::text, filling::text, status::text, created_at,
-  delivered_at, delivered_by_user_id, cancelled_at, cancelled_by_user_id, quantity`,
-		userID, cardID, bread, filling, quantity,
+  delivered_at, delivered_by_user_id, cancelled_at, cancelled_by_user_id, quantity, remark`,
+		userID, cardID, bread, filling, quantity, remark,
 	).Scan(
 		&o.ID, &o.UserID, &cardIDScan, &o.Bread, &o.Filling, &o.Status, &o.CreatedAt,
-		&o.DeliveredAt, &o.DeliveredByUserID, &o.CancelledAt, &o.CancelledByUserID, &o.Quantity,
+		&o.DeliveredAt, &o.DeliveredByUserID, &o.CancelledAt, &o.CancelledByUserID, &o.Quantity, &remarkScan,
 	)
 	if err != nil {
 		return nil, err
 	}
 	o.CardID = nullInt64ToPtr(cardIDScan)
 	o.IsPhysicalCard = false
+	if remarkScan.Valid {
+		o.Remark = remarkScan.String
+	}
 	return &o, nil
 }
 
@@ -209,7 +224,7 @@ func (s *Store) ListTostiOrdersForUser(ctx context.Context, userID int64, limit 
 	}
 	rows, err := s.pool.Query(ctx, `
 SELECT id, user_id, card_id, bread::text, filling::text, status::text, created_at,
-  delivered_at, delivered_by_user_id, cancelled_at, cancelled_by_user_id, quantity,
+  delivered_at, delivered_by_user_id, cancelled_at, cancelled_by_user_id, quantity, remark,
   CASE
     WHEN card_id IS NULL THEN TRUE
     ELSE EXISTS(SELECT 1 FROM cards c WHERE c.id = tosti_orders.card_id AND c.source = 'physical'::card_source)
@@ -235,7 +250,7 @@ func (s *Store) ListPendingTostiOrdersForOperator(ctx context.Context, limit int
 	}
 	rows, err := s.pool.Query(ctx, `
 SELECT o.id, o.user_id, o.card_id, o.bread::text, o.filling::text, o.status::text, o.created_at,
-  o.delivered_at, o.delivered_by_user_id, o.cancelled_at, o.cancelled_by_user_id, o.quantity,
+  o.delivered_at, o.delivered_by_user_id, o.cancelled_at, o.cancelled_by_user_id, o.quantity, o.remark,
   CASE
     WHEN o.card_id IS NULL THEN TRUE
     ELSE EXISTS(SELECT 1 FROM cards c WHERE c.id = o.card_id AND c.source = 'physical'::card_source)
@@ -254,14 +269,18 @@ LIMIT $1`, limit)
 	for rows.Next() {
 		var r TostiOrderOperatorRow
 		var cardIDScan sql.NullInt64
+		var remarkScan sql.NullString
 		if err := rows.Scan(
 			&r.ID, &r.UserID, &cardIDScan, &r.Bread, &r.Filling, &r.Status, &r.CreatedAt,
-			&r.DeliveredAt, &r.DeliveredByUserID, &r.CancelledAt, &r.CancelledByUserID, &r.Quantity, &r.IsPhysicalCard,
+			&r.DeliveredAt, &r.DeliveredByUserID, &r.CancelledAt, &r.CancelledByUserID, &r.Quantity, &remarkScan, &r.IsPhysicalCard,
 			&r.CustomerName, &r.CustomerEmail,
 		); err != nil {
 			return nil, err
 		}
 		r.CardID = nullInt64ToPtr(cardIDScan)
+		if remarkScan.Valid {
+			r.Remark = remarkScan.String
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -272,13 +291,17 @@ func scanTostiOrders(rows pgx.Rows) ([]TostiOrder, error) {
 	for rows.Next() {
 		var o TostiOrder
 		var cardIDScan sql.NullInt64
+		var remarkScan sql.NullString
 		if err := rows.Scan(
 			&o.ID, &o.UserID, &cardIDScan, &o.Bread, &o.Filling, &o.Status, &o.CreatedAt,
-			&o.DeliveredAt, &o.DeliveredByUserID, &o.CancelledAt, &o.CancelledByUserID, &o.Quantity, &o.IsPhysicalCard,
+			&o.DeliveredAt, &o.DeliveredByUserID, &o.CancelledAt, &o.CancelledByUserID, &o.Quantity, &remarkScan, &o.IsPhysicalCard,
 		); err != nil {
 			return nil, err
 		}
 		o.CardID = nullInt64ToPtr(cardIDScan)
+		if remarkScan.Valid {
+			o.Remark = remarkScan.String
+		}
 		out = append(out, o)
 	}
 	return out, rows.Err()

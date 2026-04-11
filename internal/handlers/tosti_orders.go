@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,7 @@ type tostiOrderJSON struct {
 	DeliveredByUserID *int64  `json:"delivered_by_user_id,omitempty"`
 	CancelledAt       *string `json:"cancelled_at,omitempty"`
 	CancelledByUserID *int64  `json:"cancelled_by_user_id,omitempty"`
+	Remark            string  `json:"remark,omitempty"`
 }
 
 type tostiOrderOperatorJSON struct {
@@ -63,6 +65,7 @@ func tostiOrderToJSON(o store.TostiOrder) tostiOrderJSON {
 		CreatedAt:         o.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		DeliveredByUserID: o.DeliveredByUserID,
 		CancelledByUserID: o.CancelledByUserID,
+		Remark:            o.Remark,
 	}
 	if o.DeliveredAt != nil {
 		s := o.DeliveredAt.UTC().Format("2006-01-02T15:04:05Z07:00")
@@ -122,6 +125,7 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 		Quantity     int    `json:"quantity"`
 		Bread        string `json:"bread"`
 		Filling      string `json:"filling"`
+		Remark       string `json:"remark"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
 	if err := dec.Decode(&body); err != nil {
@@ -143,7 +147,8 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 	if qty <= 0 {
 		qty = 1
 	}
-	o, err := d.Store.CreateTostiOrder(r.Context(), u.ID, cardID, body.Bread, body.Filling, qty)
+	remark := strings.TrimSpace(body.Remark)
+	o, err := d.Store.CreateTostiOrder(r.Context(), u.ID, cardID, body.Bread, body.Filling, qty, remark)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
@@ -162,6 +167,8 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_bread", "Brood moet wit of bruin zijn.")
 		case errors.Is(err, store.ErrTostiInvalidFilling):
 			httpx.JSONError(w, http.StatusBadRequest, "invalid_filling", "Vulling moet ham, kaas of ham_kaas zijn.")
+		case errors.Is(err, store.ErrTostiInvalidRemark):
+			httpx.JSONError(w, http.StatusBadRequest, "invalid_remark", "Opmerking mag maximaal 500 tekens zijn.")
 		case errors.Is(err, store.ErrCardNotForTosti):
 			httpx.JSONError(w, http.StatusBadRequest, "wrong_card_kind", "Deze kaart is geen tostikaart.")
 		default:

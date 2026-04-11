@@ -21,6 +21,12 @@ function fillingLabel(f: api.TostiFilling): string {
   return 'Ham'
 }
 
+const tostiRemarkMaxChars = 500
+
+function unicodeScalarCount(s: string): number {
+  return [...s].length
+}
+
 function pendingReservedOnCard(orders: api.TostiOrder[], cardId: number): number {
   return orders
     .filter((o) => o.status === 'pending' && o.card_id !== null && o.card_id === cardId)
@@ -47,6 +53,7 @@ export function OrderTostiPage() {
   const [quantity, setQuantity] = useState(1)
   const [bread, setBread] = useState<api.TostiBread>('wit')
   const [filling, setFilling] = useState<api.TostiFilling>('ham')
+  const [stallRemark, setStallRemark] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -138,6 +145,15 @@ export function OrderTostiPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
+    const trimmedRemark = stallRemark.trim()
+    if (unicodeScalarCount(trimmedRemark) > tostiRemarkMaxChars) {
+      void alert({
+        title: 'Opmerking te lang',
+        message: `Maximaal ${tostiRemarkMaxChars} tekens (inclusief emoji als één teken).`,
+        variant: 'error',
+      })
+      return
+    }
     if (paymentMode === 'physical') {
       if (quantity < 1 || quantity > 10) {
         void alert({
@@ -170,11 +186,13 @@ export function OrderTostiPage() {
     }
     setSubmitting(true)
     try {
+      const remarkOpt = trimmedRemark !== '' ? { remark: trimmedRemark } : {}
       if (paymentMode === 'physical') {
-        await api.createTostiOrder(csrf, { physical_card: true, bread, filling, quantity })
+        await api.createTostiOrder(csrf, { physical_card: true, bread, filling, quantity, ...remarkOpt })
       } else {
-        await api.createTostiOrder(csrf, { card_id: cardId as number, bread, filling, quantity })
+        await api.createTostiOrder(csrf, { card_id: cardId as number, bread, filling, quantity, ...remarkOpt })
       }
+      setStallRemark('')
       await load()
       await refresh()
       if (paymentMode === 'physical') {
@@ -467,6 +485,20 @@ export function OrderTostiPage() {
               </div>
             </fieldset>
           </div>
+
+          <label className="md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Opmerking voor de kraam</span>
+            <span className="mt-0.5 block text-xs text-slate-500">Optioneel, max. {tostiRemarkMaxChars} tekens.</span>
+            <textarea
+              value={stallRemark}
+              onChange={(e) => setStallRemark(e.target.value)}
+              maxLength={tostiRemarkMaxChars}
+              rows={3}
+              className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              //placeholder="Bijv. licht toasten, geen mosterd…"
+              aria-label="Opmerking voor de kraam"
+            />
+          </label>
 
           <button
             type="submit"

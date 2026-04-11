@@ -183,6 +183,7 @@ export const tostiOrderSchema = z.object({
   delivered_by_user_id: optionalInt,
   cancelled_at: z.preprocess((value) => (typeof value === 'string' ? value : undefined), z.string().optional()),
   cancelled_by_user_id: optionalInt,
+  remark: z.preprocess((value) => (typeof value === 'string' ? value : undefined), z.string().optional()),
 })
 
 const tostiQueueEntrySchema = z.object({
