@@ -2,52 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
-import { PaymentRequestsPanel } from '../components/PaymentRequestsPanel'
 import { useAlertDialog } from '../components/useAlertDialog'
 import { useTostiRealtime } from '../useTostiRealtime'
-
-function breadLabel(b: api.TostiBread): string {
-  return b === 'bruin' ? 'Bruin' : 'Wit'
-}
-
-function fillingLabel(f: api.TostiFilling): string {
-  if (f === 'kaas') return 'Kaas'
-  if (f === 'ham_kaas') return 'Ham & kaas'
-  return 'Ham'
-}
-
-function localISODate(d: Date = new Date()): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function isPhysicalTostiOrder(o: api.OperatorTostiOrderRow): boolean {
-  return o.is_physical_card
-}
-
-function formatAmsterdamDateLong(yyyyMMdd: string): string {
-  const p = yyyyMMdd.split('-').map(Number)
-  if (p.length !== 3 || p.some((n) => !Number.isFinite(n))) return yyyyMMdd
-  const [y, m, d] = p
-  return new Date(y, m - 1, d).toLocaleDateString('nl-NL', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
-function cardKindLabel(kind: api.CardKind): string {
-  return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
-}
-
-function cardKindBadgeClass(kind: api.CardKind): string {
-  return kind === 'avondeten'
-    ? 'ml-1 rounded bg-amber-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-950'
-    : 'ml-1 rounded bg-indigo-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-indigo-950'
-}
+import { breadLabel, fillingLabel } from '../utils/tostiLabels'
+import { localISODate, isPhysicalTostiOrder } from './kraam/kraamFormat'
+import { KraamAvondetenSection } from './kraam/KraamAvondetenSection'
+import { KraamCardSearchSection } from './kraam/KraamCardSearchSection'
+import { KraamPaymentQueueSection } from './kraam/KraamPaymentQueueSection'
+import { KraamPhysicalSaleSection } from './kraam/KraamPhysicalSaleSection'
+import { KraamSoldTodayHeader } from './kraam/KraamSoldTodayHeader'
+import { KraamTostiQueueSection } from './kraam/KraamTostiQueueSection'
 
 export function KraamPage() {
   const { user, csrf, refresh } = useAuth()
@@ -266,6 +230,13 @@ export function KraamPage() {
     }
   }
 
+  const memberOptions = members
+    .map((m) => ({
+      user_id: m.id,
+      label: `${m.name} (${m.email})`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'nl-NL'))
+
   async function onRegisterPhysicalSale() {
     if (saleUserID <= 0) {
       void alert({ title: 'Geen lid gekozen', message: 'Kies eerst een lid voor de kaartverkoop.', variant: 'error' })
@@ -391,9 +362,10 @@ export function KraamPage() {
     const qtyPrefix = q > 1 ? `${q}× ` : ''
     const physical = isPhysicalTostiOrder(o)
     const knipjeTxt = q === 1 ? '1 knipje wordt' : `${q} knipjes worden`
+    const breadShort = breadLabel(o.bread, 'short')
     const confirmMessage = physical
-      ? `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${q === 1 ? '1 knipje' : `${q} knipjes`} op de kaart.`
-      : `${o.customer_name}: ${qtyPrefix}${breadLabel(o.bread)} brood, ${fillingLabel(o.filling)} — ${knipjeTxt} afgetrokken van kaart #${o.card_id}.`
+      ? `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${q === 1 ? '1 knipje' : `${q} knipjes`} op de kaart.`
+      : `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)} — ${knipjeTxt} afgetrokken van kaart #${o.card_id}.`
     const ok = await confirm({
       title: 'Als geleverd markeren?',
       message: confirmMessage,
@@ -450,386 +422,65 @@ export function KraamPage() {
 
   const avondetenSelectable = avondetenRows.filter((r) => !r.registered_for_date && r.knipjes_remaining > 0)
   const avondetenPickableIds = new Set(avondetenSelectable.map((r) => r.card_id))
-  const memberOptions = members
-    .map((m) => ({
-      user_id: m.id,
-      label: `${m.name} (${m.email})`,
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'nl-NL'))
 
   return (
     <div className="space-y-10">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
-        <h1 className="text-2xl font-bold text-slate-900 lg:shrink-0">Lunchkraam</h1>
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm lg:max-w-md lg:shrink-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Verkocht vandaag</p>
-          {soldTodayLoading ? (
-            <p className="mt-2 text-sm text-slate-600">Laden…</p>
-          ) : soldToday ? (
-            <>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">{soldToday.quantity}</p>
-              <p className="mt-1 text-sm text-slate-700">
-                {soldToday.quantity === 1 ? 'tosti geleverd' : 'tosti’s geleverd'}
-              </p>
-              <p className="mt-2 text-xs text-slate-500">{formatAmsterdamDateLong(soldToday.amsterdam_date)}</p>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-amber-800">Kon het totaal niet laden. Vernieuw de pagina.</p>
-          )}
-        </div>
-      </div>
+      <KraamSoldTodayHeader soldTodayLoading={soldTodayLoading} soldToday={soldToday} />
 
-      <section className="space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Tosti-bestellingen</h2>
-            <p className="text-sm text-slate-600">
-              Bij een digitale kaart worden knipjes bij leveren afgeboekt. Bij een fysieke kaart knipjes knippen op de
-              kaart.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void Promise.all([loadOrders(), loadSoldToday()])}
-            className="min-h-10 shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
-          >
-            Wachtrij vernieuwen
-          </button>
-        </div>
-        {loadingOrders && orders.length === 0 ? (
-          <p className="text-slate-600">Bestellingen laden…</p>
-        ) : orders.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-slate-600">
-            Geen openstaande tostibestellingen.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {orders.map((o) => {
-              const physical = isPhysicalTostiOrder(o)
-              return (
-              <li
-                key={o.id}
-                className={`flex flex-col gap-3 rounded-2xl border p-4 shadow-md sm:flex-row sm:items-center sm:justify-between ${
-                  physical
-                    ? 'border-amber-300/90 bg-amber-50/50'
-                    : 'border-slate-200 bg-white'
-                }`}
-              >
-                <div>
-                  <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
-                    {o.customer_name}
-                    {physical ? (
-                      <span className="rounded-md bg-amber-700 px-2 py-0.5 text-xs font-semibold text-white">
-                        Fysieke kaart
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-sm text-slate-600">{o.customer_email}</p>
-                  <p className="mt-1 text-slate-800">
-                    <strong>
-                      {o.quantity > 1 ? `${o.quantity}× ` : ''}
-                      {breadLabel(o.bread)} brood, {fillingLabel(o.filling)}
-                    </strong>
-                    {o.quantity > 1 ? (
-                      <span className="ml-2 text-sm font-normal text-slate-600">
-                        ({o.quantity} knipjes)
-                      </span>
-                    ) : null}
-                  </p>
-                  {o.remark ? (
-                    <p className="mt-1 text-sm italic text-slate-700">&ldquo;{o.remark}&rdquo;</p>
-                  ) : null}
-                  <p className="text-xs text-slate-500">
-                    {physical
-                      ? new Date(o.created_at).toLocaleString('nl-NL')
-                      : `Kaart #${o.card_id} · ${new Date(o.created_at).toLocaleString('nl-NL')}`}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={busyOrder !== null}
-                    onClick={() => void onDeliverOrder(o)}
-                    className="min-h-10 rounded-xl bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
-                  >
-                    {busyOrder?.id === o.id && busyOrder.action === 'deliver' ? 'Bezig…' : 'Geleverd'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busyOrder !== null}
-                    onClick={() => void onCancelOrder(o)}
-                    className="min-h-10 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    {busyOrder?.id === o.id && busyOrder.action === 'cancel' ? 'Bezig…' : 'Annuleren'}
-                  </button>
-                </div>
-              </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+      <KraamTostiQueueSection
+        loadingOrders={loadingOrders}
+        orders={orders}
+        busyOrder={busyOrder}
+        onRefreshQueue={() => void Promise.all([loadOrders(), loadSoldToday()])}
+        onDeliverOrder={onDeliverOrder}
+        onCancelOrder={onCancelOrder}
+      />
 
-      <section className="space-y-4 rounded-2xl border border-amber-200/90 bg-amber-50/40 p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-amber-950">Betalingen in de wachtrij</h2>
-            <p className="text-sm text-amber-900/85">
-              Accordeer als betaald. Weigeren kan alleen zolang er nog geen knipje is gebruikt.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loadPayments()}
-            className="min-h-10 shrink-0 rounded-xl border border-amber-300/80 bg-white px-4 py-2 text-sm font-semibold text-amber-950 shadow-sm hover:bg-amber-100/60"
-          >
-            Vernieuwen
-          </button>
-        </div>
-        {paymentLoading && paymentRows.length === 0 ? (
-          <p className="text-amber-900/80">Betalingsaanvragen laden…</p>
-        ) : paymentLoadFailed && paymentRows.length === 0 ? (
-          <div className="rounded-xl border border-amber-200 bg-white/90 p-4 text-center">
-            <p className="text-sm text-amber-950">Kon de wachtrij niet laden.</p>
-            <button
-              type="button"
-              onClick={() => void loadPayments()}
-              className="mt-3 rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-900"
-            >
-              Opnieuw proberen
-            </button>
-          </div>
-        ) : (
-          <PaymentRequestsPanel
-            rows={paymentRows}
-            busyId={paymentBusyId}
-            canManageRequest={(row) => Boolean(user.is_admin || row.kind !== 'avondeten')}
-            onFulfill={(id, k) => void onPaymentFulfill(id, k)}
-            onReject={(id) => void onPaymentReject(id)}
-            layout="cards-only"
-          />
-        )}
-      </section>
+      <KraamPaymentQueueSection
+        user={user}
+        paymentLoading={paymentLoading}
+        paymentLoadFailed={paymentLoadFailed}
+        paymentRows={paymentRows}
+        paymentBusyId={paymentBusyId}
+        onRefresh={loadPayments}
+        onFulfill={onPaymentFulfill}
+        onReject={onPaymentReject}
+      />
 
-      <section className="space-y-4 rounded-2xl border border-indigo-200/90 bg-indigo-50/40 p-5 shadow-sm sm:p-6">
-        <div>
-          <h2 className="text-lg font-semibold text-indigo-950">Fysieke kaartverkoop registreren</h2>
-          <p className="text-sm text-indigo-900/85">
-            Registreer directe verkoop (operator/admin).
-          </p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-indigo-950">Lid</span>
-            <select
-              value={saleUserID}
-              onChange={(e) => setSaleUserID(Number(e.target.value))}
-              className="input-control min-h-11 rounded-xl"
-            >
-              <option value={0}>Kies een lid…</option>
-              {memberOptions.map((m) => (
-                <option key={m.user_id} value={m.user_id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-indigo-950">Kaarttype</span>
-            <select
-              value={saleKind}
-              onChange={(e) => setSaleKind(e.target.value as api.CardKind)}
-              className="input-control min-h-11 rounded-xl"
-            >
-              <option value="tosti">Tostikaart</option>
-              <option value="avondeten">Avondetenkaart</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-indigo-950">Betaalmiddel</span>
-            <select
-              value={salePaymentMethod}
-              onChange={(e) => setSalePaymentMethod(e.target.value as api.PaymentMethod)}
-              className="input-control min-h-11 rounded-xl"
-            >
-              <option value="tikkie">Tikkie</option>
-              <option value="contant">Contant</option>
-            </select>
-          </label>
-        </div>
-        <div className="flex justify-end">
-          <button
-            type="button"
-            disabled={saleSubmitting || memberOptions.length === 0}
-            onClick={() => void onRegisterPhysicalSale()}
-            className="min-h-11 rounded-xl bg-indigo-700 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-800 disabled:opacity-50"
-          >
-            {saleSubmitting ? 'Bezig…' : 'Verkoop opslaan'}
-          </button>
-        </div>
-      </section>
+      <KraamPhysicalSaleSection
+        memberOptions={memberOptions}
+        saleUserID={saleUserID}
+        saleKind={saleKind}
+        salePaymentMethod={salePaymentMethod}
+        saleSubmitting={saleSubmitting}
+        onChangeUser={setSaleUserID}
+        onChangeKind={setSaleKind}
+        onChangePaymentMethod={setSalePaymentMethod}
+        onSubmit={onRegisterPhysicalSale}
+      />
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Kaarten & handmatig knipje</h2>
-        <p className="text-slate-600">Zoek op kaartnummer, naam of e-mail. Alleen tostikaarten: handmatig knipje.</p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Zoek…"
-            className="input-control min-h-11 max-w-md rounded-xl"
-            aria-label="Zoek kaarten"
-          />
-          <button
-            type="button"
-            onClick={() => void refreshAll()}
-            className="btn-secondary min-h-11 rounded-xl px-4"
-          >
-            Alles vernieuwen
-          </button>
-        </div>
+      <KraamCardSearchSection
+        q={q}
+        onQueryChange={setQ}
+        loading={loading}
+        rows={rows}
+        busyId={busyId}
+        onRefreshAll={refreshAll}
+        onUseKnipje={onUseKnipje}
+      />
 
-        {loading && rows.length === 0 ? (
-          <p className="text-slate-600">Laden…</p>
-        ) : rows.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
-            Geen kaarten gevonden. Probeer een ander zoekwoord of laat leeg voor de nieuwste kaarten.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {rows.map((c) => (
-              <li
-                key={c.id}
-                className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-md sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-mono text-xs text-slate-500">
-                    Kaart #{c.id}{' '}
-                    <span className={cardKindBadgeClass(c.kind)}>{cardKindLabel(c.kind)}</span>
-                    {c.source === 'physical' ? (
-                      <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900">
-                        Fysiek (schatting)
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="font-semibold text-slate-900">{c.owner_name}</p>
-                  <p className="text-sm text-slate-600">{c.owner_email}</p>
-                  <p className="mt-1 text-sm text-slate-700">
-                    <strong>{c.knipjes_remaining}</strong> / 10 knipjes
-                  </p>
-                </div>
-                {c.knipjes_remaining <= 0 ? (
-                  <span className="text-sm text-slate-400">Op</span>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={busyId !== null}
-                    onClick={() => void onUseKnipje(c)}
-                    className="min-h-11 shrink-0 rounded-xl bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
-                  >
-                    {busyId === c.id ? 'Bezig…' : '1 knipje gebruiken'}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="space-y-4 rounded-2xl border border-brand-200/90 bg-brand-50/50 p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-8">
-            <h2 className="text-lg font-semibold text-brand-950">Avondeten</h2>
-            <label className="flex max-w-[11rem] flex-col gap-1 text-sm">
-              <span className="font-medium text-brand-950">Datum</span>
-              <input
-                type="date"
-                value={avondetenMealDate}
-                onChange={(e) => setAvondetenMealDate(e.target.value)}
-                className="input-control min-h-11 rounded-xl"
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loadAvondeten()}
-            className="min-h-10 shrink-0 rounded-xl border border-brand-300/80 bg-white px-4 py-2 text-sm font-semibold text-brand-950 shadow-sm hover:bg-brand-100/50"
-          >
-            Vernieuwen
-          </button>
-        </div>
-        {avondetenLoading ? (
-          <p className="text-sm text-brand-900/80">Laden…</p>
-        ) : avondetenRows.length === 0 ? (
-          <p className="text-sm text-brand-900/80">Geen avondetenkaarten.</p>
-        ) : (
-          <>
-            <div className="overflow-x-auto rounded-xl border border-brand-100 bg-white shadow-sm">
-              <table className="w-full min-w-[36rem] text-left text-sm">
-                <thead className="border-b border-brand-100 bg-brand-50/80 text-xs font-semibold uppercase tracking-wide text-brand-900/70">
-                  <tr>
-                    <th className="w-10 px-3 py-2.5" />
-                    <th className="px-3 py-2.5">Naam</th>
-                    <th className="px-3 py-2.5">Kaart</th>
-                    <th className="px-3 py-2.5">Knipjes</th>
-                    <th className="px-3 py-2.5">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-brand-50">
-                  {avondetenRows.map((r) => {
-                    const canPick = avondetenPickableIds.has(r.card_id)
-                    const checked = avondetenPicked.includes(r.card_id)
-                    return (
-                      <tr key={r.card_id} className={r.registered_for_date ? 'bg-slate-50/80' : ''}>
-                        <td className="px-3 py-2.5">
-                          {canPick ? (
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
-                              checked={checked}
-                              onChange={() => toggleAvondetenPick(r.card_id)}
-                              aria-label={`Mee-eten ${r.owner_name}`}
-                            />
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="font-medium text-slate-900">{r.owner_name}</div>
-                          <div className="text-xs text-slate-500">{r.owner_email}</div>
-                        </td>
-                        <td className="px-3 py-2.5 font-mono text-slate-600">#{r.card_id}</td>
-                        <td className="px-3 py-2.5 text-slate-700">{r.knipjes_remaining} / 10</td>
-                        <td className="px-3 py-2.5 text-slate-600">
-                          {r.registered_for_date ? (
-                            <span className="text-brand-800">Geregistreerd</span>
-                          ) : r.knipjes_remaining <= 0 ? (
-                            <span className="text-slate-500">Op</span>
-                          ) : (
-                            <span className="text-slate-500">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-              <span className="text-sm text-brand-900/85 sm:mr-auto">
-                Geselecteerd: <strong>{avondetenPicked.length}</strong>
-              </span>
-              <button
-                type="button"
-                disabled={avondetenSubmitting || avondetenPicked.length === 0}
-                onClick={() => void onSubmitAvondeten()}
-                className="min-h-11 rounded-xl bg-brand-700 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
-              >
-                {avondetenSubmitting ? 'Bezig…' : 'Afboeken'}
-              </button>
-            </div>
-          </>
-        )}
-      </section>
+      <KraamAvondetenSection
+        avondetenMealDate={avondetenMealDate}
+        onMealDateChange={setAvondetenMealDate}
+        avondetenLoading={avondetenLoading}
+        avondetenRows={avondetenRows}
+        avondetenPicked={avondetenPicked}
+        avondetenPickableIds={avondetenPickableIds}
+        avondetenSubmitting={avondetenSubmitting}
+        onTogglePick={toggleAvondetenPick}
+        onRefresh={loadAvondeten}
+        onSubmit={onSubmitAvondeten}
+      />
     </div>
   )
 }

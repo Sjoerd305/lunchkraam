@@ -34,7 +34,7 @@ export function useTostiRealtime(
     let socket: WebSocket | null = null
     let closed = false
     let attempt = 0
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+    let reconnectTimer: number | undefined
 
     const clearTimer = () => {
       if (reconnectTimer !== undefined) {
