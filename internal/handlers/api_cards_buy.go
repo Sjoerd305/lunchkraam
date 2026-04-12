@@ -95,12 +95,12 @@ func (d *Deps) APICardUse(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.Store.UseKnipje(r.Context(), cardID, u)
 	if err != nil {
-		switch err {
-		case store.ErrNoKnipjes:
+		switch {
+		case errors.Is(err, store.ErrNoKnipjes):
 			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Deze kaart heeft geen knipjes meer.")
-		case store.ErrNotFound:
+		case errors.Is(err, store.ErrNotFound):
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Kaart niet gevonden.")
-		case store.ErrCardPhysicalReadonly:
+		case errors.Is(err, store.ErrCardPhysicalReadonly):
 			httpx.JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Fysieke kaarten zijn read-only in de app.")
 		default:
 			httpx.JSONError(w, http.StatusBadRequest, "use_failed", "Kon geen knipje gebruiken.")

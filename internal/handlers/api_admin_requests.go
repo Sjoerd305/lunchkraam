@@ -60,10 +60,10 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.Store.FulfillCardRequest(r.Context(), reqID, u.ID, salePrice)
 	if err != nil {
-		switch err {
-		case store.ErrNotFound:
+		switch {
+		case errors.Is(err, store.ErrNotFound):
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden.")
-		case store.ErrForbidden:
+		case errors.Is(err, store.ErrForbidden):
 			httpx.JSONError(w, http.StatusConflict, "already_fulfilled", "Deze aanvraag was al verwerkt.")
 		default:
 			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kon niet toekennen.")

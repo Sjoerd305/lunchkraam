@@ -54,22 +54,19 @@ WHERE id = $1 AND knipjes_remaining > 0`
 	return nil
 }
 
-// UseKnipje lets an admin/operator use one punch on any tosti card.
-// Avondeten cards are excluded: debits only via RegisterAvondetenMealsForDate (kraam ochtendlijst).
+// UseKnipje lets an admin/operator use one punch on a card (tosti or avondeten).
+// Avondeten day-list debits use RegisterAvondetenMealsForDate instead.
 func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
 	if !actor.IsAdmin && !actor.IsOperator {
 		return ErrForbidden
 	}
-	var kind string
-	err := s.pool.QueryRow(ctx, `SELECT kind::text FROM cards WHERE id = $1`, cardID).Scan(&kind)
+	var exists int
+	err := s.pool.QueryRow(ctx, `SELECT 1 FROM cards WHERE id = $1`, cardID).Scan(&exists)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
-	}
-	if kind == CardKindAvondeten {
-		return s.useKnipjeAnyCard(ctx, cardID)
 	}
 	return s.useKnipjeAnyCard(ctx, cardID)
 }

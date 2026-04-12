@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -74,7 +75,7 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if _, err := d.Store.ShopExpenseByID(r.Context(), expenseID); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Uitgave niet gevonden.")
 			return
 		}
@@ -165,7 +166,7 @@ func (d *Deps) APIShopExpenseReceiptMeta(w http.ResponseWriter, r *http.Request)
 	}
 	rec, err := d.Store.ShopExpenseReceiptByExpenseID(r.Context(), expenseID)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Geen bonfoto voor deze uitgave.")
 			return
 		}
@@ -191,7 +192,7 @@ func (d *Deps) APIShopExpenseReceiptImage(w http.ResponseWriter, r *http.Request
 	}
 	rec, err := d.Store.ShopExpenseReceiptByExpenseID(r.Context(), expenseID)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Geen bonfoto voor deze uitgave.")
 			return
 		}
@@ -215,7 +216,7 @@ func (d *Deps) APIShopExpenseReceiptDelete(w http.ResponseWriter, r *http.Reques
 	}
 	rec, err := d.Store.ShopExpenseReceiptByExpenseID(r.Context(), expenseID)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Geen bonfoto voor deze uitgave.")
 			return
 		}

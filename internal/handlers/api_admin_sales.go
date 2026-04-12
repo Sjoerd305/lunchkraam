@@ -12,9 +12,52 @@ import (
 	"lunchkraam/internal/store"
 )
 
+type adminSalesTripletInt struct {
+	Tosti     int64 `json:"tosti"`
+	Avondeten int64 `json:"avondeten"`
+	Total     int64 `json:"total"`
+}
+
+type adminSalesTripletFloat struct {
+	Tosti     float64 `json:"tosti"`
+	Avondeten float64 `json:"avondeten"`
+	Total     float64 `json:"total"`
+}
+
+type adminSalesExpensesSplit struct {
+	Lunchkraam float64 `json:"lunchkraam"`
+	Avondeten  float64 `json:"avondeten"`
+	Total      float64 `json:"total"`
+}
+
+type adminSalesMonthlyRow struct {
+	Month          int     `json:"month"`
+	FulfilledCount int64   `json:"fulfilled_count"`
+	RevenueEUR     float64 `json:"revenue_eur"`
+	ExpensesEUR    float64 `json:"expenses_eur"`
+	NetEUR         float64 `json:"net_eur"`
+	LabelNL        string  `json:"label_nl"`
+}
+
+type adminSalesMonthlyBreakdownRow struct {
+	Month       int                     `json:"month"`
+	CardsSold   adminSalesTripletInt    `json:"cards_sold"`
+	RevenueEUR  adminSalesTripletFloat  `json:"revenue_eur"`
+	ExpensesEUR adminSalesExpensesSplit `json:"expenses_eur"`
+	NetEUR      float64                 `json:"net_eur"`
+	LabelNL     string                  `json:"label_nl"`
+}
+
+type adminSalesYearBreakdown struct {
+	CardsSold   adminSalesTripletInt    `json:"cards_sold"`
+	RevenueEUR  adminSalesTripletFloat  `json:"revenue_eur"`
+	ExpensesEUR adminSalesExpensesSplit `json:"expenses_eur"`
+	NetEUR      float64                 `json:"net_eur"`
+}
+
 type adminSalesYearRollup struct {
-	Monthly                []map[string]any
-	MonthlyBreakdown       []map[string]any
+	Monthly                []adminSalesMonthlyRow
+	MonthlyBreakdown       []adminSalesMonthlyBreakdownRow
 	YearCount              int64
 	YearCountTosti         int64
 	YearCountAvondeten     int64
@@ -27,10 +70,38 @@ type adminSalesYearRollup struct {
 	YearNet                float64
 }
 
+type adminSalesTostiMonthlyRow struct {
+	Month    int    `json:"month"`
+	Quantity int64  `json:"quantity"`
+	LabelNL  string `json:"label_nl"`
+}
+
+type adminSalesTostiKindRow struct {
+	Bread    string `json:"bread"`
+	Filling  string `json:"filling"`
+	Quantity int64  `json:"quantity"`
+}
+
+type adminSalesStatsResponse struct {
+	Year               int                             `json:"year"`
+	Timezone           string                          `json:"timezone"`
+	PaymentAmountEUR   string                          `json:"payment_amount_eur"`
+	Monthly            []adminSalesMonthlyRow          `json:"monthly"`
+	MonthlyBreakdown   []adminSalesMonthlyBreakdownRow `json:"monthly_breakdown"`
+	YearFulfilledCount int64                           `json:"year_fulfilled_count"`
+	YearRevenueEUR     float64                         `json:"year_revenue_eur"`
+	YearExpensesEUR    float64                         `json:"year_expenses_eur"`
+	YearNetEUR         float64                         `json:"year_net_eur"`
+	YearBreakdown      adminSalesYearBreakdown         `json:"year_breakdown"`
+	YearTostiQuantity  int64                           `json:"year_tosti_quantity"`
+	TostiMonthly       []adminSalesTostiMonthlyRow     `json:"tosti_monthly"`
+	TostiByKind        []adminSalesTostiKindRow        `json:"tosti_by_kind"`
+}
+
 func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuckets [12]store.AdminExpenseMonthAgg) adminSalesYearRollup {
 	var r adminSalesYearRollup
-	r.Monthly = make([]map[string]any, 0, 12)
-	r.MonthlyBreakdown = make([]map[string]any, 0, 12)
+	r.Monthly = make([]adminSalesMonthlyRow, 0, 12)
+	r.MonthlyBreakdown = make([]adminSalesMonthlyBreakdownRow, 0, 12)
 	for i := 0; i < 12; i++ {
 		b := buckets[i]
 		r.YearCount += b.FulfilledCount
@@ -49,33 +120,21 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 		r.YearExpensesLunchkraam += expLunchkraam
 		r.YearExpensesAvondeten += expAvondeten
 		net := math.Round((rev-exp)*100) / 100
-		r.Monthly = append(r.Monthly, map[string]any{
-			"month":           i + 1,
-			"fulfilled_count": b.FulfilledCount,
-			"revenue_eur":     rev,
-			"expenses_eur":    exp,
-			"net_eur":         net,
-			"label_nl":        monthLabelNL(i + 1),
+		r.Monthly = append(r.Monthly, adminSalesMonthlyRow{
+			Month: i + 1, FulfilledCount: b.FulfilledCount,
+			RevenueEUR: rev, ExpensesEUR: exp, NetEUR: net,
+			LabelNL: monthLabelNL(i + 1),
 		})
-		r.MonthlyBreakdown = append(r.MonthlyBreakdown, map[string]any{
-			"month": i + 1,
-			"cards_sold": map[string]any{
-				"tosti":     b.FulfilledCountTosti,
-				"avondeten": b.FulfilledCountAvondeten,
-				"total":     b.FulfilledCount,
+		r.MonthlyBreakdown = append(r.MonthlyBreakdown, adminSalesMonthlyBreakdownRow{
+			Month: i + 1,
+			CardsSold: adminSalesTripletInt{
+				Tosti: b.FulfilledCountTosti, Avondeten: b.FulfilledCountAvondeten, Total: b.FulfilledCount,
 			},
-			"revenue_eur": map[string]any{
-				"tosti":     revTosti,
-				"avondeten": revAvondeten,
-				"total":     rev,
+			RevenueEUR: adminSalesTripletFloat{Tosti: revTosti, Avondeten: revAvondeten, Total: rev},
+			ExpensesEUR: adminSalesExpensesSplit{
+				Lunchkraam: expLunchkraam, Avondeten: expAvondeten, Total: exp,
 			},
-			"expenses_eur": map[string]any{
-				"lunchkraam": expLunchkraam,
-				"avondeten":  expAvondeten,
-				"total":      exp,
-			},
-			"net_eur":  net,
-			"label_nl": monthLabelNL(i + 1),
+			NetEUR: net, LabelNL: monthLabelNL(i + 1),
 		})
 	}
 	r.YearRevenue = math.Round(r.YearRevenue*100) / 100
@@ -88,25 +147,21 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 	return r
 }
 
-func tostiMonthlyToJSON(monthly [12]int64) []map[string]any {
-	out := make([]map[string]any, 0, 12)
+func tostiMonthlyRows(monthly [12]int64) []adminSalesTostiMonthlyRow {
+	out := make([]adminSalesTostiMonthlyRow, 0, 12)
 	for i := 0; i < 12; i++ {
-		out = append(out, map[string]any{
-			"month":    i + 1,
-			"quantity": monthly[i],
-			"label_nl": monthLabelNL(i + 1),
+		out = append(out, adminSalesTostiMonthlyRow{
+			Month: i + 1, Quantity: monthly[i], LabelNL: monthLabelNL(i + 1),
 		})
 	}
 	return out
 }
 
-func tostiByKindToJSON(rows []store.TostiKindQuantity) []map[string]any {
-	out := make([]map[string]any, 0, len(rows))
+func tostiByKindRows(rows []store.TostiKindQuantity) []adminSalesTostiKindRow {
+	out := make([]adminSalesTostiKindRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, map[string]any{
-			"bread":    row.Bread,
-			"filling":  row.Filling,
-			"quantity": row.Quantity,
+		out = append(out, adminSalesTostiKindRow{
+			Bread: row.Bread, Filling: row.Filling, Quantity: row.Quantity,
 		})
 	}
 	return out
@@ -153,38 +208,35 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]any{
-		"year":                 year,
-		"timezone":             "Europe/Amsterdam",
-		"payment_amount_eur":   d.Config.PaymentAmountEUR,
-		"monthly":              rollup.Monthly,
-		"monthly_breakdown":    rollup.MonthlyBreakdown,
-		"year_fulfilled_count": rollup.YearCount,
-		"year_revenue_eur":     rollup.YearRevenue,
-		"year_expenses_eur":    rollup.YearExpenses,
-		"year_net_eur":         rollup.YearNet,
-		"year_breakdown": map[string]any{
-			"cards_sold": map[string]any{
-				"tosti":     rollup.YearCountTosti,
-				"avondeten": rollup.YearCountAvondeten,
-				"total":     rollup.YearCount,
+	resp := adminSalesStatsResponse{
+		Year:               year,
+		Timezone:           "Europe/Amsterdam",
+		PaymentAmountEUR:   d.Config.PaymentAmountEUR,
+		Monthly:            rollup.Monthly,
+		MonthlyBreakdown:   rollup.MonthlyBreakdown,
+		YearFulfilledCount: rollup.YearCount,
+		YearRevenueEUR:     rollup.YearRevenue,
+		YearExpensesEUR:    rollup.YearExpenses,
+		YearNetEUR:         rollup.YearNet,
+		YearBreakdown: adminSalesYearBreakdown{
+			CardsSold: adminSalesTripletInt{
+				Tosti: rollup.YearCountTosti, Avondeten: rollup.YearCountAvondeten, Total: rollup.YearCount,
 			},
-			"revenue_eur": map[string]any{
-				"tosti":     rollup.YearRevenueTosti,
-				"avondeten": rollup.YearRevenueAvondeten,
-				"total":     rollup.YearRevenue,
+			RevenueEUR: adminSalesTripletFloat{
+				Tosti: rollup.YearRevenueTosti, Avondeten: rollup.YearRevenueAvondeten, Total: rollup.YearRevenue,
 			},
-			"expenses_eur": map[string]any{
-				"lunchkraam": rollup.YearExpensesLunchkraam,
-				"avondeten":  rollup.YearExpensesAvondeten,
-				"total":      rollup.YearExpenses,
+			ExpensesEUR: adminSalesExpensesSplit{
+				Lunchkraam: rollup.YearExpensesLunchkraam,
+				Avondeten:  rollup.YearExpensesAvondeten,
+				Total:      rollup.YearExpenses,
 			},
-			"net_eur": rollup.YearNet,
+			NetEUR: rollup.YearNet,
 		},
-		"year_tosti_quantity": yearTostiQty,
-		"tosti_monthly":       tostiMonthlyToJSON(tostiMonthly),
-		"tosti_by_kind":       tostiByKindToJSON(tostiByKind),
-	})
+		YearTostiQuantity: yearTostiQty,
+		TostiMonthly:      tostiMonthlyRows(tostiMonthly),
+		TostiByKind:       tostiByKindRows(tostiByKind),
+	}
+	httpx.JSON(w, http.StatusOK, resp)
 }
 
 func mergeFinanceYears(fulfilled, expense []int) []int {

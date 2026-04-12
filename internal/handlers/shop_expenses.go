@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -51,12 +52,12 @@ func (d *Deps) APIAdminShopExpensesList(w http.ResponseWriter, r *http.Request) 
 	out := make([]map[string]any, 0, len(rows))
 	for _, e := range rows {
 		out = append(out, map[string]any{
-			"id":           e.ID,
-			"amount_eur":   e.AmountEUR,
-			"spent_on":     e.SpentOn.Format("2006-01-02"),
-			"description":  e.Description,
-			"purpose":      e.Purpose,
-			"created_at":   e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
+			"id":          e.ID,
+			"amount_eur":  e.AmountEUR,
+			"spent_on":    e.SpentOn.Format("2006-01-02"),
+			"description": e.Description,
+			"purpose":     e.Purpose,
+			"created_at":  e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"year": year, "expenses": out})
@@ -119,12 +120,12 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, map[string]any{
-		"id":           e.ID,
-		"amount_eur":   e.AmountEUR,
-		"spent_on":     e.SpentOn.Format("2006-01-02"),
-		"description":  e.Description,
-		"purpose":      e.Purpose,
-		"created_at":   e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
+		"id":          e.ID,
+		"amount_eur":  e.AmountEUR,
+		"spent_on":    e.SpentOn.Format("2006-01-02"),
+		"description": e.Description,
+		"purpose":     e.Purpose,
+		"created_at":  e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 	})
 }
 
@@ -137,7 +138,7 @@ func (d *Deps) APIAdminShopExpenseDelete(w http.ResponseWriter, r *http.Request)
 	}
 	err = d.Store.DeleteShopExpense(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httpx.JSONError(w, http.StatusNotFound, "not_found", "Uitgave niet gevonden.")
 			return
 		}
