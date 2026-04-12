@@ -1,0 +1,4 @@
+Date completed (UTC);Type;Description;Amount;Payment currency;State;ID
+2026-03-15 10:00:00;CARD_PAYMENT;Albert Heijn;-12,50;EUR;COMPLETED;txn-sample-001
+2026-03-16 11:30:00;TRANSFER;Internal pocket;50,00;EUR;COMPLETED;txn-sample-002
+2026-03-17 09:00:00;FEE;Metal plan fee;-7,99;EUR;COMPLETED;txn-sample-003

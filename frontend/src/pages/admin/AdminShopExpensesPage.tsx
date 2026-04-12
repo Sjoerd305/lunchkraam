@@ -19,6 +19,16 @@ function shopExpensePurposeLabel(p: api.ShopExpensePurpose): string {
   return p === 'avondeten' ? 'Avondeten' : 'Lunchkraam'
 }
 
+function formatDateTimeShortNL(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return new Intl.DateTimeFormat('nl-NL', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(d)
+}
+
 export function AdminShopExpensesPage() {
   const { csrf, user } = useAuth()
   const { alert, confirm } = useAlertDialog()
@@ -40,6 +50,39 @@ export function AdminShopExpensesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [receiptsByExpenseId, setReceiptsByExpenseId] = useState<Record<number, api.ShopExpenseReceipt | null>>({})
   const [uploadingReceiptId, setUploadingReceiptId] = useState<number | null>(null)
+  const [patchingPurposeId, setPatchingPurposeId] = useState<number | null>(null)
+
+  const [revolutFile, setRevolutFile] = useState<File | null>(null)
+  const [revolutPurpose, setRevolutPurpose] = useState<api.ShopExpensePurpose>('lunchkraam')
+  const [revolutFingerprint, setRevolutFingerprint] = useState(true)
+  const [revolutDryRun, setRevolutDryRun] = useState(false)
+  const [revolutSkipTypes, setRevolutSkipTypes] = useState('')
+  const [revolutCurrencyEUR, setRevolutCurrencyEUR] = useState(true)
+  const [revolutCompletedOnly, setRevolutCompletedOnly] = useState(true)
+  const [revolutSubmitting, setRevolutSubmitting] = useState(false)
+  const [revolutImportCredits, setRevolutImportCredits] = useState(true)
+  const [revolutGuessPurposeByTime, setRevolutGuessPurposeByTime] = useState(true)
+  const [revolutCreditLunchEUR, setRevolutCreditLunchEUR] = useState('15')
+  const [revolutCreditAvondetenEUR, setRevolutCreditAvondetenEUR] = useState('10')
+  const [revolutBalance, setRevolutBalance] = useState<api.RevolutBalance | null>(null)
+  const [revolutBalanceLoading, setRevolutBalanceLoading] = useState(false)
+
+  const loadRevolutBalance = useCallback(async () => {
+    if (!user) return
+    setRevolutBalanceLoading(true)
+    try {
+      const b = await api.getRevolutBalance(isOperatorOnly)
+      setRevolutBalance(b)
+    } catch {
+      setRevolutBalance(null)
+    } finally {
+      setRevolutBalanceLoading(false)
+    }
+  }, [user, isOperatorOnly])
+
+  useEffect(() => {
+    void loadRevolutBalance()
+  }, [loadRevolutBalance])
 
   useEffect(() => {
     if (!user) return
@@ -147,6 +190,23 @@ export function AdminShopExpensesPage() {
     return Array.from(s).sort((a, b) => b - a)
   }, [years, year])
 
+  async function onPurposeChange(expenseId: number, nextPurpose: api.ShopExpensePurpose) {
+    const prev = rows.find((x) => x.id === expenseId)
+    if (!prev || prev.purpose === nextPurpose) return
+    setRows((rs) => rs.map((row) => (row.id === expenseId ? { ...row, purpose: nextPurpose } : row)))
+    setPatchingPurposeId(expenseId)
+    try {
+      const updated = await api.patchShopExpensePurpose(csrf, expenseId, nextPurpose, isOperatorOnly)
+      setRows((rs) => rs.map((row) => (row.id === expenseId ? updated : row)))
+    } catch (err) {
+      setRows((rs) => rs.map((row) => (row.id === expenseId ? { ...row, purpose: prev.purpose } : row)))
+      const msg = err instanceof api.ApiError ? err.message : 'Bijwerken mislukt.'
+      await alert({ title: 'Waarvoor wijzigen mislukt', message: msg, variant: 'error' })
+    } finally {
+      setPatchingPurposeId(null)
+    }
+  }
+
   async function onDelete(id: number) {
     const ok = await confirm({
       title: 'Uitgave verwijderen?',
@@ -199,6 +259,55 @@ export function AdminShopExpensesPage() {
 
   function onNewReceiptFileSelected(file: File | null) {
     setNewReceiptFile(file)
+  }
+
+  async function runRevolutImport() {
+    if (!user) {
+      await alert({
+        title: 'Niet ingelogd',
+        message: 'Log opnieuw in om te importeren.',
+        variant: 'error',
+      })
+      return
+    }
+    if (!revolutFile) {
+      await alert({ title: 'Geen bestand', message: 'Kies een Revolut CSV-export.', variant: 'error' })
+      return
+    }
+    const yearToRefresh = year ?? new Date().getFullYear()
+    setRevolutSubmitting(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', revolutFile)
+      fd.append('purpose', revolutPurpose)
+      fd.append('fingerprint_missing_id', revolutFingerprint ? '1' : '0')
+      fd.append('dry_run', revolutDryRun ? '1' : '0')
+      fd.append('completed_only', revolutCompletedOnly ? '1' : '0')
+      if (revolutSkipTypes.trim()) fd.append('skip_types', revolutSkipTypes.trim())
+      fd.append('currency', revolutCurrencyEUR ? 'EUR' : '')
+      fd.append('import_credits', revolutImportCredits ? '1' : '0')
+      fd.append('guess_purpose_by_time', revolutGuessPurposeByTime ? '1' : '0')
+      fd.append('credit_lunch_eur', revolutCreditLunchEUR.trim())
+      fd.append('credit_avondeten_eur', revolutCreditAvondetenEUR.trim())
+      const r = await api.importRevolutShopExpenses(csrf, fd, isOperatorOnly)
+      const debitLine = r.dry_run
+        ? `Uitgaven (proef): ${r.debits_imported} geïmporteerd, ${r.debits_skipped} overgeslagen.`
+        : `Uitgaven: ${r.debits_imported} geïmporteerd of bijgewerkt, ${r.debits_skipped} overgeslagen.`
+      const creditLine =
+        r.credits_enabled &&
+        (r.dry_run
+          ? `Inkomsten (proef): ${r.credits_imported} zouden worden geboekt, ${r.credits_skipped} overgeslagen.`
+          : `Inkomsten: ${r.credits_imported} geboekt, ${r.credits_skipped} overgeslagen.`)
+      const msg = creditLine ? `${debitLine}\n${creditLine}` : debitLine
+      await alert({ title: r.dry_run ? 'Proefrun' : 'Revolut-import', message: msg, variant: 'success' })
+      if (!r.dry_run) void loadRevolutBalance()
+      if (!r.dry_run && (r.debits_imported > 0 || r.credits_imported > 0)) await loadList(yearToRefresh)
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Importeren mislukt.'
+      await alert({ title: 'Revolut-import mislukt', message: msg, variant: 'error' })
+    } finally {
+      setRevolutSubmitting(false)
+    }
   }
 
   return (
@@ -258,7 +367,7 @@ export function AdminShopExpensesPage() {
               className="input-control mt-1.5"
             />
           </label>
-          <label className="block text-sm sm:col-span-2 lg:col-span-3">
+          <div className="block text-sm sm:col-span-2 lg:col-span-3">
             <span className="font-medium text-slate-700">Bonfoto (verplicht)</span>
             <div className="mt-1.5 flex flex-wrap gap-2">
               <label className="btn-secondary inline-flex min-h-11 cursor-pointer items-center px-4 text-sm font-semibold">
@@ -282,7 +391,7 @@ export function AdminShopExpensesPage() {
               </label>
             </div>
             {newReceiptFile ? <span className="mt-1 block text-xs text-slate-600">{newReceiptFile.name}</span> : null}
-          </label>
+          </div>
           <div className="flex items-end sm:col-span-2 lg:col-span-3">
             <button
               type="submit"
@@ -290,6 +399,191 @@ export function AdminShopExpensesPage() {
               className="btn-primary min-h-11 px-5"
             >
               {submitting ? 'Bezig…' : 'Toevoegen'}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="surface-card">
+        <h3 className="text-sm font-semibold text-slate-800">Revolut-saldo</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Het saldo komt uit de kolom <strong>Saldo</strong> van je laatst <strong>succesvol geïmporteerde</strong>{' '}
+          Revolut-csv (nieuwste voltooide EUR-regel). Dit is geen live koppeling met Revolut; exporteer opnieuw voor een
+          actueler cijfer.
+        </p>
+        <div className="mt-3 text-sm text-slate-800">
+          {revolutBalanceLoading ? (
+            <span className="text-slate-500">Saldo laden…</span>
+          ) : revolutBalance != null &&
+            revolutBalance.balance_eur != null &&
+            revolutBalance.updated_at != null &&
+            revolutBalance.updated_at !== '' ? (
+            <div className="space-y-1">
+              <p className="text-lg font-semibold tabular-nums">{formatEUR(revolutBalance.balance_eur)}</p>
+              {revolutBalance.statement_as_of ? (
+                <p className="text-slate-600">
+                  Per afschrift (transactiedatum): {formatDateTimeShortNL(revolutBalance.statement_as_of)}
+                </p>
+              ) : null}
+              <p className="text-xs text-slate-500">
+                In Lunchkraam bijgewerkt: {formatDateTimeShortNL(revolutBalance.updated_at)}
+              </p>
+            </div>
+          ) : (
+            <p className="text-slate-600">
+              Nog geen saldo opgeslagen. Importeer een csv-export met saldokolom (zonder proefrun) om het hier te tonen.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="surface-card">
+        <h3 className="text-sm font-semibold text-slate-800">Revolut-import (CSV)</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Upload een accountafschrift-export van Revolut. <strong>Afschrijvingen</strong> worden als uitgave geboekt; bij
+          tijdherkenning zetten we <strong>waarvoor</strong> per regel op basis van het voltooide tijdstip (Europe/Amsterdam:
+          ochtend ca. 08:00–13:00 → lunchkraam, avond ca. 16:00–19:00 → avondeten; anders het gekozen standaarddoel).
+          Optioneel worden <strong>tegoeden</strong> die exact €15 of €10 zijn (instelbaar) als omzet in de grafieken
+          meegeteld: €15 → lunchkraam, €10 → avondeten. Tel die bedragen niet dubbel met al in de app geaccordeerde
+          kaartverkopen.
+        </p>
+        <form
+          id="revolut-shop-import-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void runRevolutImport()
+          }}
+          className="mt-4 grid gap-4 sm:grid-cols-2"
+        >
+          <label className="block text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">CSV-bestand</span>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="input-control mt-1.5"
+              onChange={(e) => setRevolutFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-slate-700">Standaard waarvoor</span>
+            <span className="mt-0.5 block text-xs font-normal text-slate-500">
+              Gebruikt als het tijdstip niet in het ochtend- of avondvenster valt (of als tijdherkenning uit staat).
+            </span>
+            <select
+              value={revolutPurpose}
+              onChange={(e) => setRevolutPurpose(e.target.value as api.ShopExpensePurpose)}
+              className="select-control mt-1.5 min-h-11 w-full"
+            >
+              <option value="lunchkraam">Lunchkraam</option>
+              <option value="avondeten">Avondeten</option>
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-slate-700">Valuta-filter</span>
+            <select
+              value={revolutCurrencyEUR ? 'eur' : 'all'}
+              onChange={(e) => setRevolutCurrencyEUR(e.target.value === 'eur')}
+              className="select-control mt-1.5 min-h-11 w-full"
+            >
+              <option value="eur">Alleen EUR</option>
+              <option value="all">Alle valuta</option>
+            </select>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-slate-800 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={revolutGuessPurposeByTime}
+              onChange={(e) => setRevolutGuessPurposeByTime(e.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
+            />
+            <span>
+              <span className="font-medium text-slate-700">Waarvoor afleiden uit tijdstip</span>
+              <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                Voltooide tijd in Europe/Amsterdam: 08:00–13:00 → lunchkraam, 16:00–19:00 → avondeten; anders het
+                standaarddoel hierboven.
+              </span>
+            </span>
+          </label>
+          <label className="block text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">Types overslaan (optioneel)</span>
+            <input
+              type="text"
+              value={revolutSkipTypes}
+              onChange={(e) => setRevolutSkipTypes(e.target.value)}
+              placeholder="bijv. TOPUP, EXCHANGE"
+              className="input-control mt-1.5"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-800">
+            <input
+              type="checkbox"
+              checked={revolutFingerprint}
+              onChange={(e) => setRevolutFingerprint(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Vingerafdruk als er geen ID-kolom is
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-800">
+            <input
+              type="checkbox"
+              checked={revolutCompletedOnly}
+              onChange={(e) => setRevolutCompletedOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Alleen voltooide transacties (VOLTOOID / COMPLETED)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-800 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={revolutImportCredits}
+              onChange={(e) => setRevolutImportCredits(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Inkomsten importeren (positieve regels die exact matchen met onderstaande bedragen)
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-slate-700">Lunchkraam-kaartbedrag (€)</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={revolutCreditLunchEUR}
+              onChange={(e) => setRevolutCreditLunchEUR(e.target.value)}
+              placeholder="15"
+              disabled={!revolutImportCredits}
+              className="input-control mt-1.5"
+            />
+            <span className="mt-1 block text-xs text-slate-500">0 = dit type niet importeren</span>
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-slate-700">Avondeten-kaartbedrag (€)</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={revolutCreditAvondetenEUR}
+              onChange={(e) => setRevolutCreditAvondetenEUR(e.target.value)}
+              placeholder="10"
+              disabled={!revolutImportCredits}
+              className="input-control mt-1.5"
+            />
+            <span className="mt-1 block text-xs text-slate-500">0 = dit type niet importeren</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-800 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={revolutDryRun}
+              onChange={(e) => setRevolutDryRun(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Alleen proefrun (niets opslaan)
+          </label>
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+            <button
+              type="button"
+              disabled={revolutSubmitting || !revolutFile}
+              className="btn-primary min-h-11 px-5"
+              onClick={() => void runRevolutImport()}
+            >
+              {revolutSubmitting ? 'Bezig…' : revolutDryRun ? 'Proefrun' : 'Importeren'}
             </button>
           </div>
         </form>
@@ -332,6 +626,7 @@ export function AdminShopExpensesPage() {
                   <th className="py-2 pr-4">Datum</th>
                   <th className="py-2 pr-4">Bedrag</th>
                   <th className="py-2 pr-4">Waarvoor</th>
+                  <th className="py-2 pr-4">Bron</th>
                   <th className="py-2 pr-4">Omschrijving</th>
                   <th className="py-2 pr-4">Bon</th>
                   {user?.is_admin ? <th className="py-2 text-right">Actie</th> : null}
@@ -344,7 +639,23 @@ export function AdminShopExpensesPage() {
                     <td className="py-3 pr-4 font-medium tabular-nums text-slate-900">
                       {formatEUR(r.amount_eur)}
                     </td>
-                    <td className="py-3 pr-4 text-slate-700">{shopExpensePurposeLabel(r.purpose)}</td>
+                    <td className="py-3 pr-4 text-slate-700">
+                      <select
+                        value={r.purpose}
+                        disabled={patchingPurposeId === r.id}
+                        onChange={(e) =>
+                          void onPurposeChange(r.id, e.target.value as api.ShopExpensePurpose)
+                        }
+                        className="select-control min-h-9 max-w-[12rem] text-xs"
+                        aria-label={`Waarvoor voor uitgave ${r.spent_on}`}
+                      >
+                        <option value="lunchkraam">{shopExpensePurposeLabel('lunchkraam')}</option>
+                        <option value="avondeten">{shopExpensePurposeLabel('avondeten')}</option>
+                      </select>
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-slate-600">
+                      {r.source === 'revolut' ? 'Revolut' : 'Handmatig'}
+                    </td>
                     <td className="py-3 pr-4 text-slate-700">{r.description || '—'}</td>
                     <td className="py-3 pr-4 text-slate-700">
                       <div className="flex flex-wrap items-center gap-2">

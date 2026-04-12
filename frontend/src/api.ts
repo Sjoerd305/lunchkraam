@@ -17,6 +17,8 @@ import {
   operatorTostiOrdersResponseSchema,
   operatorTostiSoldTodaySchema,
   registeredCountResponseSchema,
+  revolutBalanceResponseSchema,
+  revolutShopExpenseImportResponseSchema,
   shopExpenseSchema,
   shopExpenseReceiptSchema,
   shopExpensesResponseSchema,
@@ -188,6 +190,25 @@ export type AdminShopExpense = {
   description: string
   purpose: ShopExpensePurpose
   created_at: string
+  source: string
+  external_id: string
+}
+
+export type RevolutShopExpenseImportResult = {
+  imported: number
+  skipped: number
+  debits_imported: number
+  debits_skipped: number
+  credits_imported: number
+  credits_skipped: number
+  credits_enabled: boolean
+  dry_run: boolean
+}
+
+export type RevolutBalance = {
+  balance_eur: number | null
+  statement_as_of: string | null
+  updated_at: string | null
 }
 
 export type ShopExpenseReceipt = {
@@ -736,6 +757,26 @@ export async function createShopExpense(
   return parseApiResponse(shopExpenseSchema, await res.json())
 }
 
+export async function patchShopExpensePurpose(
+  csrf: string,
+  id: number,
+  purpose: ShopExpensePurpose,
+  isOperatorOnly: boolean,
+): Promise<AdminShopExpense> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/shop-expenses/${id}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ purpose }),
+  })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(shopExpenseSchema, await res.json())
+}
+
 export async function deleteShopExpense(csrf: string, id: number): Promise<void> {
   const res = await fetch(`/api/admin/shop-expenses/${id}`, {
     method: 'DELETE',
@@ -743,6 +784,29 @@ export async function deleteShopExpense(csrf: string, id: number): Promise<void>
     headers: { 'X-CSRF-Token': csrf },
   })
   if (!res.ok) throw await parseError(res)
+}
+
+export async function importRevolutShopExpenses(
+  csrf: string,
+  formData: FormData,
+  isOperatorOnly: boolean,
+): Promise<RevolutShopExpenseImportResult> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/shop-expenses/revolut-import`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+    body: formData,
+  })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(revolutShopExpenseImportResponseSchema, await res.json())
+}
+
+export async function getRevolutBalance(isOperatorOnly: boolean): Promise<RevolutBalance> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/revolut-balance`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(revolutBalanceResponseSchema, await res.json())
 }
 
 export async function getShopExpenseReceipt(id: number, isOperatorOnly: boolean): Promise<ShopExpenseReceipt> {

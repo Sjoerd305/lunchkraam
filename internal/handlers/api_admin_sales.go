@@ -168,13 +168,12 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, resp)
 }
 
-func mergeFinanceYears(fulfilled, expense []int) []int {
-	seen := make(map[int]struct{}, len(fulfilled)+len(expense))
-	for _, y := range fulfilled {
-		seen[y] = struct{}{}
-	}
-	for _, y := range expense {
-		seen[y] = struct{}{}
+func mergeFinanceYears(lists ...[]int) []int {
+	seen := make(map[int]struct{})
+	for _, list := range lists {
+		for _, y := range list {
+			seen[y] = struct{}{}
+		}
 	}
 	out := make([]int, 0, len(seen))
 	for y := range seen {
@@ -195,7 +194,12 @@ func (d *Deps) APIAdminSalesYears(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
-	years := mergeFinanceYears(fulfilled, expenseYears)
+	bankYears, err := d.Store.AdminBankCreditImportYears(r.Context())
+	if err != nil {
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		return
+	}
+	years := mergeFinanceYears(fulfilled, expenseYears, bankYears)
 	httpx.JSON(w, http.StatusOK, map[string]any{"years": years})
 }
 

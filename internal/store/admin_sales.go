@@ -23,10 +23,16 @@ SELECT
      INNER JOIN cards c ON c.id = cr.card_id WHERE cr.status = 'fulfilled') AS fulfilled_knip_rem,
   (SELECT COUNT(*)::bigint FROM card_requests WHERE status = 'cancelled') AS cancelled_req,
   (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int AS finance_y,
-  (SELECT COALESCE(SUM(sale_price_eur), 0)::float8 FROM card_requests cr
-     WHERE cr.status = 'fulfilled' AND cr.fulfilled_at IS NOT NULL
-       AND (EXTRACT(YEAR FROM cr.fulfilled_at AT TIME ZONE $1))::int =
-           (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int) AS year_rev,
+  (
+    (SELECT COALESCE(SUM(sale_price_eur), 0)::float8 FROM card_requests cr
+       WHERE cr.status = 'fulfilled' AND cr.fulfilled_at IS NOT NULL
+         AND (EXTRACT(YEAR FROM cr.fulfilled_at AT TIME ZONE $1))::int =
+             (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int)
+    +
+    (SELECT COALESCE(SUM(bci.amount_eur), 0)::float8 FROM bank_credit_imports bci
+       WHERE (EXTRACT(YEAR FROM bci.received_on))::int =
+             (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int)
+  ) AS year_rev,
   (SELECT COALESCE(SUM(se.amount_eur), 0)::float8 FROM shop_expenses se
      WHERE (EXTRACT(YEAR FROM se.spent_on))::int =
            (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int) AS year_exp`
@@ -55,9 +61,28 @@ SELECT
 	return &st, nil
 }
 
-// AdminSalesByMonth aggregates fulfilled card_requests per calendar month in Europe/Amsterdam.
-// Revenue is SUM(sale_price_eur). Indexes 0–11 are January–December.
+// AdminSalesByMonth aggregates fulfilled card_requests per calendar month in Europe/Amsterdam,
+// plus Revolut-imported bank credits (bank_credit_imports) by received_on month.
+// Revenue totals include both; kaartverkoop-aantallen komen alleen uit de app.
 func (s *Store) AdminSalesByMonth(ctx context.Context, year int) ([12]AdminSalesMonthAgg, error) {
+	buckets, err := s.adminCardRequestSalesByMonth(ctx, year)
+	if err != nil {
+		return buckets, err
+	}
+	credits, err := s.AdminBankCreditRevenueByMonth(ctx, year)
+	if err != nil {
+		return buckets, err
+	}
+	for i := 0; i < 12; i++ {
+		c := credits[i]
+		buckets[i].RevenueEUR += c.LunchkraamEUR + c.AvondetenEUR
+		buckets[i].RevenueEURTosti += c.LunchkraamEUR
+		buckets[i].RevenueEURAvondeten += c.AvondetenEUR
+	}
+	return buckets, nil
+}
+
+func (s *Store) adminCardRequestSalesByMonth(ctx context.Context, year int) ([12]AdminSalesMonthAgg, error) {
 	var buckets [12]AdminSalesMonthAgg
 	const q = `
 SELECT (EXTRACT(MONTH FROM fulfilled_at AT TIME ZONE $2))::int AS m,
@@ -75,7 +100,7 @@ GROUP BY 1
 ORDER BY 1`
 	rows, err := s.pool.Query(ctx, q, year, adminSalesTZ)
 	if err != nil {
-		return buckets, fmt.Errorf("admin sales by month: %w", err)
+		return buckets, fmt.Errorf("admin card request sales by month: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {

@@ -19,15 +19,16 @@ COPY --from=frontend /f/dist ./frontend/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata su-exec
 WORKDIR /app
 COPY --from=gobuild /out/server /app/server
 COPY migrations ./migrations
 COPY --from=frontend /f/dist ./frontend/dist
-RUN mkdir -p /app/data/receipts && chown -R nobody:nobody /app/data
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh && mkdir -p /app/data/receipts
 ENV MIGRATIONS_DIR=/app/migrations
 ENV FRONTEND_DIST=/app/frontend/dist
 EXPOSE 8080
-USER nobody
-ENTRYPOINT ["/app/server"]
+USER root
+ENTRYPOINT ["/docker-entrypoint.sh"]
 

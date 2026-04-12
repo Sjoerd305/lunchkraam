@@ -26,11 +26,29 @@ import (
 	"lunchkraam/internal/store"
 )
 
+func warnIfReceiptsDirNotWritable(dir string) {
+	if strings.TrimSpace(dir) == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("warning: bonfoto-map %q: mkdir: %v — uploads mislukken tot dit is opgelost.", dir, err)
+		return
+	}
+	f, err := os.CreateTemp(dir, ".receipt-write-test-*")
+	if err != nil {
+		log.Printf("warning: bonfoto-map %q is niet beschrijfbaar: %v — zet RECEIPTS_DIR of maprechten goed (zie docker-compose).", dir, err)
+		return
+	}
+	_ = f.Close()
+	_ = os.Remove(f.Name())
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	warnIfReceiptsDirNotWritable(cfg.ReceiptsDir)
 
 	ctx := context.Background()
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
@@ -129,8 +147,11 @@ func main() {
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/avondeten/register", h.APIOperatorAvondetenRegister)
 					r.Get("/operator/sales-years", h.APIAdminSalesYears)
 					r.Get("/operator/sales-stats", h.APIAdminSalesStats)
+					r.Get("/operator/revolut-balance", h.APIRevolutBalance)
 					r.Get("/operator/shop-expenses", h.APIAdminShopExpensesList)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/shop-expenses", h.APIAdminShopExpenseCreate)
+					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Patch("/operator/shop-expenses/{id}", h.APIShopExpensePatch)
+					r.With(httprate.Limit(10, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/shop-expenses/revolut-import", h.APIShopExpensesRevolutImport)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptUpload)
 					r.Get("/operator/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptMeta)
 					r.Get("/operator/shop-expenses/{id}/receipt/image", h.APIShopExpenseReceiptImage)
@@ -157,8 +178,11 @@ func main() {
 					r.Get("/admin/dashboard", h.APIAdminDashboard)
 					r.Get("/admin/sales-years", h.APIAdminSalesYears)
 					r.Get("/admin/sales-stats", h.APIAdminSalesStats)
+					r.Get("/admin/revolut-balance", h.APIRevolutBalance)
 					r.Get("/admin/shop-expenses", h.APIAdminShopExpensesList)
 					r.Post("/admin/shop-expenses", h.APIAdminShopExpenseCreate)
+					r.Patch("/admin/shop-expenses/{id}", h.APIShopExpensePatch)
+					r.With(httprate.Limit(10, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/admin/shop-expenses/revolut-import", h.APIShopExpensesRevolutImport)
 					r.Delete("/admin/shop-expenses/{id}", h.APIAdminShopExpenseDelete)
 					r.Post("/admin/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptUpload)
 					r.Get("/admin/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptMeta)

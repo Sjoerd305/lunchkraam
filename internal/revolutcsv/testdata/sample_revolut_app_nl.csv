@@ -1,0 +1,3 @@
+Type,Product,Startdatum,Datum voltooid,Beschrijving,Bedrag,Kosten,Valuta,Status,Saldo
+Toeslag,Betaalrekening,2025-02-18 18:08:29,2025-02-18 18:08:29,Kosten voor kaartlevering,"-7,99",0,EUR,VOLTOOID,0
+Geld toevoegen,Betaalrekening,2025-05-03 11:50:50,,Open banking geannuleerd,15,0,EUR,ONGEDAAN GEMAAKT,

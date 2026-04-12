@@ -50,15 +50,8 @@ func (d *Deps) APIAdminShopExpensesList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
-	for _, e := range rows {
-		out = append(out, map[string]any{
-			"id":          e.ID,
-			"amount_eur":  e.AmountEUR,
-			"spent_on":    e.SpentOn.Format("2006-01-02"),
-			"description": e.Description,
-			"purpose":     e.Purpose,
-			"created_at":  e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
-		})
+	for i := range rows {
+		out = append(out, shopExpenseJSON(&rows[i]))
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"year": year, "expenses": out})
 }
@@ -119,14 +112,53 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan mislukt.")
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, map[string]any{
+	httpx.JSON(w, http.StatusCreated, shopExpenseJSON(e))
+}
+
+func shopExpenseJSON(e *store.ShopExpense) map[string]any {
+	return map[string]any{
 		"id":          e.ID,
 		"amount_eur":  e.AmountEUR,
 		"spent_on":    e.SpentOn.Format("2006-01-02"),
 		"description": e.Description,
 		"purpose":     e.Purpose,
 		"created_at":  e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
-	})
+		"source":      e.Source,
+		"external_id": e.ExternalID,
+	}
+}
+
+// APIShopExpensePatch updates allowed fields on a shop expense (currently only purpose). Used for /api/admin and /api/operator.
+func (d *Deps) APIShopExpensePatch(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id < 1 {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige uitgave.")
+		return
+	}
+	var body struct {
+		Purpose string `json:"purpose"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
+	if err := dec.Decode(&body); err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return
+	}
+	purpose, ok := parseShopExpensePurpose(body.Purpose)
+	if !ok {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_purpose", "Doel moet lunchkraam of avondeten zijn.")
+		return
+	}
+	e, err := d.Store.UpdateShopExpensePurpose(r.Context(), id, purpose)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.JSONError(w, http.StatusNotFound, "not_found", "Uitgave niet gevonden.")
+			return
+		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bijwerken mislukt.")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, shopExpenseJSON(e))
 }
 
 func (d *Deps) APIAdminShopExpenseDelete(w http.ResponseWriter, r *http.Request) {

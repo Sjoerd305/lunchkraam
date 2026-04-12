@@ -9,13 +9,21 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ShopExpense is a manual grocery / supply cost entry (amount on calendar date spent_on).
+// Shop expense row sources (must match DB check constraint shop_expenses_source_check).
+const (
+	ShopExpenseSourceManual  = "manual"
+	ShopExpenseSourceRevolut = "revolut"
+)
+
+// ShopExpense is a grocery / supply cost entry (amount on calendar date spent_on).
 type ShopExpense struct {
 	ID          int64
 	AmountEUR   float64
 	SpentOn     time.Time
 	Description string
 	Purpose     string
+	Source      string
+	ExternalID  string
 	CreatedAt   time.Time
 }
 
@@ -46,11 +54,57 @@ func (s *Store) InsertShopExpense(ctx context.Context, createdBy int64, amountEU
 	row := s.pool.QueryRow(ctx, `
 INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by)
 VALUES ($1, $2::date, $3, $4, $5)
-RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at`,
+RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')`,
 		amountEUR, dateStr, desc, purpose, createdBy,
 	)
 	var e ShopExpense
-	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt); err != nil {
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// UpsertImportedShopExpense inserts or updates a row keyed by (source, external_id).
+// source must be a valid DB value (e.g. ShopExpenseSourceRevolut); externalID must be non-empty.
+// amountEUR must be positive; createdBy may be nil to store NULL.
+func (s *Store) UpsertImportedShopExpense(
+	ctx context.Context,
+	source, externalID string,
+	createdBy *int64,
+	amountEUR float64,
+	spentOn time.Time,
+	description, purpose string,
+) (*ShopExpense, error) {
+	source = strings.TrimSpace(strings.ToLower(source))
+	externalID = strings.TrimSpace(externalID)
+	if source == "" || externalID == "" {
+		return nil, fmt.Errorf("bron en externe id zijn verplicht")
+	}
+	if source != ShopExpenseSourceRevolut {
+		return nil, fmt.Errorf("onbekende bron %q", source)
+	}
+	if amountEUR <= 0 {
+		return nil, fmt.Errorf("bedrag moet groter dan nul zijn")
+	}
+	desc := strings.TrimSpace(description)
+	dateStr := spentOn.UTC().Format("2006-01-02")
+	var created any
+	if createdBy != nil {
+		created = *createdBy
+	}
+	row := s.pool.QueryRow(ctx, `
+INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by, source, external_id)
+VALUES ($1, $2::date, $3, $4, $5, $6, $7)
+ON CONFLICT (source, external_id) DO UPDATE SET
+    amount_eur = EXCLUDED.amount_eur,
+    spent_on = EXCLUDED.spent_on,
+    description = EXCLUDED.description,
+    purpose = EXCLUDED.purpose
+RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')`,
+		amountEUR, dateStr, desc, purpose, created, source, externalID,
+	)
+	var e ShopExpense
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 		return nil, err
 	}
 	return &e, nil
@@ -68,13 +122,33 @@ func (s *Store) DeleteShopExpense(ctx context.Context, id int64) error {
 	return nil
 }
 
+// UpdateShopExpensePurpose sets purpose to lunchkraam or avondeten.
+func (s *Store) UpdateShopExpensePurpose(ctx context.Context, id int64, purpose string) (*ShopExpense, error) {
+	if purpose != "lunchkraam" && purpose != "avondeten" {
+		return nil, fmt.Errorf("purpose must be lunchkraam or avondeten")
+	}
+	row := s.pool.QueryRow(ctx, `
+UPDATE shop_expenses SET purpose = $1 WHERE id = $2
+RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')`,
+		purpose, id,
+	)
+	var e ShopExpense
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &e, nil
+}
+
 func (s *Store) ShopExpenseByID(ctx context.Context, id int64) (*ShopExpense, error) {
 	row := s.pool.QueryRow(ctx, `
-SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')
 FROM shop_expenses
 WHERE id = $1`, id)
 	var e ShopExpense
-	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt); err != nil {
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -155,7 +229,7 @@ func (s *Store) DeleteShopExpenseReceipt(ctx context.Context, expenseID int64) e
 // ListShopExpensesByYear returns expenses for a calendar year (spent_on), newest first.
 func (s *Store) ListShopExpensesByYear(ctx context.Context, year int) ([]ShopExpense, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')
 FROM shop_expenses
 WHERE (EXTRACT(YEAR FROM spent_on))::int = $1
 ORDER BY spent_on DESC, id DESC`,
@@ -168,7 +242,7 @@ ORDER BY spent_on DESC, id DESC`,
 	var out []ShopExpense
 	for rows.Next() {
 		var e ShopExpense
-		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

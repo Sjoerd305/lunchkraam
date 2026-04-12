@@ -11,6 +11,7 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -107,24 +108,28 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := os.MkdirAll(d.Config.ReceiptsDir, 0o755); err != nil {
+		log.Printf("shop expense receipt upload: mkdir %q: %v", d.Config.ReceiptsDir, err)
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kan opslagmap niet maken.")
 		return
 	}
 	name, err := randomHex(16)
 	if err != nil {
+		log.Printf("shop expense receipt upload: randomHex: %v", err)
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kan bestandsnaam niet maken.")
 		return
 	}
 	filename := fmt.Sprintf("expense_%d_%s.jpg", expenseID, name)
 	path := filepath.Join(d.Config.ReceiptsDir, filename)
 	if err := os.WriteFile(path, payload, 0o644); err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan bonfoto mislukt.")
+		log.Printf("shop expense receipt upload: write %q: %v", path, err)
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan bonfoto mislukt (controleer schrijfrechten op RECEIPTS_DIR).")
 		return
 	}
 
 	prev, prevErr := d.Store.ShopExpenseReceiptByExpenseID(r.Context(), expenseID)
 	if prevErr != nil && prevErr != store.ErrNotFound {
 		_ = os.Remove(path)
+		log.Printf("shop expense receipt upload: load previous receipt: %v", prevErr)
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
@@ -140,6 +145,7 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 	)
 	if err != nil {
 		_ = os.Remove(path)
+		log.Printf("shop expense receipt upload: upsert metadata expense_id=%d: %v", expenseID, err)
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan metadata mislukt.")
 		return
 	}

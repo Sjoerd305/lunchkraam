@@ -317,10 +317,29 @@ export const shopExpenseSchema = z.object({
   description: stringWithDefault(''),
   purpose: shopExpensePurposeSchema,
   created_at: stringWithDefault(''),
+  source: stringWithDefault('manual'),
+  external_id: stringWithDefault(''),
 })
 
 export const shopExpensesResponseSchema = z.object({
   expenses: z.array(shopExpenseSchema).catch([]),
+})
+
+export const revolutShopExpenseImportResponseSchema = z.object({
+  imported: intWithDefault(0),
+  skipped: intWithDefault(0),
+  debits_imported: intWithDefault(0),
+  debits_skipped: intWithDefault(0),
+  credits_imported: intWithDefault(0),
+  credits_skipped: intWithDefault(0),
+  credits_enabled: z.boolean().catch(false),
+  dry_run: z.boolean().catch(false),
+})
+
+export const revolutBalanceResponseSchema = z.object({
+  balance_eur: z.number().nullable(),
+  statement_as_of: z.string().nullable(),
+  updated_at: z.string().nullable(),
 })
 
 export const shopExpenseReceiptSchema = z.object({
