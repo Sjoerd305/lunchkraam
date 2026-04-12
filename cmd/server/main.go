@@ -154,7 +154,7 @@ func main() {
 					r.With(httprate.Limit(10, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/shop-expenses/revolut-import", h.APIShopExpensesRevolutImport)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptUpload)
 					r.Get("/operator/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptMeta)
-					r.Get("/operator/shop-expenses/{id}/receipt/image", h.APIShopExpenseReceiptImage)
+					r.Get("/operator/shop-expenses/{id}/receipts/{receiptId}/image", h.APIShopExpenseReceiptImage)
 				})
 
 				r.Group(func(r chi.Router) {
@@ -186,8 +186,8 @@ func main() {
 					r.Delete("/admin/shop-expenses/{id}", h.APIAdminShopExpenseDelete)
 					r.Post("/admin/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptUpload)
 					r.Get("/admin/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptMeta)
-					r.Get("/admin/shop-expenses/{id}/receipt/image", h.APIShopExpenseReceiptImage)
-					r.Delete("/admin/shop-expenses/{id}/receipt", h.APIShopExpenseReceiptDelete)
+					r.Get("/admin/shop-expenses/{id}/receipts/{receiptId}/image", h.APIShopExpenseReceiptImage)
+					r.Delete("/admin/shop-expenses/{id}/receipts/{receiptId}", h.APIShopExpenseReceiptDelete)
 					r.Get("/admin/users", h.APIAdminUsers)
 					r.Post("/admin/users/local", h.APIAdminCreateLocalUser)
 					r.Patch("/admin/users/{id}/local", h.APIAdminPatchLocalUser)

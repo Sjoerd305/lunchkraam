@@ -48,7 +48,7 @@ export function AdminShopExpensesPage() {
   const [description, setDescription] = useState('')
   const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [receiptsByExpenseId, setReceiptsByExpenseId] = useState<Record<number, api.ShopExpenseReceipt | null>>({})
+  const [receiptsByExpenseId, setReceiptsByExpenseId] = useState<Record<number, api.ShopExpenseReceipt[]>>({})
   const [uploadingReceiptId, setUploadingReceiptId] = useState<number | null>(null)
   const [patchingPurposeId, setPatchingPurposeId] = useState<number | null>(null)
 
@@ -119,10 +119,10 @@ export function AdminShopExpensesPage() {
         const receiptEntries = await Promise.all(
           list.map(async (row) => {
             try {
-              const receipt = await api.getShopExpenseReceipt(row.id, isOperatorOnly)
-              return [row.id, receipt] as const
+              const receipts = await api.getShopExpenseReceipts(row.id, isOperatorOnly)
+              return [row.id, receipts] as const
             } catch {
-              return [row.id, null] as const
+              return [row.id, []] as const
             }
           }),
         )
@@ -229,7 +229,10 @@ export function AdminShopExpensesPage() {
     setUploadingReceiptId(expenseId)
     try {
       const receipt = await api.uploadShopExpenseReceipt(csrf, expenseId, file, isOperatorOnly)
-      setReceiptsByExpenseId((prev) => ({ ...prev, [expenseId]: receipt }))
+      setReceiptsByExpenseId((prev) => ({
+        ...prev,
+        [expenseId]: [...(prev[expenseId] ?? []), receipt],
+      }))
       await alert({ title: 'Bonfoto opgeslagen', message: 'De bonfoto is toegevoegd.', variant: 'success' })
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Uploaden mislukt.'
@@ -239,7 +242,7 @@ export function AdminShopExpensesPage() {
     }
   }
 
-  async function onDeleteReceipt(expenseId: number) {
+  async function onDeleteReceipt(expenseId: number, receiptId: number) {
     if (year === null) return
     const ok = await confirm({
       title: 'Bonfoto verwijderen?',
@@ -249,8 +252,11 @@ export function AdminShopExpensesPage() {
     })
     if (!ok) return
     try {
-      await api.deleteShopExpenseReceipt(csrf, expenseId)
-      setReceiptsByExpenseId((prev) => ({ ...prev, [expenseId]: null }))
+      await api.deleteShopExpenseReceipt(csrf, expenseId, receiptId)
+      setReceiptsByExpenseId((prev) => ({
+        ...prev,
+        [expenseId]: (prev[expenseId] ?? []).filter((r) => r.id !== receiptId),
+      }))
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Verwijderen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -688,28 +694,33 @@ export function AdminShopExpensesPage() {
                             }}
                           />
                         </label>
-                        {receiptsByExpenseId[r.id] ? (
-                          <>
-                            <a
-                              href={receiptsByExpenseId[r.id]?.image_url || '#'}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs font-semibold text-slate-700 underline"
-                            >
-                              Bekijk
-                            </a>
-                            {user?.is_admin ? (
-                              <button
-                                type="button"
-                                onClick={() => void onDeleteReceipt(r.id)}
-                                className="text-xs font-semibold text-red-700 hover:text-red-900"
-                              >
-                                Verwijder foto
-                              </button>
-                            ) : null}
-                          </>
-                        ) : (
+                        {(receiptsByExpenseId[r.id] ?? []).length === 0 ? (
                           <span className="text-xs text-slate-500">Geen foto</span>
+                        ) : (
+                          <ul className="list-none space-y-1.5 p-0">
+                            {(receiptsByExpenseId[r.id] ?? []).map((rec, idx) => (
+                              <li key={rec.id} className="flex flex-wrap items-center gap-2">
+                                <a
+                                  href={rec.image_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs font-semibold text-slate-700 underline"
+                                >
+                                  Bekijk
+                                  {(receiptsByExpenseId[r.id] ?? []).length > 1 ? ` ${idx + 1}` : ''}
+                                </a>
+                                {user?.is_admin ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void onDeleteReceipt(r.id, rec.id)}
+                                    className="text-xs font-semibold text-red-700 hover:text-red-900"
+                                  >
+                                    Verwijderen
+                                  </button>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </div>
                     </td>

@@ -352,6 +352,10 @@ export const shopExpenseReceiptSchema = z.object({
   image_url: stringWithDefault(''),
 })
 
+export const shopExpenseReceiptsListResponseSchema = z.object({
+  receipts: z.array(shopExpenseReceiptSchema).catch([]),
+})
+
 export const adminDashboardResponseSchema = z.object({
   active_cards_total: intWithDefault(0),
   knipjes_remaining_total: intWithDefault(0),

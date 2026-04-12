@@ -89,6 +89,36 @@ Y,2025-06-02 10:00:00,"1,25",EUR,VOLTOOID,"101,75"
 	}
 }
 
+func TestParseAmountCommaFractions(t *testing.T) {
+	tests := []struct {
+		in   string
+		want float64
+	}{
+		{"33,5", 33.5},
+		{"32,5", 32.5},
+		{"32,50", 32.5},
+		{"3,35", 3.35},
+		{"-33,5", -33.5},
+		{"-32,50", -32.5},
+		{"1.234,56", 1234.56},
+		{"1,234", 1234},
+		{"1,234,567", 1234567},
+		{"12,34", 12.34},
+		{"0,5", 0.5},
+	}
+	for _, tc := range tests {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := parseAmount(tc.in)
+			if err != nil {
+				t.Fatalf("parseAmount(%q): %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Fatalf("parseAmount(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFingerprintExternalIDStable(t *testing.T) {
 	d := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
 	a := FingerprintExternalID(d, -1.5, "x", "CARD")

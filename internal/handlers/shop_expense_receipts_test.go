@@ -38,11 +38,11 @@ func TestDecodeAndCompressReceipt_InvalidImage(t *testing.T) {
 
 func TestExpenseReceiptImageURL(t *testing.T) {
 	adminReq := httptest.NewRequest("GET", "/api/admin/shop-expenses/10/receipt", nil)
-	if got := expenseReceiptImageURL(adminReq, 10); got != "/api/admin/shop-expenses/10/receipt/image" {
+	if got := expenseReceiptImageURL(adminReq, 10, 99); got != "/api/admin/shop-expenses/10/receipts/99/image" {
 		t.Fatalf("unexpected admin url: %q", got)
 	}
 	operatorReq := httptest.NewRequest("GET", "/api/operator/shop-expenses/11/receipt", nil)
-	if got := expenseReceiptImageURL(operatorReq, 11); got != "/api/operator/shop-expenses/11/receipt/image" {
+	if got := expenseReceiptImageURL(operatorReq, 11, 5); got != "/api/operator/shop-expenses/11/receipts/5/image" {
 		t.Fatalf("unexpected operator url: %q", got)
 	}
 }

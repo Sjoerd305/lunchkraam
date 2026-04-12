@@ -157,7 +157,8 @@ WHERE id = $1`, id)
 	return &e, nil
 }
 
-func (s *Store) UpsertShopExpenseReceipt(
+// InsertShopExpenseReceipt adds another receipt image for an expense.
+func (s *Store) InsertShopExpenseReceipt(
 	ctx context.Context,
 	expenseID int64,
 	storagePath string,
@@ -168,12 +169,6 @@ func (s *Store) UpsertShopExpenseReceipt(
 	row := s.pool.QueryRow(ctx, `
 INSERT INTO shop_expense_receipts (shop_expense_id, storage_path, content_type, size_bytes, sha256)
 VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (shop_expense_id) DO UPDATE SET
-    storage_path = EXCLUDED.storage_path,
-    content_type = EXCLUDED.content_type,
-    size_bytes = EXCLUDED.size_bytes,
-    sha256 = EXCLUDED.sha256,
-    created_at = now()
 RETURNING id, shop_expense_id, storage_path, content_type, size_bytes, sha256, created_at`,
 		expenseID, storagePath, contentType, sizeBytes, sha256,
 	)
@@ -192,11 +187,49 @@ RETURNING id, shop_expense_id, storage_path, content_type, size_bytes, sha256, c
 	return &rec, nil
 }
 
-func (s *Store) ShopExpenseReceiptByExpenseID(ctx context.Context, expenseID int64) (*ShopExpenseReceipt, error) {
+// CountShopExpenseReceipts returns how many receipt rows exist for an expense.
+func (s *Store) CountShopExpenseReceipts(ctx context.Context, expenseID int64) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM shop_expense_receipts WHERE shop_expense_id = $1`, expenseID).Scan(&n)
+	return n, err
+}
+
+// ListShopExpenseReceiptsByExpenseID returns receipts oldest first.
+func (s *Store) ListShopExpenseReceiptsByExpenseID(ctx context.Context, expenseID int64) ([]ShopExpenseReceipt, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT id, shop_expense_id, storage_path, content_type, size_bytes, sha256, created_at
+FROM shop_expense_receipts
+WHERE shop_expense_id = $1
+ORDER BY created_at ASC, id ASC`, expenseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ShopExpenseReceipt
+	for rows.Next() {
+		var rec ShopExpenseReceipt
+		if err := rows.Scan(
+			&rec.ID,
+			&rec.ShopExpenseID,
+			&rec.StoragePath,
+			&rec.ContentType,
+			&rec.SizeBytes,
+			&rec.SHA256,
+			&rec.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// ShopExpenseReceiptByID loads one receipt row by primary key.
+func (s *Store) ShopExpenseReceiptByID(ctx context.Context, receiptID int64) (*ShopExpenseReceipt, error) {
 	row := s.pool.QueryRow(ctx, `
 SELECT id, shop_expense_id, storage_path, content_type, size_bytes, sha256, created_at
 FROM shop_expense_receipts
-WHERE shop_expense_id = $1`, expenseID)
+WHERE id = $1`, receiptID)
 	var rec ShopExpenseReceipt
 	if err := row.Scan(
 		&rec.ID,
@@ -215,15 +248,27 @@ WHERE shop_expense_id = $1`, expenseID)
 	return &rec, nil
 }
 
-func (s *Store) DeleteShopExpenseReceipt(ctx context.Context, expenseID int64) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM shop_expense_receipts WHERE shop_expense_id = $1`, expenseID)
-	if err != nil {
-		return err
+// DeleteShopExpenseReceiptByID removes one receipt; returns the row for filesystem cleanup.
+func (s *Store) DeleteShopExpenseReceiptByID(ctx context.Context, receiptID int64) (*ShopExpenseReceipt, error) {
+	row := s.pool.QueryRow(ctx, `
+DELETE FROM shop_expense_receipts WHERE id = $1
+RETURNING id, shop_expense_id, storage_path, content_type, size_bytes, sha256, created_at`, receiptID)
+	var rec ShopExpenseReceipt
+	if err := row.Scan(
+		&rec.ID,
+		&rec.ShopExpenseID,
+		&rec.StoragePath,
+		&rec.ContentType,
+		&rec.SizeBytes,
+		&rec.SHA256,
+		&rec.CreatedAt,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return &rec, nil
 }
 
 // ListShopExpensesByYear returns expenses for a calendar year (spent_on), newest first.

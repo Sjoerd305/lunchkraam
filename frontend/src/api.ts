@@ -21,6 +21,7 @@ import {
   revolutShopExpenseImportResponseSchema,
   shopExpenseSchema,
   shopExpenseReceiptSchema,
+  shopExpenseReceiptsListResponseSchema,
   shopExpensesResponseSchema,
   tostiOrdersResponseSchema,
   tostiQueueResponseSchema,
@@ -809,11 +810,15 @@ export async function getRevolutBalance(isOperatorOnly: boolean): Promise<Revolu
   return parseApiResponse(revolutBalanceResponseSchema, await res.json())
 }
 
-export async function getShopExpenseReceipt(id: number, isOperatorOnly: boolean): Promise<ShopExpenseReceipt> {
+export async function getShopExpenseReceipts(
+  expenseId: number,
+  isOperatorOnly: boolean,
+): Promise<ShopExpenseReceipt[]> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/${id}/receipt`, { credentials: 'include' })
+  const res = await fetch(`${prefix}/shop-expenses/${expenseId}/receipt`, { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
-  return parseApiResponse(shopExpenseReceiptSchema, await res.json())
+  const payload = parseApiResponse(shopExpenseReceiptsListResponseSchema, await res.json())
+  return payload.receipts
 }
 
 export async function uploadShopExpenseReceipt(
@@ -835,8 +840,12 @@ export async function uploadShopExpenseReceipt(
   return parseApiResponse(shopExpenseReceiptSchema, await res.json())
 }
 
-export async function deleteShopExpenseReceipt(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/admin/shop-expenses/${id}/receipt`, {
+export async function deleteShopExpenseReceipt(
+  csrf: string,
+  expenseId: number,
+  receiptId: number,
+): Promise<void> {
+  const res = await fetch(`/api/admin/shop-expenses/${expenseId}/receipts/${receiptId}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrf },

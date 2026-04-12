@@ -235,10 +235,16 @@ func parseAmount(s string) (float64, error) {
 			s = strings.ReplaceAll(s, ",", "")
 		}
 	} else if strings.Contains(s, ",") && !strings.Contains(s, ".") {
-		// Could be 12,34 (EU) or 1,234 (US thousands) — if exactly one comma and two digits after, decimal
-		if i := strings.LastIndex(s, ","); i >= 0 && len(s)-i-1 == 2 {
+		// Only comma: EU decimals often use 1 or 2 fractional digits (e.g. 33,5 / 32,50). US thousands use one comma and exactly 3 digits after (1,234).
+		i := strings.LastIndex(s, ",")
+		fracLen := len(s) - i - 1
+		switch {
+		case fracLen == 1 || fracLen == 2:
 			s = strings.ReplaceAll(s, ",", ".")
-		} else {
+		case fracLen == 3 && strings.Count(s, ",") == 1:
+			s = strings.ReplaceAll(s, ",", "")
+		default:
+			// Multiple commas (e.g. 1,234,567) or unusual lengths: strip all commas as grouping separators.
 			s = strings.ReplaceAll(s, ",", "")
 		}
 	}
