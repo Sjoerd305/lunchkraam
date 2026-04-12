@@ -65,7 +65,7 @@ func (d *Deps) APIOperatorAvondetenList(w http.ResponseWriter, r *http.Request) 
 }
 
 func (d *Deps) APIOperatorAvondetenRegister(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
+	u := auth.MustUserFromContext(r.Context())
 	var body struct {
 		MealDate string  `json:"meal_date"`
 		CardIDs  []int64 `json:"card_ids"`

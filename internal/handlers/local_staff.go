@@ -76,7 +76,7 @@ func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
 			ID: row.ID, Name: row.Name, Email: row.Email,
 			IsAdmin: row.IsAdmin, IsOperator: row.IsOperator, IsMatroosJeugd: row.IsMatroosJeugd,
 			MustChangePassword: row.MustChangePassword,
-			CreatedAt:          row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			CreatedAt:          row.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 		}
 		if row.LoginUsername != nil && *row.LoginUsername != "" {
 			j.AuthKind = "local"
@@ -184,11 +184,7 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) APILocalChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
-	u, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		httpx.JSONError(w, http.StatusUnauthorized, "unauthorized", "Niet ingelogd.")
-		return
-	}
+	u := auth.MustUserFromContext(r.Context())
 	var body struct {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
@@ -262,7 +258,7 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 			"kind":              row.Kind,
 			"source":            row.Source,
 			"knipjes_remaining": row.KnipjesRemaining,
-			"created_at":        row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"created_at":        row.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 			"owner_name":        row.OwnerName,
 			"owner_email":       row.OwnerEmail,
 			"owner_user_id":     row.UserID,

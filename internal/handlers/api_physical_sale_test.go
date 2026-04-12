@@ -1,38 +1,41 @@
 package handlers
 
 import (
+	"errors"
 	"testing"
 
 	"lunchkraam/internal/store"
 )
 
-func TestValidatePhysicalCardSaleInput(t *testing.T) {
+func TestParsePhysicalCardSaleInput(t *testing.T) {
 	operator := &store.User{IsOperator: true}
 
 	t.Run("rejects non operator and non admin", func(t *testing.T) {
-		_, _, code, _ := validatePhysicalCardSaleInput(&store.User{}, 10, "tosti", "contant")
-		if code != "operator_or_admin_required" {
-			t.Fatalf("expected operator_or_admin_required, got %q", code)
+		_, err := parsePhysicalCardSaleInput(&store.User{}, 10, "tosti", "contant")
+		var inv *errPhysicalSaleInput
+		if !errors.As(err, &inv) || inv.Code != "operator_or_admin_required" {
+			t.Fatalf("expected operator_or_admin_required, got %v", err)
 		}
 	})
 
 	t.Run("rejects invalid payment method", func(t *testing.T) {
-		_, _, code, _ := validatePhysicalCardSaleInput(operator, 10, "tosti", "pin")
-		if code != "invalid_payment_method" {
-			t.Fatalf("expected invalid_payment_method, got %q", code)
+		_, err := parsePhysicalCardSaleInput(operator, 10, "tosti", "pin")
+		var inv *errPhysicalSaleInput
+		if !errors.As(err, &inv) || inv.Code != "invalid_payment_method" {
+			t.Fatalf("expected invalid_payment_method, got %v", err)
 		}
 	})
 
 	t.Run("accepts valid contant input", func(t *testing.T) {
-		kind, paymentMethod, code, _ := validatePhysicalCardSaleInput(operator, 10, "avondeten", "contant")
-		if code != "" {
-			t.Fatalf("expected no validation error, got %q", code)
+		in, err := parsePhysicalCardSaleInput(operator, 10, "avondeten", "contant")
+		if err != nil {
+			t.Fatalf("expected no validation error, got %v", err)
 		}
-		if kind != store.CardKindAvondeten {
-			t.Fatalf("expected kind %q, got %q", store.CardKindAvondeten, kind)
+		if in.Kind != store.CardKindAvondeten {
+			t.Fatalf("expected kind %q, got %q", store.CardKindAvondeten, in.Kind)
 		}
-		if paymentMethod != store.PaymentMethodContant {
-			t.Fatalf("expected payment method %q, got %q", store.PaymentMethodContant, paymentMethod)
+		if in.PaymentMethod != store.PaymentMethodContant {
+			t.Fatalf("expected payment method %q, got %q", store.PaymentMethodContant, in.PaymentMethod)
 		}
 	})
 }

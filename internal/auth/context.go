@@ -19,6 +19,16 @@ func UserFromContext(ctx context.Context) (*store.User, bool) {
 	return u, ok
 }
 
+// MustUserFromContext returns the authenticated user set by RequireUserAPI (or equivalent).
+// It panics if the user is missing — only use on routes that always run that middleware.
+func MustUserFromContext(ctx context.Context) *store.User {
+	u, ok := UserFromContext(ctx)
+	if !ok || u == nil {
+		panic("auth: no user in context (route must use RequireUserAPI)")
+	}
+	return u
+}
+
 func WithUser(ctx context.Context, u *store.User) context.Context {
 	return context.WithValue(ctx, ctxKeyUser, u)
 }

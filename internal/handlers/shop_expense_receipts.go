@@ -152,7 +152,7 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 		"content_type":    rec.ContentType,
 		"size_bytes":      rec.SizeBytes,
 		"sha256":          rec.SHA256,
-		"created_at":      rec.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		"created_at":      rec.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 		"image_url":       expenseReceiptImageURL(r, expenseID),
 	})
 }
@@ -178,7 +178,7 @@ func (d *Deps) APIShopExpenseReceiptMeta(w http.ResponseWriter, r *http.Request)
 		"content_type":    rec.ContentType,
 		"size_bytes":      rec.SizeBytes,
 		"sha256":          rec.SHA256,
-		"created_at":      rec.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		"created_at":      rec.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 		"image_url":       expenseReceiptImageURL(r, expenseID),
 	})
 }

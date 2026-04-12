@@ -23,6 +23,8 @@ func OptionalUser(st *store.Store) func(http.Handler) http.Handler {
 			}
 			u, err := st.UserByID(r.Context(), id)
 			if err != nil {
+				auth.ClearSessionUser(sess)
+				_ = sess.Save(r, w)
 				next.ServeHTTP(w, r)
 				return
 			}

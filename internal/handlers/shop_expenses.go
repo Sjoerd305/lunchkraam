@@ -56,18 +56,14 @@ func (d *Deps) APIAdminShopExpensesList(w http.ResponseWriter, r *http.Request) 
 			"spent_on":     e.SpentOn.Format("2006-01-02"),
 			"description":  e.Description,
 			"purpose":      e.Purpose,
-			"created_at":   e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"created_at":   e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"year": year, "expenses": out})
 }
 
 func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request) {
-	u, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		httpx.JSONError(w, http.StatusUnauthorized, "unauthorized", "Niet ingelogd.")
-		return
-	}
+	u := auth.MustUserFromContext(r.Context())
 	var body struct {
 		AmountEUR   any    `json:"amount_eur"`
 		SpentOn     string `json:"spent_on"`
@@ -128,7 +124,7 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		"spent_on":     e.SpentOn.Format("2006-01-02"),
 		"description":  e.Description,
 		"purpose":      e.Purpose,
-		"created_at":   e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		"created_at":   e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 	})
 }
 

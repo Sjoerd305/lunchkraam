@@ -62,24 +62,24 @@ func tostiOrderToJSON(o store.TostiOrder) tostiOrderJSON {
 		Bread:             o.Bread,
 		Filling:           o.Filling,
 		Status:            o.Status,
-		CreatedAt:         o.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		CreatedAt:         o.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 		DeliveredByUserID: o.DeliveredByUserID,
 		CancelledByUserID: o.CancelledByUserID,
 		Remark:            o.Remark,
 	}
 	if o.DeliveredAt != nil {
-		s := o.DeliveredAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+		s := o.DeliveredAt.UTC().Format(httpx.JSONTimeLayout)
 		j.DeliveredAt = &s
 	}
 	if o.CancelledAt != nil {
-		s := o.CancelledAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+		s := o.CancelledAt.UTC().Format(httpx.JSONTimeLayout)
 		j.CancelledAt = &s
 	}
 	return j
 }
 
 func (d *Deps) APITostiOrdersQueue(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
+	u := auth.MustUserFromContext(r.Context())
 	list, err := d.Store.ListPendingTostiOrdersForOperator(r.Context(), 200)
 	if err != nil {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Wachtrij laden mislukt.")
@@ -95,7 +95,7 @@ func (d *Deps) APITostiOrdersQueue(w http.ResponseWriter, r *http.Request) {
 			Quantity:       row.Quantity,
 			Bread:          row.Bread,
 			Filling:        row.Filling,
-			CreatedAt:      row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			CreatedAt:      row.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
 			CustomerName:   row.CustomerName,
 			IsMine:         row.UserID == u.ID,
 		})
@@ -104,7 +104,7 @@ func (d *Deps) APITostiOrdersQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) APITostiOrdersMine(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
+	u := auth.MustUserFromContext(r.Context())
 	list, err := d.Store.ListTostiOrdersForUser(r.Context(), u.ID, 50)
 	if err != nil {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestellingen laden mislukt.")
@@ -118,7 +118,7 @@ func (d *Deps) APITostiOrdersMine(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
+	u := auth.MustUserFromContext(r.Context())
 	var body struct {
 		CardID       int64  `json:"card_id"`
 		PhysicalCard bool   `json:"physical_card"`
@@ -181,7 +181,7 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) APITostiOrderCancel(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
+	u := auth.MustUserFromContext(r.Context())
 	idStr := chi.URLParam(r, "id")
 	oid, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -224,7 +224,7 @@ func (d *Deps) APIOperatorTostiOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
+	u := auth.MustUserFromContext(r.Context())
 	idStr := chi.URLParam(r, "id")
 	oid, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -261,7 +261,7 @@ func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Reque
 }
 
 func (d *Deps) APIOperatorTostiOrderCancel(w http.ResponseWriter, r *http.Request) {
-	u, _ := auth.UserFromContext(r.Context())
+	u := auth.MustUserFromContext(r.Context())
 	idStr := chi.URLParam(r, "id")
 	oid, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
