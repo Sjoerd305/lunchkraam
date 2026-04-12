@@ -54,19 +54,22 @@ WHERE id = $1 AND knipjes_remaining > 0`
 	return nil
 }
 
-// UseKnipje lets an admin/operator use one punch on a card (tosti or avondeten).
-// Avondeten day-list debits use RegisterAvondetenMealsForDate instead.
+// UseKnipje lets an admin/operator use one punch on a non-physical card (tosti or avondeten).
+// Physical cards are read-only in the app; Avondeten day-list debits use RegisterAvondetenMealsForDate.
 func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
 	if !actor.IsAdmin && !actor.IsOperator {
 		return ErrForbidden
 	}
-	var exists int
-	err := s.pool.QueryRow(ctx, `SELECT 1 FROM cards WHERE id = $1`, cardID).Scan(&exists)
+	var source string
+	err := s.pool.QueryRow(ctx, `SELECT source::text FROM cards WHERE id = $1`, cardID).Scan(&source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
+	}
+	if source == "physical" {
+		return ErrCardPhysicalReadonly
 	}
 	return s.useKnipjeAnyCard(ctx, cardID)
 }
