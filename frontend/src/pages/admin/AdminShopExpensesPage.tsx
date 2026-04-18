@@ -66,6 +66,8 @@ export function AdminShopExpensesPage() {
   const [revolutCreditAvondetenEUR, setRevolutCreditAvondetenEUR] = useState('10')
   const [revolutBalance, setRevolutBalance] = useState<api.RevolutBalance | null>(null)
   const [revolutBalanceLoading, setRevolutBalanceLoading] = useState(false)
+  const [pendingReviews, setPendingReviews] = useState<api.PendingImportReview[]>([])
+  const [reviewActioning, setReviewActioning] = useState<number | null>(null)
 
   const loadRevolutBalance = useCallback(async () => {
     if (!user) return
@@ -80,9 +82,23 @@ export function AdminShopExpensesPage() {
     }
   }, [user, isOperatorOnly])
 
+  const loadPendingReviews = useCallback(async () => {
+    if (!user) return
+    try {
+      const reviews = await api.getPendingImportReviews(isOperatorOnly)
+      setPendingReviews(reviews)
+    } catch {
+      setPendingReviews([])
+    }
+  }, [user, isOperatorOnly])
+
   useEffect(() => {
     void loadRevolutBalance()
   }, [loadRevolutBalance])
+
+  useEffect(() => {
+    void loadPendingReviews()
+  }, [loadPendingReviews])
 
   useEffect(() => {
     if (!user) return
@@ -267,6 +283,34 @@ export function AdminShopExpensesPage() {
     setNewReceiptFile(file)
   }
 
+  async function onMergeReview(reviewId: number) {
+    if (year === null) return
+    setReviewActioning(reviewId)
+    try {
+      await api.mergePendingReview(csrf, reviewId, isOperatorOnly)
+      await loadPendingReviews()
+      await loadList(year)
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Samenvoegen mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setReviewActioning(null)
+    }
+  }
+
+  async function onDismissReview(reviewId: number) {
+    setReviewActioning(reviewId)
+    try {
+      await api.dismissPendingReview(csrf, reviewId, isOperatorOnly)
+      await loadPendingReviews()
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Overslaan mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setReviewActioning(null)
+    }
+  }
+
   async function runRevolutImport() {
     if (!user) {
       await alert({
@@ -299,14 +343,21 @@ export function AdminShopExpensesPage() {
       const debitLine = r.dry_run
         ? `Uitgaven (proef): ${r.debits_imported} geïmporteerd, ${r.debits_skipped} overgeslagen.`
         : `Uitgaven: ${r.debits_imported} geïmporteerd of bijgewerkt, ${r.debits_skipped} overgeslagen.`
+      const pendingLine =
+        !r.dry_run && r.debits_pending_review > 0
+          ? `${r.debits_pending_review} mogelijke duplica${r.debits_pending_review === 1 ? 'at' : 'ten'} gevonden (controleer hieronder).`
+          : ''
       const creditLine =
         r.credits_enabled &&
         (r.dry_run
           ? `Inkomsten (proef): ${r.credits_imported} zouden worden geboekt, ${r.credits_skipped} overgeslagen.`
           : `Inkomsten: ${r.credits_imported} geboekt, ${r.credits_skipped} overgeslagen.`)
-      const msg = creditLine ? `${debitLine}\n${creditLine}` : debitLine
+      const msg = [debitLine, pendingLine, creditLine].filter(Boolean).join('\n')
       await alert({ title: r.dry_run ? 'Proefrun' : 'Revolut-import', message: msg, variant: 'success' })
-      if (!r.dry_run) void loadRevolutBalance()
+      if (!r.dry_run) {
+        void loadRevolutBalance()
+        void loadPendingReviews()
+      }
       if (!r.dry_run && (r.debits_imported > 0 || r.credits_imported > 0)) await loadList(yearToRefresh)
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Importeren mislukt.'
@@ -594,6 +645,66 @@ export function AdminShopExpensesPage() {
           </div>
         </form>
       </section>
+
+      {pendingReviews.length > 0 && (
+        <section className="surface-card">
+          <h3 className="text-sm font-semibold text-slate-800">
+            Mogelijke duplicaten ({pendingReviews.length})
+          </h3>
+          <p className="mt-2 text-sm text-slate-600">
+            Deze Revolut-transacties komen overeen met handmatig ingevoerde uitgaven (zelfde bedrag en datum). Kies per
+            regel wat je wilt doen.
+          </p>
+          <div className="mt-4 space-y-4">
+            {pendingReviews.map((rv) => (
+              <div key={rv.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revolut-import</span>
+                    <p className="mt-1 font-medium tabular-nums text-slate-900">{formatEUR(rv.revolut.amount_eur)}</p>
+                    <p className="text-sm text-slate-700">{rv.revolut.spent_on}</p>
+                    <p className="text-xs text-slate-600">{rv.revolut.description || '\u2014'}</p>
+                    <p className="text-xs text-slate-500">{shopExpensePurposeLabel(rv.revolut.purpose)}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Handmatige boeking
+                    </span>
+                    <p className="mt-1 font-medium tabular-nums text-slate-900">
+                      {formatEUR(rv.matched_manual.amount_eur)}
+                    </p>
+                    <p className="text-sm text-slate-700">{rv.matched_manual.spent_on}</p>
+                    <p className="text-xs text-slate-600">{rv.matched_manual.description || '\u2014'}</p>
+                    <p className="text-xs text-slate-500">{shopExpensePurposeLabel(rv.matched_manual.purpose)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={reviewActioning === rv.id}
+                    onClick={() => void onMergeReview(rv.id)}
+                    className="btn-primary min-h-9 px-3 text-xs"
+                  >
+                    {reviewActioning === rv.id ? 'Bezig\u2026' : 'Samenvoegen'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reviewActioning === rv.id}
+                    onClick={() => void onDismissReview(rv.id)}
+                    className="text-xs font-semibold text-red-700 hover:text-red-900"
+                  >
+                    Overslaan
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Samenvoegen = handmatige boeking verwijderen, Revolut-import behouden (bonnetjes worden overgezet).
+                  Overslaan = Revolut-import negeren.
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="surface-card">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

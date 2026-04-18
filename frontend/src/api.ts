@@ -16,6 +16,7 @@ import {
   operatorCardSaleResponseSchema,
   operatorTostiOrdersResponseSchema,
   operatorTostiSoldTodaySchema,
+  pendingImportReviewsResponseSchema,
   registeredCountResponseSchema,
   revolutBalanceResponseSchema,
   revolutShopExpenseImportResponseSchema,
@@ -200,10 +201,31 @@ export type RevolutShopExpenseImportResult = {
   skipped: number
   debits_imported: number
   debits_skipped: number
+  debits_pending_review: number
   credits_imported: number
   credits_skipped: number
   credits_enabled: boolean
   dry_run: boolean
+}
+
+export type PendingImportReview = {
+  id: number
+  revolut: {
+    amount_eur: number
+    spent_on: string
+    description: string
+    purpose: ShopExpensePurpose
+    external_id: string
+  }
+  matched_manual: {
+    id: number
+    amount_eur: number
+    spent_on: string
+    description: string
+    purpose: ShopExpensePurpose
+    source: string
+  }
+  created_at: string
 }
 
 export type RevolutBalance = {
@@ -847,6 +869,34 @@ export async function deleteShopExpenseReceipt(
 ): Promise<void> {
   const res = await fetch(`/api/admin/shop-expenses/${expenseId}/receipts/${receiptId}`, {
     method: 'DELETE',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
+export async function getPendingImportReviews(isOperatorOnly: boolean): Promise<PendingImportReview[]> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/shop-expenses/pending-reviews`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  const payload = parseApiResponse(pendingImportReviewsResponseSchema, await res.json())
+  return payload.reviews
+}
+
+export async function mergePendingReview(csrf: string, id: number, isOperatorOnly: boolean): Promise<void> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/shop-expenses/pending-reviews/${id}/merge`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+  })
+  if (!res.ok) throw await parseError(res)
+}
+
+export async function dismissPendingReview(csrf: string, id: number, isOperatorOnly: boolean): Promise<void> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/shop-expenses/pending-reviews/${id}/dismiss`, {
+    method: 'POST',
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrf },
   })

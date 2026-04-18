@@ -145,13 +145,14 @@ func (d *Deps) APIShopExpensesRevolutImport(w http.ResponseWriter, r *http.Reque
 	}
 
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"imported":         debitRes.Imported,
-		"skipped":          debitRes.Skipped,
-		"debits_imported":  debitRes.Imported,
-		"debits_skipped":   debitRes.Skipped,
-		"credits_imported": creditRes.Imported,
-		"credits_skipped":  creditRes.Skipped,
-		"credits_enabled":  importCredits,
-		"dry_run":          dryRun,
+		"imported":               debitRes.Imported,
+		"skipped":                debitRes.Skipped,
+		"debits_imported":        debitRes.Imported,
+		"debits_skipped":         debitRes.Skipped,
+		"debits_pending_review":  debitRes.PendingReview,
+		"credits_imported":       creditRes.Imported,
+		"credits_skipped":        creditRes.Skipped,
+		"credits_enabled":        importCredits,
+		"dry_run":                dryRun,
 	})
 }

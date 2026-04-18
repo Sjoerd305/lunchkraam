@@ -330,10 +330,35 @@ export const revolutShopExpenseImportResponseSchema = z.object({
   skipped: intWithDefault(0),
   debits_imported: intWithDefault(0),
   debits_skipped: intWithDefault(0),
+  debits_pending_review: intWithDefault(0),
   credits_imported: intWithDefault(0),
   credits_skipped: intWithDefault(0),
   credits_enabled: z.boolean().catch(false),
   dry_run: z.boolean().catch(false),
+})
+
+export const pendingImportReviewSchema = z.object({
+  id: intWithDefault(0),
+  revolut: z.object({
+    amount_eur: floatWithDefault(0),
+    spent_on: stringWithDefault(''),
+    description: stringWithDefault(''),
+    purpose: shopExpensePurposeSchema,
+    external_id: stringWithDefault(''),
+  }),
+  matched_manual: z.object({
+    id: intWithDefault(0),
+    amount_eur: floatWithDefault(0),
+    spent_on: stringWithDefault(''),
+    description: stringWithDefault(''),
+    purpose: shopExpensePurposeSchema,
+    source: stringWithDefault('manual'),
+  }),
+  created_at: stringWithDefault(''),
+})
+
+export const pendingImportReviewsResponseSchema = z.object({
+  reviews: z.array(pendingImportReviewSchema).catch([]),
 })
 
 export const revolutBalanceResponseSchema = z.object({

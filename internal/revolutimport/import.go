@@ -59,9 +59,10 @@ type CreditOptions struct {
 
 // Result is returned after scanning the CSV (and optionally writing to the DB).
 type Result struct {
-	Imported int
-	Skipped  int
-	DryRun   bool
+	Imported      int
+	Skipped       int
+	PendingReview int // rows flagged for duplicate review instead of imported
+	DryRun        bool
 }
 
 // ParseSkipTypes builds a set of uppercase type names to skip.
@@ -199,6 +200,35 @@ func ImportDebitRows(ctx context.Context, st *store.Store, rows []revolutcsv.Row
 			res.Imported++
 			continue
 		}
+
+		// Check if this Revolut row already exists in shop_expenses (re-import).
+		alreadyImported, err := st.ShopExpenseExistsBySourceAndExternalID(ctx, store.ShopExpenseSourceRevolut, extID)
+		if err != nil {
+			return res, fmt.Errorf("exists check %s: %w", extID, err)
+		}
+		if alreadyImported {
+			// Re-import: just update the existing row, no duplicate detection needed.
+			if _, err := st.UpsertImportedShopExpense(ctx, store.ShopExpenseSourceRevolut, extID, o.CreatedBy, amt, spentOn, desc, purpose); err != nil {
+				return res, fmt.Errorf("upsert %s: %w", extID, err)
+			}
+			res.Imported++
+			continue
+		}
+
+		// New Revolut row: check for matching manual expenses (same amount + date).
+		matches, err := st.FindMatchingManualExpenses(ctx, amt, spentOn)
+		if err != nil {
+			return res, fmt.Errorf("duplicate check %s: %w", extID, err)
+		}
+		if len(matches) > 0 {
+			// Flag for review instead of importing directly.
+			if _, err := st.InsertPendingImportReview(ctx, amt, spentOn, desc, purpose, store.ShopExpenseSourceRevolut, extID, matches[0].ID, o.CreatedBy); err != nil {
+				return res, fmt.Errorf("pending review %s: %w", extID, err)
+			}
+			res.PendingReview++
+			continue
+		}
+
 		if _, err := st.UpsertImportedShopExpense(ctx, store.ShopExpenseSourceRevolut, extID, o.CreatedBy, amt, spentOn, desc, purpose); err != nil {
 			return res, fmt.Errorf("upsert %s: %w", extID, err)
 		}
