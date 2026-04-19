@@ -20,7 +20,7 @@ Vite proxy’t `/api` en `/ws` naar `127.0.0.1:8080` (zie `vite.config.ts`).
 
 ## API-contract
 
-Responses worden in de UI gevalideerd met Zod: `src/api.ts` en `src/api.schemas.ts`. Zie ook de root-[README](../README.md) (sectie Frontend API-contracten).
+Responses worden in de UI gevalideerd met Zod: `src/api/` (barrel `index.ts` + domeinmodules) en `src/api.schemas.ts`. Zie ook de root-[README](../README.md) (sectie Frontend API-contracten).
 
 ## Meer documentatie
 

@@ -42,8 +42,8 @@
 - [x] Gedeelde **`formatEUR`** / **`roundCents`** in [frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts) (`Intl.NumberFormat` NL + EUR).
 - [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings); **buiten admin** staan nog losse `€`-strings op o.a. Buy/Dashboard — zie *Production backlog — code*.
 - [x] **Admin grafieken** (`AdminSalesCharts`): `roundCents` i.p.v. herhaalde `Math.round(x*100)/100`.
-- [x] **Zod** — response- en payload-types in `api.ts` via `z.infer<typeof …Schema>` gekoppeld aan [frontend/src/api.schemas.ts](frontend/src/api.schemas.ts) (sub-schema’s geëxporteerd waar nodig).
-- [x] Optioneel: **`apiRequest`-factory** (`apiJson` / `apiVoid` / `apiFormJson` in [frontend/src/apiRequest.ts](frontend/src/apiRequest.ts)) — `api.ts` gebruikt dit centraal.
+- [x] **Zod** — response- en payload-types in [frontend/src/api/types.ts](../frontend/src/api/types.ts) (barrel [frontend/src/api/index.ts](../frontend/src/api/index.ts)) via `z.infer<typeof …Schema>` gekoppeld aan [frontend/src/api.schemas.ts](frontend/src/api.schemas.ts) (sub-schema’s geëxporteerd waar nodig).
+- [x] Optioneel: **`apiRequest`-factory** (`apiJson` / `apiVoid` / `apiFormJson` in [frontend/src/apiRequest.ts](frontend/src/apiRequest.ts)) — domeinmodules onder `frontend/src/api/` gebruiken dit centraal.
 - [x] Optioneel: **TanStack Query** — `QueryClientProvider` in [frontend/src/main.tsx](frontend/src/main.tsx); admin-pagina’s met server state gebruiken `useQuery` / `invalidateQueries` (o.a. dashboard, requests, users, settings, sales charts, expenses overview, finance, shop expenses).
 
 ### Code review / vervolg (korte scan 2026-04-19)
@@ -144,11 +144,12 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 
 | Veld | Inhoud |
 |------|--------|
-| **Doel** | `frontend/src/api.ts` (~640+ regels) splitsen in domeinmodules zonder alle import-paden in de app te breken. |
-| **Wijzigingen** | Bijv. `api/client.ts` (csrf, base URL), `api/adminFinance.ts`, `api/shopExpenses.ts`, … + `api/index.ts` die alles re-exporteert. Call sites kunnen gefaseerd `from '../api/adminFinance'` krijgen **of** ongewijzigd `from '../api'` houden via barrel file. |
-| **Acceptatie** | Geen gedragwijziging; bundelgrootte vergelijkbaar of beter; circulaire imports vermijden. |
-| **Risico** | Medium (import cycles) — tooling: `tsc -b` en grep op dubbele exports. |
+| **Doel** | Monoliet `api.ts` (~640+ regels) splitsen in domeinmodules zonder alle import-paden in de app te breken. |
+| **Wijzigingen (uitgevoerd)** | Map [frontend/src/api/](../frontend/src/api/): `types.ts` (alle `z.infer`-types + `CreateTostiOrderBody`), `auth.ts`, `adminUsers.ts`, `operator.ts`, `tostiOrders.ts`, `memberBuy.ts`, `sales.ts`, `shopExpenses.ts`, `adminRequests.ts`, `adminSettings.ts`, `bankCredits.ts`, [index.ts](../frontend/src/api/index.ts) (re-export + `ApiError`). Monoliet `api.ts` verwijderd; `from '../api'` blijft via directory-barrel. |
+| **Acceptatie** | `npm run build` groen; geen gedragwijziging; geen circulaire imports tussen domeinmodules. |
+| **Risico** | Medium (import cycles) — mitigatie: types alleen in `types.ts`, domeinbestanden importeren `../apiRequest` + `../api.schemas` + `./types`. |
 | **Grootte** | Medium (mechanisch). |
+| **Status** | **Gedaan**. |
 
 ### PR-G — Frontend: `KraamPage` + realtime op TanStack Query
 
@@ -194,8 +195,8 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 2. **PR-B** (Revolut handler-split) — **afgerond**.  
 3. **PR-C** (`httptest` smoke) — **afgerond**.  
 4. **PR-D** (CLI `slog`) — **afgerond**.  
-5. **PR-E** (`AdminShopExpensesPage`-split) — **afgerond**. Vervolg: **PR-F** (api-modularisatie).  
-6. **PR-F** (api-modularisatie) — vóór of na **PR-G/H** afhankelijk van conflict-pijn.  
+5. **PR-E** (`AdminShopExpensesPage`-split) — **afgerond**.  
+6. **PR-F** (api-modularisatie) — **afgerond**. Vervolg: **PR-G** / **PR-H** (Query-migraties) naar behoefte.  
 7. **PR-G** / **PR-H** (Query-migraties) — in deel-PR’s als review-capaciteit beperkt is.  
 8. **PR-I** — wanneer prioriteit voor WS/error-hardening.
 
@@ -209,7 +210,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G**, **PR-H** |
 | *Code health — backend* HTTP smoke / uitbreidbare `httptest` | **PR-C** (**gedaan**) |
 | *Code review* CLI `slog` (`revolut-import`) | **PR-D** (**gedaan**) |
-| Geen expliciete regel maar scan-bevinding | **PR-A** (**gedaan**), **PR-E** (**gedaan**), **PR-F**, **PR-I** |
+| Geen expliciete regel maar scan-bevinding | **PR-A** (**gedaan**), **PR-E** (**gedaan**), **PR-F** (**gedaan**), **PR-I** |
 
 ## Libraries vs zelf bouwen (richtlijn)
 

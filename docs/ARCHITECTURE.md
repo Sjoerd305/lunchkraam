@@ -12,7 +12,7 @@ Dit document vult de [README](../README.md) aan met een beknopte technische uitl
 - **`internal/middleware`**: Sessie, CSRF-bescherming op `/api`, auth/rollen, rate limits.
 - **`internal/auth`**: Google OAuth-config en profiel/domain-checks.
 - **`internal/realtime`**: Hub voor WebSocket-“hints”.
-- **`frontend/`**: React/Vite-SPA; [`frontend/src/api.ts`](../frontend/src/api.ts) + [`api.schemas.ts`](../frontend/src/api.schemas.ts) voor Zod-gevalideerde API-responses.
+- **`frontend/`**: React/Vite-SPA; [`frontend/src/api/`](../frontend/src/api/index.ts) (barrel + domeinmodules) + [`api.schemas.ts`](../frontend/src/api.schemas.ts) voor Zod-gevalideerde API-responses.
 
 ## Runtime en deployment (hoog niveau)
 

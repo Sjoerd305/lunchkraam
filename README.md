@@ -112,7 +112,7 @@ scripts/restore-database.sh --skip-receipts backups/lunchkraam-20260401-031500.s
 
 ## Frontend API-contracten
 
-- De frontend valideert `res.json()`-payloads in `frontend/src/api.ts` met **Zod**.
+- De frontend valideert `res.json()`-payloads in `frontend/src/api/` (HTTP-clientmodules + barrel) met **Zod**.
 - Definieer response-schema's centraal in `frontend/src/api.schemas.ts`.
 - Houd endpoint-functies klein: `fetch` + `parseApiResponse(...)` + `return`.
 - Gebruik default-first parsing (`.default()` / `.catch()`) voor niet-kritieke velden zodat UI's robuust blijven.
