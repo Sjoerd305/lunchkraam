@@ -319,6 +319,29 @@ export const adminSalesStatsResponseSchema = z.object({
   tosti_by_kind: z.array(adminTostiKindBucketSchema).catch([]),
 })
 
+export const financeControlMonthStatusSchema = z.enum([
+  'no_activity',
+  'in_sync',
+  'revolut_imports_higher',
+  'app_revenue_higher',
+])
+
+export const financeControlMonthRowSchema = z.object({
+  month: intWithDefault(0),
+  label_nl: stringWithDefault(''),
+  revolut_imports_eur: floatWithDefault(0),
+  app_revenue_eur: floatWithDefault(0),
+  delta_eur: floatWithDefault(0),
+  status: financeControlMonthStatusSchema,
+})
+
+export const financeControlResponseSchema = z.object({
+  year: intWithDefault(0),
+  timezone: stringWithDefault('Europe/Amsterdam'),
+  months: z.array(financeControlMonthRowSchema).catch([]),
+  method_note_nl: stringWithDefault(''),
+})
+
 export const shopExpenseSchema = z.object({
   id: intWithDefault(0),
   amount_eur: floatWithDefault(0),

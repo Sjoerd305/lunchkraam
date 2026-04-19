@@ -12,6 +12,7 @@ Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de
 Deze README is het startpunt (runbook, rollen, backups, API-conventies). Daarnaast:
 
 - **Architectuur** (code-indeling, Mermaid-diagrammen voor o.a. runtime, CI/CD, OAuth, realtime): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Overzicht van HTTP-routes staat in [`cmd/server/main.go`](cmd/server/main.go).
+- **Vrijwilligers (financiën, import, waar saldo staat):** [docs/VOLUNTEERS.md](docs/VOLUNTEERS.md)
 - **Beveiliging** (kwetsbaarheden verantwoord melden): [SECURITY.md](SECURITY.md)
 
 ## Vereisten

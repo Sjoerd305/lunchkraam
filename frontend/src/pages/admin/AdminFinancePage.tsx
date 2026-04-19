@@ -242,6 +242,13 @@ export function AdminFinancePage() {
           <Link to="/admin/expenses" className="font-semibold text-brand-800 underline hover:text-brand-950">
             Boodschappen
           </Link>
+          {' · '}
+          <Link
+            to="/admin/finance-control"
+            className="font-semibold text-brand-800 underline hover:text-brand-950"
+          >
+            Verkoopcontrole
+          </Link>
         </p>
       </section>
 

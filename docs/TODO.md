@@ -11,19 +11,19 @@
 ## Revolut vs tostikraam-verkoop
 
 - [x] **Saldo / import:** Revolut-CSV-import (uitgaven + optioneel inkomsten als bank-omzet), saldo uit afschrift-kolom op **Boodschappen** (`AdminShopExpensesPage`), openstaande bankregels koppelen op **Financiën** (`AdminFinancePage`).
-- [ ] **Saldo vs verwachting in één beeld:** expliciet **voor / achter / synchroon** tov **verwachte omzet** (cumulatief of per periode) — nu wel **maandvergelijking** Revolut-credits vs app-omzet via CLI: `cmd/revolut-import` (reconcile-modus), nog geen dedicated in-app rapport met die legenda.
+- [x] **Saldo vs verwachting in één beeld:** maandvergelijking in-app onder **Beheer → Verkoopcontrole** (zelfde delta-teken als `cmd/revolut-import reconcile`; legenda synchroon / Revolut hoger / App hoger). CLI blijft nuttig voor ruwe CSV. — **PR-K** (MVP geleverd; uitbreidingen mogelijk).
 - [x] **Avondeten vs lunchkraam:** zelfde rekening, **apart doel** (`lunchkraam` / `avondeten`) bij import en handmatige boekingen; omzet- en uitgaven**split** in dashboard, grafieken, overzichten en import-voorbeeld.
 
 ## Losse posten (buiten digitale Revolut-lijn)
 
 - [x] **Handmatige uitgaven / kas:** contante en digitale uitgave + **contant bij kas** op **Boodschappen**; dubbele import vs handmatige bon → **wachtrij** (pending reviews).
-- [ ] **Overige correcties** expliciet modelleren (bijv. terugbetalingen, afspraken andere speltak/gasten) als jullie dat **niet** genoeg vinden onder bestaande boekingen + “bank zonder verkoop” op Financiën — productkeuze / korte workflow in UI.
-- [ ] Optioneel: **toelichting of tags** bij importregels (bijv. afwijkende Tikkie-groep) als **administratieve context**, zonder een tweede gelijke boeking te maken.
+- [ ] **Overige correcties** expliciet modelleren (bijv. terugbetalingen, afspraken andere speltak/gasten) als jullie dat **niet** genoeg vinden onder bestaande boekingen + “bank zonder verkoop” op Financiën — productkeuze / korte workflow in UI — **PR-L**.
+- [ ] Optioneel: **toelichting of tags** bij importregels (bijv. afwijkende Tikkie-groep) als **administratieve context**, zonder een tweede gelijke boeking te maken — **PR-M** (los of als fase 2 na **PR-L**).
 
 ## Nog uit te werken in product / UI
 
-- [ ] **Verkoopcontrole-scherm** (alles in één scherm met legenda *voor/achter/synchroon*): deels gedekt door **Dashboard** + **Overzichten** + **Financiën** + CLI-reconcile; nog geen aparte “controle”-pagina.
-- [ ] **Documentatie vrijwilligers:** kort **stappenplan** (import vs handmatig, waar saldo staat, hoe koppelen) — nu vooral in UI-teksten en [docs/ARCHITECTURE.md](ARCHITECTURE.md); geen aparte handleiding.
+- [x] **Verkoopcontrole-scherm:** **Beheer → Verkoopcontrole** (`GET /api/admin|operator/finance-control`) met maandtabel + legenda; link vanaf Financiën. — **PR-K** (MVP).
+- [x] **Documentatie vrijwilligers:** [docs/VOLUNTEERS.md](VOLUNTEERS.md) + link vanuit [README.md](../README.md). — **PR-O** (basis; optioneel uitbreiden met screenshots / extra UI-links).
 
 ## Code health — backend
 
@@ -40,7 +40,7 @@
 *Last reviewed: 2026-04-19 (follow-up scan)*
 
 - [x] Gedeelde **`formatEUR`** / **`roundCents`** in [frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts) (`Intl.NumberFormat` NL + EUR).
-- [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings); **buiten admin** staan nog losse `€`-strings op o.a. Buy/Dashboard — zie *Production backlog — code*.
+- [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings); **Buy** en **Dashboard** gebruiken `formatEURFromString` voor dynamische bedragen. Het symbool **€** in vaste copy (labels, uitleg, o.a. admin Revolut-teksten) is cosmetisch en staat los van *Production backlog — code* tenzij jullie alles uniform willen trekken.
 - [x] **Admin grafieken** (`AdminSalesCharts`): `roundCents` i.p.v. herhaalde `Math.round(x*100)/100`.
 - [x] **Zod** — response- en payload-types in [frontend/src/api/types.ts](../frontend/src/api/types.ts) (barrel [frontend/src/api/index.ts](../frontend/src/api/index.ts)) via `z.infer<typeof …Schema>` gekoppeld aan [frontend/src/api.schemas.ts](frontend/src/api.schemas.ts) (sub-schema’s geëxporteerd waar nodig).
 - [x] Optioneel: **`apiRequest`-factory** (`apiJson` / `apiVoid` / `apiFormJson` in [frontend/src/apiRequest.ts](frontend/src/apiRequest.ts)) — domeinmodules onder `frontend/src/api/` gebruiken dit centraal.
@@ -63,14 +63,14 @@
 - [x] **Generieke 500 + DB-fouten:** [internal/httpx/logged_errors.go](internal/httpx/logged_errors.go) (`RespondInternalStoreError`) op `"Databasefout."`-paden in handlers.
 - [x] **Bank credit store:** types/errors + `scanBankCreditListRow` naar [internal/store/bank_credit_types.go](internal/store/bank_credit_types.go) (lijst-SQL blijft in `bank_credit_reconciliation.go`).
 - [x] **Revolut shop import (HTTP-laag):** opgesplitst — dunne handlers in [internal/handlers/shop_expenses_revolut_import.go](../internal/handlers/shop_expenses_revolut_import.go); formulier/CSV/response-helpers in `revolut_shop_expenses_*.go` (zelfde package).
-- [ ] **Nog te splitsen / afsmullen:** o.a. [internal/handlers/api_admin_sales.go](internal/handlers/api_admin_sales.go) (DTO-rounding helper), [internal/store/shop_expenses.go](internal/store/shop_expenses.go).
+- [ ] **Nog te splitsen / afsmullen:** o.a. [internal/handlers/api_admin_sales.go](internal/handlers/api_admin_sales.go) (DTO-rounding helper), [internal/store/shop_expenses.go](internal/store/shop_expenses.go) — **PR-N**.
 
 **Frontend**
 
 - [x] **`useQueryErrorAlert`:** zie hook hierboven + admin-pagina’s.
 - [x] **Card-kind labels/badges:** [frontend/src/utils/cardKindPresentation.ts](frontend/src/utils/cardKindPresentation.ts); Kraam re-exporteert vanuit [frontend/src/pages/kraam/kraamFormat.ts](frontend/src/pages/kraam/kraamFormat.ts).
 - [x] **Lidgerichte + chart-tick euro’s:** `formatEURFromString` / `formatEUR` op Buy, Dashboard, admin-grafieken ([frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts)).
-- [x] **TanStack Query (deels):** `queryKeys.member` + [frontend/src/pages/CardsPage.tsx](frontend/src/pages/CardsPage.tsx) op Query; [frontend/src/pages/BuyPage.tsx](frontend/src/pages/BuyPage.tsx) invalideert `myCards` na mutaties.
+- [x] **TanStack Query (lid + operator):** `queryKeys.member` / `operator` + [CardsPage](../frontend/src/pages/CardsPage.tsx), [BuyPage](../frontend/src/pages/BuyPage.tsx) (`buyInfo` + `myCards`), [OrderTostiPage](../frontend/src/pages/OrderTostiPage.tsx), [KraamPage](../frontend/src/pages/KraamPage.tsx) — zie **PR-G** / **PR-H**.
 - [x] **Kraam (operator):** Query + WebSocket `invalidateQueries` — [frontend/src/pages/KraamPage.tsx](../frontend/src/pages/KraamPage.tsx), `queryKeys.operator.*` in [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts).  
 - [x] **OrderTosti + Buy (lid):** `useQuery` + `invalidateQueries` — [frontend/src/pages/OrderTostiPage.tsx](../frontend/src/pages/OrderTostiPage.tsx), [frontend/src/pages/BuyPage.tsx](../frontend/src/pages/BuyPage.tsx); `queryKeys.member.myTostiOrders` + `tostiQueue` in [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts) (**PR-H**).
 - [x] **Zod randgevallen:** WebSocket-envelope in [frontend/src/useTostiRealtime.ts](../frontend/src/useTostiRealtime.ts); veilige error-body in [frontend/src/apiRequest.ts](../frontend/src/apiRequest.ts) (`parseError`) + [frontend/src/apiRequest.test.ts](../frontend/src/apiRequest.test.ts) — **PR-I**.
@@ -186,10 +186,77 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | **Grootte** | Klein–medium. |
 | **Status** | **Gedaan**. |
 
-### PR-J — Product (referentie; meestal geen pure code-PR)
+### PR-J — Paraplu (verwijzing)
 
-| Items | Verkoopcontrole-scherm, vrijwilligersdocumentatie, “overige correcties”-model — zie secties *Nog uit te werken* en *Losse posten* bovenin dit document. |
-| **Opmerking** | Per item aparte PR met ontwerp + copy; niet mengen met refactor-PR’s. |
+| Veld | Inhoud |
+|------|--------|
+| **Rol** | Verwijsindex: concrete vervolgwerk zit in **PR-K t/m PR-O** (hieronder). Oude bullets *Revolut vs tostikraam*, *Losse posten*, *Nog uit te werken* en *Production backlog — backend* linken naar die PR’s. |
+| **Opmerking** | Geen merge van “alles in één PR”; houd domeinscheiding voor review en rollback. |
+
+### PR-K — Product + API: financieel controle-overzicht (*voor / achter / synchroon*)
+
+| Veld | Inhoud |
+|------|--------|
+| **Doel** | Eén **admin**-scherm (of duidelijk benoemde sectie) waar vrijwilligers **in één oogopslag** zien of digitale omzet **voor** op de Revolut-lijn ligt, **achter**, of **synchroon** — consistent met het principe *waarheid vs controle* (Revolut blijft bron voor bank; app-omzet is controle). |
+| **Context** | CLI `cmd/revolut-import` reconcile geeft al maandvergelijking; Dashboard / Overzichten / Financiën dekken delen, maar zonder gedeelde legenda en zonder expliciete statuslabels. |
+| **Product / UX** | 1) **Definities** (copy + tooltips): wat is “verwachte omzet” (periode, doelen lunchkraam/avondeten, accordering), wat is “bankzijde” (Revolut-import credits, saldo-snapshot, cumulatief). 2) **Legenda** drie statussen met kleuren/iconen; optioneel vierde “onbekend/onvoldoende data”. 3) **Periode-switch**: jaar + optioneel maand / cumulatief YTD (afstemmen met bestaande admin-jaarpatronen). 4) **Navigatie**: link vanaf Financiën, Overzichten of admin-dashboard; broodkruim of titel “Verkoopcontrole”. |
+| **Backend** | 1) Nieuw(e) endpoint(s), bv. `GET /api/admin/finance-control?year=&month=` (operator-variant indien nodig), die **bestaande tabellen** gebruiken (`bank_credits`, kaartverkopen, importmetadata — exacte joins in ontwerpfase vastleggen). 2) **Zelfde rekensommen** als CLI waar mogelijk: overweeg gedeelde pure-Go package of interne helper gedeeld met `cmd/revolut-import` om drift te voorkomen (of documenteer bewuste afwijkingen). 3) **Rounding**: `internal/money.RoundEUR` overal in JSON. 4) **Auth**: zelfde als Financiën/overzichten. |
+| **Frontend** | Nieuwe pagina bv. `AdminFinanceControlPage` of uitbreiding `AdminFinancePage`; **TanStack Query** + `queryKeys.admin.financeControl(…)`; `useQueryErrorAlert`; lege toestanden (“nog geen import dit jaar”). |
+| **Testen** | 1) Handler-/store-tests met `TEST_DATABASE_URL` waar zinvol. 2) **Gouden fixture** of vergelijking met één bekende CLI-reconcile-run (document in PR-beschrijving). |
+| **Acceptatie** | `go test ./...`, `npm run build`; inhoudelijk akkoord van penningmeester op definities + labels; geen regressie op bestaande Financiën-routes. |
+| **Risico** | **Hoog** (interpretatie product + dubbele waarheid); mitigatie: ontwerp eerst in issue/figma, één bron per cijfer in code documenteren. |
+| **Grootte** | **Groot** (backend + frontend + copy). |
+| **Status** | **MVP gedaan** (april 2026): API + admin/operator UI + README/VOLUNTEERS; productreview en eventuele copy-/CSV-pariteit kunnen nog volgen. |
+
+### PR-L — Product + data: overige correcties (boekingen buiten standaardpad)
+
+| Veld | Inhoud |
+|------|--------|
+| **Doel** | Modelleren van **correcties** (terugbetalingen, andere speltak, gasten, interne verrekeningen) die **niet** goed in huidige “uitgave / bank zonder verkoop / handmatige bon” passen — zonder dubbele digitale omzet. |
+| **Context** | Zie *Losse posten*; besluitvorming: voldoet “handmatige boeking + Financiën” of is een **expliciet type** nodig (audit, rapportage, filters). |
+| **Ontwerp (voor code)** | 1) Enum of `correction_kind` + optionele koppeling naar `shop_expense` / `bank_credit` / vrije tekst. 2) Impact op **Overzichten**, **Dashboard**, export (wel/niet meetellen in “verwacht”). 3) Rechten: alleen admin of ook operator. |
+| **Backend** | Migratie(s); store-functies; handlers; `httpx` + typed errors volgens repo-standaard; idempotency waar van toepassing. |
+| **Frontend** | Workflow op **Financiën** of **Boodschappen** (kort formulier + bevestiging); uitleg in UI waarom dit pad bestaat. |
+| **Acceptatie** | Migraties reversibel of backup-plan; `go test`; handmatige scenario’s in staging; geen dubbele telling in PR-K rapportage zodra die bestaat (cross-check in PR-beschrijving). |
+| **Risico** | Medium–hoog (boekhoudkundige kant); mitigatie: kleine MVP (één correctietype) vóór uitbreiding. |
+| **Grootte** | Medium–groot. |
+| **Status** | **Gepland**. |
+
+### PR-M — Optioneel: administratieve tags / toelichting bij importregels
+
+| Veld | Inhoud |
+|------|--------|
+| **Doel** | **Context** bij importregels (bv. afwijkende Tikkie-groep, kamp) **zonder** tweede gelijke boeking — alleen leesbare/administratieve metadata. |
+| **Scope** | Alleen indien **PR-L** of productprioriteit dit nodig heeft; kan **na PR-L** als fase 2 om scope te beperken. |
+| **Backend** | Nullable kolom(men) of kleine `import_line_note`-tabel gekoppeld aan bestaande unieke sleutels (`external_id` / fingerprint); PATCH of inline in import-response; geen wijziging aan bedrag/kernboeking zonder expliciete user-actie. |
+| **Frontend** | Kolom of slide-over in Revolut-preview / Financiën; bewerkbaar door admin; max. lengte server-side. |
+| **Acceptatie** | Geen wijziging default-importgedrag zonder tag; XSS-veilige weergave (escape); `go test` / `npm run build`. |
+| **Risico** | Laag bij read-only MVP; medium bij edit + historie. |
+| **Grootte** | Klein–medium. |
+| **Status** | **Optioneel / gepland**. |
+
+### PR-N — Backend: splitsen `api_admin_sales` + `shop_expenses` store
+
+| Veld | Inhoud |
+|------|--------|
+| **Doel** | Minder merge-conflicten, duidelijkere lagen: DTO/rounding, handler-orchestratie, store per concern — zelfde HTTP-contracten als nu. |
+| **Context** | *Production backlog — code*: [internal/handlers/api_admin_sales.go](../internal/handlers/api_admin_sales.go), [internal/store/shop_expenses.go](../internal/store/shop_expenses.go). |
+| **Wijzigingen (richting)** | 1) **Sales:** bv. `admin_sales_dto.go`, `admin_sales_queries.go` of vergelijkbaar; rounding helper naast `internal/money`. 2) **Shop expenses:** splits in `shop_expenses_list.go`, `shop_expenses_write.go`, … volgens bestaande repo-patroon (vergelijk `bank_credit_*`, `revolut_shop_*`). 3) **Geen** gedragwijziging in eerste PR; eventuele bugfix alleen met test. |
+| **Acceptatie** | `go test ./... -count=1`; handmatig: admin sales endpoints + shop expense flows ongewijzigd (statuscodes, JSON-keys). |
+| **Risico** | Medium (grote touch); mitigatie: mechanische verplaatsing + smoke `httptest` uitbreiden waar rendabel. |
+| **Grootte** | Medium–groot. |
+| **Status** | **Gepland**. |
+
+### PR-O — Documentatie: vrijwilligershandleiding (repo + links)
+
+| Veld | Inhoud |
+|------|--------|
+| **Doel** | Eén **leesbare handleiding** (Nederlands) voor niet-ontwikkelaars: stappenplan import vs handmatig, waar saldo staat, hoe bankregels koppelen, wie te mailen bij problemen. |
+| **Deliverables** | 1) Nieuw doc bv. [docs/VOLUNTEERS.md](VOLUNTEERS.md) of `docs/handleiding-vrijwilligers.md` met inhoudsopgave. 2) Korte verwijzing in [README.md](../README.md) en/of [docs/ARCHITECTURE.md](ARCHITECTURE.md). 3) Optioneel: één zin + link in admin UI (footer of “?”-pagina) — alleen als product akkoord is. |
+| **Acceptatie** | Spelling/concept review door team; geen build-afhankelijkheid verplicht (alleen markdown tenzij UI-link). |
+| **Risico** | Laag. |
+| **Grootte** | Klein (documentatie-only MVP); medium als UI-links + screenshots. |
+| **Status** | **Basis gedaan** (april 2026): vrijwilligershandleiding in repo; optionele UI-“?”-link of screenshots blijven open. |
 
 ---
 
@@ -204,7 +271,12 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 7. **PR-G** (Kraam + Query + WS-invalidatie) — **afgerond**.  
 8. **PR-H** (OrderTosti + Buy op Query) — **afgerond**.  
 9. **PR-I** (Zod WS + veilige `parseError`) — **afgerond**.  
-10. **PR-J** — product/documentatie (zie *PR-J*); los van refactor-PR’s.
+10. **PR-J** — paraplu; zie **PR-K–O**.  
+11. **PR-O** (vrijwilligersdoc) — **eerst** doen als laag risico; helpt uitlijnen copy voor **PR-K**.  
+12. **PR-N** (backend split sales / shop_expenses) — parallel mogelijk met ontwerp **PR-K**; vermijd merge-conflict metzelfde bestanden door branch-afstemming.  
+13. **PR-K** (financieel controle-overzicht) — groot; na of met **PR-O**; test tegen CLI-reconcile.  
+14. **PR-L** (overige correcties) — productbesluit; kan **na PR-K** als rapportage daarop correctietypes moet tonen.  
+15. **PR-M** (tags import) — optioneel, **na PR-L** of zelfstandig volgens prioriteit.
 
 ---
 
@@ -212,8 +284,13 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 
 | Backlog-regel | PR |
 |---------------|-----|
-| *Production backlog — Backend* “shop_expenses_revolut_import splitsen” | **PR-B** |
+| *Production backlog — Backend* “shop_expenses_revolut_import splitsen” | **PR-B** (**gedaan**) |
+| *Production backlog — Backend* “api_admin_sales / shop_expenses splitsen” | **PR-N** (**gepland**) |
 | *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G** (**gedaan**), **PR-H** (**gedaan**) |
+| *Revolut vs tostikraam* “saldo vs verwachting” + *Nog uit te werken* verkoopcontrole | **PR-K** (**MVP gedaan**; verfijning mogelijk) |
+| *Losse posten* “overige correcties” | **PR-L** (**gepland**) |
+| *Losse posten* “tags / toelichting import” | **PR-M** (**optioneel**) |
+| *Nog uit te werken* vrijwilligersdocumentatie | **PR-O** (**basis gedaan**; optioneel uitbreiden) |
 | *Code health — backend* HTTP smoke / uitbreidbare `httptest` | **PR-C** (**gedaan**) |
 | *Code review* CLI `slog` (`revolut-import`) | **PR-D** (**gedaan**) |
 | Geen expliciete regel maar scan-bevinding | **PR-A** (**gedaan**), **PR-E** (**gedaan**), **PR-F** (**gedaan**), **PR-I** (**gedaan**) |

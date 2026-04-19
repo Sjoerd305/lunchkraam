@@ -5,6 +5,7 @@ import { AlertDialogProvider } from './components/AlertDialogProvider'
 import { AppShell } from './components/AppShell'
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
 import { AdminExpensesOverviewPage } from './pages/admin/AdminExpensesOverviewPage'
+import { AdminFinanceControlPage } from './pages/admin/AdminFinanceControlPage'
 import { AdminFinancePage } from './pages/admin/AdminFinancePage'
 import { AdminLayout } from './pages/admin/AdminLayout'
 import { AdminLocalUsersPage } from './pages/admin/AdminLocalUsersPage'
@@ -59,6 +60,7 @@ export default function App() {
                 <Route path="settings" element={<AdminSettingsPage />} />
                 <Route path="expenses-overview" element={<AdminExpensesOverviewPage />} />
                 <Route path="finance" element={<AdminFinancePage />} />
+                <Route path="finance-control" element={<AdminFinanceControlPage />} />
                 <Route path="expenses" element={<AdminShopExpensesPage />} />
               </Route>
             </Route>
