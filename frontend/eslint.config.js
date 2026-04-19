@@ -19,5 +19,9 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // New in eslint-plugin-react-hooks 7.1; flags normal async fetch + setState in effects across the app.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])
