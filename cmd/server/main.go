@@ -108,15 +108,9 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(chimw.Timeout(60 * time.Second))
 
-		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			_, _ = w.Write([]byte("ok"))
-		})
+		r.Get("/health", handlers.Health)
 
-		r.Get("/robots.txt", func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
-		})
+		r.Get("/robots.txt", handlers.RobotsTxt)
 
 		r.Group(func(r chi.Router) {
 			r.Use(apimw.Session(sessionStore))

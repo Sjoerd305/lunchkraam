@@ -33,7 +33,7 @@
 - [x] Gedeelde **JSON body decode**: `httpx.ReadJSON` / `httpx.ReadJSONAllowEmpty` i.p.v. overal `json.NewDecoder(http.MaxBytesReader(…))` + uniforme 400 bij parse-fout.
 - [x] **Store error → HTTP** centraal in [internal/httpx/store_errors.go](internal/httpx/store_errors.go) (`RespondStoreNotFound`, `WriteBankCreditStoreError`, tosti/kaart/avondeten/local-password helpers); handlers roepen die aan i.p.v. lange `errors.Is`-ketens.
 - [x] **Logging**: `log/slog` met structured fields in handlers + [internal/httpx/json.go](internal/httpx/json.go); `slog.SetDefault` in [cmd/server/main.go](cmd/server/main.go); server-startupmeldingen (dist, listen, shutdown, bonfoto-map) ook via `slog`. (`log` alleen nog voor `log.Fatalf` bij fatale startup.)
-- **HTTP-handler tests:** store→HTTP mapping heeft al [internal/httpx/store_errors_test.go](internal/httpx/store_errors_test.go); brede route-dekking via `httptest` is optioneel voor regressies op auth/rate-limit — laag prioriteit tenzij API-contract expliciet vastgelegd moet worden.
+- [x] **HTTP smoke (`httptest`):** [internal/handlers/smoke_http_test.go](../internal/handlers/smoke_http_test.go) — `/health`, `/robots.txt`, anonieme `GET /api/me` (200 + `user: null`), `GET /api/cards` zonder sessie (401 JSON); **zonder database**. Uitbreiden blijft optioneel (DB-integratie, meer routes).
 
 ## Code health — frontend
 
@@ -109,11 +109,12 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Veld | Inhoud |
 |------|--------|
 | **Doel** | Vastleggen van HTTP-contracten (status + JSON-vorm) voor een paar kritieke routes zonder volledige E2E. |
-| **Scope (voorbeeld)** | `GET /health` → 200 + body `ok`; `GET /api/me` zonder sessie → 401/403 zoals nu; eventueel één route met test-doubles voor store (als jullie al een pattern hebben). |
-| **Wijzigingen** | Nieuwe `internal/handlers/smoke_test.go` of per-domein `*_http_test.go`; gebruik `httptest.NewRecorder` + minimale router-setup (of factor `setupTestRouter(t)` helper indien nodig). |
-| **Acceptatie** | Tests draaien zonder DB waar mogelijk; anders duidelijk in README/PR welke env nodig is. |
-| **Risico** | Laag als alleen stateless routes; hoger als DB-testcontainers — hou PR klein. |
-| **Grootte** | Klein tot medium. |
+| **Scope (ingevoerd)** | `GET /health` → 200 + `ok` + `text/plain`; `GET /robots.txt` → 200; anonieme `GET /api/me` → **200** met `user: null` (zoals productie — geen 401); `GET /api/cards` zonder sessie → **401** JSON `unauthorized`. Geen `TEST_DATABASE_URL` nodig. |
+| **Wijzigingen (uitgevoerd)** | 1) [internal/handlers/public_meta.go](../internal/handlers/public_meta.go) — `Health`, `RobotsTxt` (door [cmd/server/main.go](../cmd/server/main.go) geregistreerd). 2) [internal/handlers/smoke_http_test.go](../internal/handlers/smoke_http_test.go) — Chi + `httptest`, session store, `csrf.Protect(nil)`, `OptionalUser`/`RequireUserAPI` waar nodig. |
+| **Acceptatie** | `go test ./...` groen op CI zonder Postgres. |
+| **Risico** | Laag — geen DB; `RequireUserAPI(nil)` is alleen veilig zolang tests geen ingelogde sessie simuleren. |
+| **Grootte** | Klein. |
+| **Status** | **Gedaan** (basis-smoke; uitbreiden kan in follow-up). |
 
 ### PR-D — Backend (cosmetisch): `cmd/revolut-import` naar `slog`
 
@@ -188,11 +189,12 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 ### Aanbevolen merge-volgorde
 
 1. **PR-A** (CI-tests) — **afgerond**; beschermt alle volgende wijzigingen op `production` pushes.  
-2. **PR-B** (Revolut handler-split) — **afgerond**. Vervolg: **PR-E** of **PR-F** (grote structurele frontend-wijziging).  
-3. **PR-D** (CLI cosmetica) — losstaand, elk moment.  
-4. **PR-F** (api-modularisatie) — vóór of na **PR-G/H** afhankelijk van conflict-pijn.  
-5. **PR-G** / **PR-H** (Query-migraties) — in deel-PR’s als review-capaciteit beperkt is.  
-6. **PR-C** / **PR-I** — wanneer infra/testbaarheid er is.
+2. **PR-B** (Revolut handler-split) — **afgerond**.  
+3. **PR-C** (`httptest` smoke) — **afgerond**.  
+4. Vervolg: **PR-D** (CLI `slog`) losstaand, of **PR-E** / **PR-F** (frontend-structuur).  
+5. **PR-F** (api-modularisatie) — vóór of na **PR-G/H** afhankelijk van conflict-pijn.  
+6. **PR-G** / **PR-H** (Query-migraties) — in deel-PR’s als review-capaciteit beperkt is.  
+7. **PR-I** — wanneer prioriteit voor WS/error-hardening.
 
 ---
 
@@ -202,7 +204,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 |---------------|-----|
 | *Production backlog — Backend* “shop_expenses_revolut_import splitsen” | **PR-B** |
 | *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G**, **PR-H** |
-| *Code health — backend* “HTTP-handler tests optioneel” | **PR-C** |
+| *Code health — backend* HTTP smoke / uitbreidbare `httptest` | **PR-C** (**gedaan**) |
 | *Code review* “CLI log.Printf” | **PR-D** |
 | Geen expliciete regel maar scan-bevinding | **PR-A**, **PR-E**, **PR-F**, **PR-I** |
 
