@@ -1,4 +1,5 @@
-import { z, type ZodType } from 'zod'
+import type { z } from 'zod'
+import { ApiError, apiFormJson, apiJson, apiVoid } from './apiRequest'
 import {
   adminCardsSoldBreakdownSchema,
   adminDashboardResponseSchema,
@@ -112,89 +113,40 @@ export type PendingImportReview = z.infer<typeof pendingImportReviewSchema>
 export type RevolutBalance = z.infer<typeof revolutBalanceResponseSchema>
 export type ShopExpenseReceipt = z.infer<typeof shopExpenseReceiptSchema>
 
-export class ApiError extends Error {
-  code: string
-  status: number
-
-  constructor(status: number, code: string, message: string) {
-    super(message)
-    this.status = status
-    this.code = code
-  }
-}
-
-async function parseError(res: Response): Promise<ApiError> {
-  try {
-    const j = (await res.json()) as { error?: string; message?: string }
-    return new ApiError(res.status, j.error ?? 'error', j.message ?? res.statusText)
-  } catch {
-    return new ApiError(res.status, 'error', res.statusText)
-  }
-}
-
-function parseApiResponse<T>(schema: ZodType<T>, payload: unknown): T {
-  const parsed = schema.safeParse(payload)
-  if (!parsed.success) {
-    throw new ApiError(502, 'invalid_response', 'Server gaf een ongeldig antwoord.')
-  }
-  return parsed.data
-}
+export { ApiError } from './apiRequest'
 
 export async function getMe(): Promise<MeResponse> {
-  const res = await fetch('/api/me', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(meResponseSchema, await res.json())
+  return apiJson('/api/me', meResponseSchema)
 }
 
 export async function localLogin(csrf: string, username: string, password: string): Promise<void> {
-  const res = await fetch('/api/auth/local/login', {
+  await apiVoid('/api/auth/local/login', {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ username: username.trim(), password }),
+    csrf,
+    body: { username: username.trim(), password },
   })
-  if (!res.ok) throw await parseError(res)
 }
 
 export async function changeOwnPassword(
   csrf: string,
   body: { current_password: string; new_password: string },
 ): Promise<void> {
-  const res = await fetch('/api/account/password', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid('/api/account/password', { method: 'POST', csrf, body })
 }
 
 export type AdminUserRow = z.infer<typeof adminUserRowSchema>
 
 export async function getAdminUsers(): Promise<AdminUserRow[]> {
-  const res = await fetch('/api/admin/users', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(adminUsersResponseSchema, await res.json())
+  const payload = await apiJson('/api/admin/users', adminUsersResponseSchema)
   return payload.users
 }
 
 export async function patchUserMatroosJeugd(csrf: string, userId: number, isMatroosJeugd: boolean): Promise<void> {
-  const res = await fetch(`/api/admin/users/${userId}/matroos-jeugd`, {
+  await apiVoid(`/api/admin/users/${userId}/matroos-jeugd`, {
     method: 'PATCH',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ is_matroos_jeugd: isMatroosJeugd }),
+    csrf,
+    body: { is_matroos_jeugd: isMatroosJeugd },
   })
-  if (!res.ok) throw await parseError(res)
 }
 
 export async function createLocalUser(
@@ -208,24 +160,18 @@ export async function createLocalUser(
     must_change_password: boolean
   },
 ): Promise<User> {
-  const res = await fetch('/api/admin/users/local', {
+  const payload = await apiJson('/api/admin/users/local', userEnvelopeSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({
+    csrf,
+    body: {
       username: body.username.trim().toLowerCase(),
       name: body.name.trim(),
       password: body.password,
       is_admin: body.is_admin,
       is_operator: body.is_operator,
       must_change_password: body.must_change_password,
-    }),
+    },
   })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(userEnvelopeSchema, await res.json())
   const u = payload.user
   if (!u) throw new ApiError(500, 'error', 'Ongeldig antwoord.')
   return u
@@ -236,17 +182,11 @@ export async function patchLocalUser(
   id: number,
   body: { password: string; is_admin: boolean; is_operator: boolean; must_change_password: boolean },
 ): Promise<User | null> {
-  const res = await fetch(`/api/admin/users/${id}/local`, {
+  const payload = await apiJson(`/api/admin/users/${id}/local`, userEnvelopeSchema, {
     method: 'PATCH',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify(body),
+    csrf,
+    body,
   })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(userEnvelopeSchema, await res.json())
   return payload.user
 }
 
@@ -258,9 +198,10 @@ export async function getAvondetenRegistrations(
   mealDate: string,
 ): Promise<z.infer<typeof avondetenRegistrationsResponseSchema>> {
   const qs = `?meal_date=${encodeURIComponent(mealDate)}`
-  const res = await fetch(`/api/operator/avondeten/registrations${qs}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(avondetenRegistrationsResponseSchema, await res.json())
+  const payload = await apiJson(
+    `/api/operator/avondeten/registrations${qs}`,
+    avondetenRegistrationsResponseSchema,
+  )
   return {
     meal_date: payload.meal_date || mealDate,
     cards: payload.cards,
@@ -272,32 +213,22 @@ export async function postAvondetenRegister(
   mealDate: string,
   cardIds: number[],
 ): Promise<number> {
-  const res = await fetch('/api/operator/avondeten/register', {
+  const payload = await apiJson('/api/operator/avondeten/register', registeredCountResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ meal_date: mealDate, card_ids: cardIds }),
+    csrf,
+    body: { meal_date: mealDate, card_ids: cardIds },
   })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(registeredCountResponseSchema, await res.json())
   return payload.registered_count
 }
 
 export async function getOperatorCards(q: string): Promise<OperatorCardRow[]> {
   const qs = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''
-  const res = await fetch(`/api/operator/cards${qs}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(operatorCardsResponseSchema, await res.json())
+  const payload = await apiJson(`/api/operator/cards${qs}`, operatorCardsResponseSchema)
   return payload.cards
 }
 
 export async function getOperatorMembers(): Promise<OperatorMember[]> {
-  const res = await fetch('/api/operator/members', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(operatorMembersResponseSchema, await res.json())
+  const payload = await apiJson('/api/operator/members', operatorMembersResponseSchema)
   return payload.members
 }
 
@@ -305,17 +236,11 @@ export async function createOperatorCardSale(
   csrf: string,
   body: { user_id: number; kind: CardKind; payment_method: PaymentMethod },
 ): Promise<number> {
-  const res = await fetch('/api/operator/card-sales', {
+  const payload = await apiJson('/api/operator/card-sales', operatorCardSaleResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify(body),
+    csrf,
+    body,
   })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(operatorCardSaleResponseSchema, await res.json())
   return payload.request_id
 }
 
@@ -329,16 +254,12 @@ export type OperatorTostiOrderRow = z.infer<typeof operatorTostiOrderSchema>
 export type TostiQueueEntry = z.infer<typeof tostiQueueEntrySchema>
 
 export async function getTostiQueue(): Promise<TostiQueueEntry[]> {
-  const res = await fetch('/api/tosti-orders/queue', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(tostiQueueResponseSchema, await res.json())
+  const payload = await apiJson('/api/tosti-orders/queue', tostiQueueResponseSchema)
   return payload.orders
 }
 
 export async function getMyTostiOrders(): Promise<TostiOrder[]> {
-  const res = await fetch('/api/tosti-orders/mine', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(tostiOrdersResponseSchema, await res.json())
+  const payload = await apiJson('/api/tosti-orders/mine', tostiOrdersResponseSchema)
   return payload.orders
 }
 
@@ -377,159 +298,93 @@ export async function createTostiOrder(csrf: string, body: CreateTostiOrderBody)
           quantity: body.quantity,
           ...(remark !== '' ? { remark } : {}),
         }
-  const res = await fetch('/api/tosti-orders', {
+  const parsed = await apiJson('/api/tosti-orders', createTostiOrderResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify(payload),
+    csrf,
+    body: payload,
   })
-  if (!res.ok) throw await parseError(res)
-  const parsed = parseApiResponse(createTostiOrderResponseSchema, await res.json())
   if (!parsed.order) throw new ApiError(500, 'error', 'Ongeldig antwoord.')
   return parsed.order
 }
 
 export async function cancelMyTostiOrder(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/tosti-orders/${id}/cancel`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/tosti-orders/${id}/cancel`, { method: 'POST', csrf })
 }
 
 export async function getOperatorTostiOrders(): Promise<OperatorTostiOrderRow[]> {
-  const res = await fetch('/api/operator/tosti-orders', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(operatorTostiOrdersResponseSchema, await res.json())
+  const payload = await apiJson('/api/operator/tosti-orders', operatorTostiOrdersResponseSchema)
   return payload.orders
 }
 
 export type OperatorTostiSoldToday = z.infer<typeof operatorTostiSoldTodaySchema>
 
 export async function getOperatorTostiSoldToday(): Promise<OperatorTostiSoldToday> {
-  const res = await fetch('/api/operator/tosti-sold-today', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(operatorTostiSoldTodaySchema, await res.json())
+  return apiJson('/api/operator/tosti-sold-today', operatorTostiSoldTodaySchema)
 }
 
 export async function deliverOperatorTostiOrder(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/operator/tosti-orders/${id}/deliver`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/operator/tosti-orders/${id}/deliver`, { method: 'POST', csrf })
 }
 
 export async function cancelOperatorTostiOrder(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/operator/tosti-orders/${id}/cancel`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/operator/tosti-orders/${id}/cancel`, { method: 'POST', csrf })
 }
 
 export async function logout(csrf: string): Promise<void> {
-  const res = await fetch('/api/logout', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid('/api/logout', { method: 'POST', csrf })
 }
 
 export async function getCards(): Promise<Card[]> {
-  const res = await fetch('/api/cards', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(cardsResponseSchema, await res.json())
+  const payload = await apiJson('/api/cards', cardsResponseSchema)
   return payload.cards
 }
 
 export async function useKnipje(csrf: string, cardId: number): Promise<void> {
-  const res = await fetch(`/api/cards/${cardId}/use`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/cards/${cardId}/use`, { method: 'POST', csrf })
 }
 
 export async function getBuyInfo(): Promise<BuyInfo> {
-  const res = await fetch('/api/buy', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(buyInfoResponseSchema, await res.json())
+  return apiJson('/api/buy', buyInfoResponseSchema)
 }
 
 export async function requestCard(csrf: string, kind: CardKind = 'tosti'): Promise<void> {
-  const res = await fetch('/api/buy/request', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ kind }),
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid('/api/buy/request', { method: 'POST', csrf, body: { kind } })
 }
 
 export async function cancelMyRequest(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/buy/requests/${id}/cancel`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/buy/requests/${id}/cancel`, { method: 'POST', csrf })
 }
 
 export async function cancelAllMyPendingRequests(csrf: string): Promise<number> {
-  const res = await fetch('/api/buy/cancel-all-pending', {
+  const payload = await apiJson('/api/buy/cancel-all-pending', cancelledCountResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
+    csrf,
   })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(cancelledCountResponseSchema, await res.json())
   return payload.cancelled_count
 }
 
 export async function getAdminSalesYears(): Promise<number[]> {
-  const res = await fetch('/api/admin/sales-years', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(yearsResponseSchema, await res.json())
+  const payload = await apiJson('/api/admin/sales-years', yearsResponseSchema)
   return payload.years.filter((y) => y > 0)
 }
 
 export async function getAdminSalesStats(year: number): Promise<AdminSalesStats> {
-  const res = await fetch(`/api/admin/sales-stats?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(adminSalesStatsResponseSchema, await res.json())
+  const payload = await apiJson(`/api/admin/sales-stats?year=${year}`, adminSalesStatsResponseSchema)
   return payload.year > 0 ? payload : { ...payload, year }
 }
 
 export async function getOperatorSalesYears(): Promise<number[]> {
-  const res = await fetch('/api/operator/sales-years', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(yearsResponseSchema, await res.json())
+  const payload = await apiJson('/api/operator/sales-years', yearsResponseSchema)
   return payload.years.filter((y) => y > 0)
 }
 
 export async function getOperatorSalesStats(year: number): Promise<AdminSalesStats> {
-  const res = await fetch(`/api/operator/sales-stats?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(adminSalesStatsResponseSchema, await res.json())
+  const payload = await apiJson(`/api/operator/sales-stats?year=${year}`, adminSalesStatsResponseSchema)
   return payload.year > 0 ? payload : { ...payload, year }
 }
 
 export async function getOperatorShopExpenses(year: number): Promise<AdminShopExpense[]> {
-  const res = await fetch(`/api/operator/shop-expenses?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(shopExpensesResponseSchema, await res.json())
+  const payload = await apiJson(`/api/operator/shop-expenses?year=${year}`, shopExpensesResponseSchema)
   return payload.expenses
 }
 
@@ -544,29 +399,15 @@ export async function createOperatorShopExpense(
     payment_channel?: ShopExpensePaymentChannel
   },
 ): Promise<AdminShopExpense> {
-  const res = await fetch('/api/operator/shop-expenses', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(shopExpenseSchema, await res.json())
+  return apiJson('/api/operator/shop-expenses', shopExpenseSchema, { method: 'POST', csrf, body })
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboardStats> {
-  const res = await fetch('/api/admin/dashboard', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(adminDashboardResponseSchema, await res.json())
+  return apiJson('/api/admin/dashboard', adminDashboardResponseSchema)
 }
 
 export async function getAdminShopExpenses(year: number): Promise<AdminShopExpense[]> {
-  const res = await fetch(`/api/admin/shop-expenses?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(shopExpensesResponseSchema, await res.json())
+  const payload = await apiJson(`/api/admin/shop-expenses?year=${year}`, shopExpensesResponseSchema)
   return payload.expenses
 }
 
@@ -581,17 +422,7 @@ export async function createShopExpense(
     payment_channel?: ShopExpensePaymentChannel
   },
 ): Promise<AdminShopExpense> {
-  const res = await fetch('/api/admin/shop-expenses', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(shopExpenseSchema, await res.json())
+  return apiJson('/api/admin/shop-expenses', shopExpenseSchema, { method: 'POST', csrf, body })
 }
 
 export async function patchShopExpensePurpose(
@@ -601,26 +432,15 @@ export async function patchShopExpensePurpose(
   isOperatorOnly: boolean,
 ): Promise<AdminShopExpense> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/${id}`, {
+  return apiJson(`${prefix}/shop-expenses/${id}`, shopExpenseSchema, {
     method: 'PATCH',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ purpose }),
+    csrf,
+    body: { purpose },
   })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(shopExpenseSchema, await res.json())
 }
 
 export async function deleteShopExpense(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/admin/shop-expenses/${id}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/admin/shop-expenses/${id}`, { method: 'DELETE', csrf })
 }
 
 export async function importRevolutShopExpenses(
@@ -629,14 +449,7 @@ export async function importRevolutShopExpenses(
   isOperatorOnly: boolean,
 ): Promise<RevolutShopExpenseImportResult> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/revolut-import`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-    body: formData,
-  })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(revolutShopExpenseImportResponseSchema, await res.json())
+  return apiFormJson(`${prefix}/shop-expenses/revolut-import`, revolutShopExpenseImportResponseSchema, csrf, formData)
 }
 
 export async function previewRevolutShopExpenses(
@@ -645,21 +458,12 @@ export async function previewRevolutShopExpenses(
   isOperatorOnly: boolean,
 ): Promise<RevolutPreviewResponse> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/revolut-import/preview`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-    body: formData,
-  })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(revolutPreviewResponseSchema, await res.json())
+  return apiFormJson(`${prefix}/shop-expenses/revolut-import/preview`, revolutPreviewResponseSchema, csrf, formData)
 }
 
 export async function getRevolutBalance(isOperatorOnly: boolean): Promise<RevolutBalance> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/revolut-balance`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(revolutBalanceResponseSchema, await res.json())
+  return apiJson(`${prefix}/revolut-balance`, revolutBalanceResponseSchema)
 }
 
 export async function getShopExpenseReceipts(
@@ -667,9 +471,10 @@ export async function getShopExpenseReceipts(
   isOperatorOnly: boolean,
 ): Promise<ShopExpenseReceipt[]> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/${expenseId}/receipt`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(shopExpenseReceiptsListResponseSchema, await res.json())
+  const payload = await apiJson(
+    `${prefix}/shop-expenses/${expenseId}/receipt`,
+    shopExpenseReceiptsListResponseSchema,
+  )
   return payload.receipts
 }
 
@@ -682,14 +487,7 @@ export async function uploadShopExpenseReceipt(
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
   const form = new FormData()
   form.append('receipt', file)
-  const res = await fetch(`${prefix}/shop-expenses/${id}/receipt`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-    body: form,
-  })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(shopExpenseReceiptSchema, await res.json())
+  return apiFormJson(`${prefix}/shop-expenses/${id}/receipt`, shopExpenseReceiptSchema, csrf, form)
 }
 
 export async function deleteShopExpenseReceipt(
@@ -697,153 +495,96 @@ export async function deleteShopExpenseReceipt(
   expenseId: number,
   receiptId: number,
 ): Promise<void> {
-  const res = await fetch(`/api/admin/shop-expenses/${expenseId}/receipts/${receiptId}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/admin/shop-expenses/${expenseId}/receipts/${receiptId}`, { method: 'DELETE', csrf })
 }
 
 export async function getPendingImportReviews(isOperatorOnly: boolean): Promise<PendingImportReview[]> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/pending-reviews`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(pendingImportReviewsResponseSchema, await res.json())
+  const payload = await apiJson(`${prefix}/shop-expenses/pending-reviews`, pendingImportReviewsResponseSchema)
   return payload.reviews
 }
 
 export async function mergePendingReview(csrf: string, id: number, isOperatorOnly: boolean): Promise<void> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/pending-reviews/${id}/merge`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`${prefix}/shop-expenses/pending-reviews/${id}/merge`, { method: 'POST', csrf })
 }
 
 export async function dismissPendingReview(csrf: string, id: number, isOperatorOnly: boolean): Promise<void> {
   const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
-  const res = await fetch(`${prefix}/shop-expenses/pending-reviews/${id}/dismiss`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`${prefix}/shop-expenses/pending-reviews/${id}/dismiss`, { method: 'POST', csrf })
 }
 
 export async function getAdminRequests(): Promise<AdminRequest[]> {
-  const res = await fetch('/api/admin/requests', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  const payload = parseApiResponse(adminRequestsResponseSchema, await res.json())
+  const payload = await apiJson('/api/admin/requests', adminRequestsResponseSchema)
   return payload.requests
 }
 
 export async function fulfillRequest(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/admin/requests/${id}/fulfill`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/admin/requests/${id}/fulfill`, { method: 'POST', csrf })
 }
 
 export async function rejectAdminRequest(csrf: string, id: number): Promise<void> {
-  const res = await fetch(`/api/admin/requests/${id}/reject`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrf },
-  })
-  if (!res.ok) throw await parseError(res)
+  await apiVoid(`/api/admin/requests/${id}/reject`, { method: 'POST', csrf })
 }
 
 export type AdminAppSettings = z.infer<typeof adminSettingsResponseSchema>
 
 export async function getAdminSettings(): Promise<AdminAppSettings> {
-  const res = await fetch('/api/admin/settings', { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(adminSettingsResponseSchema, await res.json())
+  return apiJson('/api/admin/settings', adminSettingsResponseSchema)
 }
 
 export async function patchAdminSettings(
   csrf: string,
   body: { tikkie_url: string; tikkie_url_avondeten: string },
 ): Promise<AdminAppSettings> {
-  const res = await fetch('/api/admin/settings', {
+  return apiJson('/api/admin/settings', adminSettingsResponseSchema, {
     method: 'PATCH',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({
+    csrf,
+    body: {
       tikkie_url: body.tikkie_url,
       tikkie_url_avondeten: body.tikkie_url_avondeten,
-    }),
+    },
   })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(adminSettingsResponseSchema, await res.json())
 }
 
 export async function getAdminBankCreditsUnmatched(year: number): Promise<BankCreditsListPayload> {
-  const res = await fetch(`/api/admin/bank-credits/unmatched?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+  return apiJson(`/api/admin/bank-credits/unmatched?year=${year}`, bankCreditsListResponseSchema)
 }
 
 export async function getOperatorBankCreditsUnmatched(year: number): Promise<BankCreditsListPayload> {
-  const res = await fetch(`/api/operator/bank-credits/unmatched?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+  return apiJson(`/api/operator/bank-credits/unmatched?year=${year}`, bankCreditsListResponseSchema)
 }
 
 export async function getAdminBankCreditsMatched(year: number): Promise<BankCreditsListPayload> {
-  const res = await fetch(`/api/admin/bank-credits/matched?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+  return apiJson(`/api/admin/bank-credits/matched?year=${year}`, bankCreditsListResponseSchema)
 }
 
 export async function getOperatorBankCreditsMatched(year: number): Promise<BankCreditsListPayload> {
-  const res = await fetch(`/api/operator/bank-credits/matched?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+  return apiJson(`/api/operator/bank-credits/matched?year=${year}`, bankCreditsListResponseSchema)
 }
 
 export async function getAdminBankCreditsWaived(year: number): Promise<BankCreditsListPayload> {
-  const res = await fetch(`/api/admin/bank-credits/waived?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+  return apiJson(`/api/admin/bank-credits/waived?year=${year}`, bankCreditsListResponseSchema)
 }
 
 export async function getOperatorBankCreditsWaived(year: number): Promise<BankCreditsListPayload> {
-  const res = await fetch(`/api/operator/bank-credits/waived?year=${year}`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+  return apiJson(`/api/operator/bank-credits/waived?year=${year}`, bankCreditsListResponseSchema)
 }
 
 export async function getAdminBankCreditSuggestions(bankCreditId: number): Promise<BankCreditSuggestionsPayload> {
-  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/suggestions`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditSuggestionsResponseSchema, await res.json())
+  return apiJson(`/api/admin/bank-credits/${bankCreditId}/suggestions`, bankCreditSuggestionsResponseSchema)
 }
 
 export async function getOperatorBankCreditSuggestions(bankCreditId: number): Promise<BankCreditSuggestionsPayload> {
-  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/suggestions`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditSuggestionsResponseSchema, await res.json())
+  return apiJson(`/api/operator/bank-credits/${bankCreditId}/suggestions`, bankCreditSuggestionsResponseSchema)
 }
 
 export async function getAdminBankCreditMatchCandidates(bankCreditId: number): Promise<BankCreditMatchCandidatesPayload> {
-  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/match-candidates`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditMatchCandidatesResponseSchema, await res.json())
+  return apiJson(`/api/admin/bank-credits/${bankCreditId}/match-candidates`, bankCreditMatchCandidatesResponseSchema)
 }
 
 export async function getOperatorBankCreditMatchCandidates(bankCreditId: number): Promise<BankCreditMatchCandidatesPayload> {
-  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/match-candidates`, { credentials: 'include' })
-  if (!res.ok) throw await parseError(res)
-  return parseApiResponse(bankCreditMatchCandidatesResponseSchema, await res.json())
+  return apiJson(`/api/operator/bank-credits/${bankCreditId}/match-candidates`, bankCreditMatchCandidatesResponseSchema)
 }
 
 export async function postAdminBankCreditMatch(
@@ -851,17 +592,11 @@ export async function postAdminBankCreditMatch(
   bankCreditId: number,
   cardRequestId: number,
 ): Promise<void> {
-  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/match`, {
+  await apiJson(`/api/admin/bank-credits/${bankCreditId}/match`, okResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ card_request_id: cardRequestId }),
+    csrf,
+    body: { card_request_id: cardRequestId },
   })
-  if (!res.ok) throw await parseError(res)
-  parseApiResponse(okResponseSchema, await res.json())
 }
 
 export async function postOperatorBankCreditMatch(
@@ -869,71 +604,41 @@ export async function postOperatorBankCreditMatch(
   bankCreditId: number,
   cardRequestId: number,
 ): Promise<void> {
-  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/match`, {
+  await apiJson(`/api/operator/bank-credits/${bankCreditId}/match`, okResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: JSON.stringify({ card_request_id: cardRequestId }),
+    csrf,
+    body: { card_request_id: cardRequestId },
   })
-  if (!res.ok) throw await parseError(res)
-  parseApiResponse(okResponseSchema, await res.json())
 }
 
 export async function postAdminBankCreditUnmatch(csrf: string, bankCreditId: number): Promise<void> {
-  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/unmatch`, {
+  await apiJson(`/api/admin/bank-credits/${bankCreditId}/unmatch`, okResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: '{}',
+    csrf,
+    body: {},
   })
-  if (!res.ok) throw await parseError(res)
-  parseApiResponse(okResponseSchema, await res.json())
 }
 
 export async function postOperatorBankCreditUnmatch(csrf: string, bankCreditId: number): Promise<void> {
-  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/unmatch`, {
+  await apiJson(`/api/operator/bank-credits/${bankCreditId}/unmatch`, okResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: '{}',
+    csrf,
+    body: {},
   })
-  if (!res.ok) throw await parseError(res)
-  parseApiResponse(okResponseSchema, await res.json())
 }
 
 export async function postAdminBankCreditWaive(csrf: string, bankCreditId: number): Promise<void> {
-  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/waive`, {
+  await apiJson(`/api/admin/bank-credits/${bankCreditId}/waive`, okResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: '{}',
+    csrf,
+    body: {},
   })
-  if (!res.ok) throw await parseError(res)
-  parseApiResponse(okResponseSchema, await res.json())
 }
 
 export async function postOperatorBankCreditWaive(csrf: string, bankCreditId: number): Promise<void> {
-  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/waive`, {
+  await apiJson(`/api/operator/bank-credits/${bankCreditId}/waive`, okResponseSchema, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrf,
-    },
-    body: '{}',
+    csrf,
+    body: {},
   })
-  if (!res.ok) throw await parseError(res)
-  parseApiResponse(okResponseSchema, await res.json())
 }

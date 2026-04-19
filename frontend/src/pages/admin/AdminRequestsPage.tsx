@@ -1,45 +1,36 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { PaymentRequestsPanel } from '../../components/PaymentRequestsPanel'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 import { useTostiRealtime } from '../../useTostiRealtime'
 
 export function AdminRequestsPage() {
   const { csrf, user } = useAuth()
   const { alert, confirm } = useAlertDialog()
-  const [rows, setRows] = useState<api.AdminRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadFailed, setLoadFailed] = useState(false)
+  const queryClient = useQueryClient()
   const [busyId, setBusyId] = useState<number | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setLoadFailed(false)
-    try {
-      const list = await api.getAdminRequests()
-      setRows(list)
-    } catch (e) {
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      setLoadFailed(true)
-      setRows([])
-      void alert({ title: 'Laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [alert])
+  const listQuery = useQuery({
+    queryKey: queryKeys.admin.requests,
+    queryFn: () => api.getAdminRequests(),
+  })
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!listQuery.isError || !listQuery.error) return
+    const msg = listQuery.error instanceof api.ApiError ? listQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Laden mislukt', message: msg, variant: 'error' })
+  }, [listQuery.isError, listQuery.error, alert])
 
   const onPaymentRealtime = useCallback(
     (reason: string) => {
       if (reason === 'open' || reason === 'payment_requests') {
-        void load()
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
       }
     },
-    [load],
+    [queryClient],
   )
 
   useTostiRealtime(
@@ -65,7 +56,7 @@ export function AdminRequestsPage() {
     setBusyId(id)
     try {
       await api.fulfillRequest(csrf, id)
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
       await alert({
         title: 'Geaccordeerd',
         message: 'De aanvraag is uit de wachtrij gehaald.',
@@ -91,7 +82,7 @@ export function AdminRequestsPage() {
     setBusyId(id)
     try {
       await api.rejectAdminRequest(csrf, id)
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
       await alert({
         title: 'Afgewezen',
         message: 'De aanvraag is geannuleerd en de kaart is verwijderd.',
@@ -105,17 +96,19 @@ export function AdminRequestsPage() {
     }
   }
 
-  if (loading && !loadFailed) {
+  const rows = listQuery.data ?? []
+
+  if (listQuery.isLoading) {
     return <p className="text-slate-600">Laden…</p>
   }
 
-  if (loadFailed && rows.length === 0) {
+  if (listQuery.isError && rows.length === 0) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-md">
         <p className="text-slate-600">Aanvragen konden niet worden geladen.</p>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => void listQuery.refetch()}
           className="min-h-12 w-full max-w-xs rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
         >
           Opnieuw proberen

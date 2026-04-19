@@ -2,26 +2,28 @@
 
 ## Principe: waarheid vs controle
 
+*(Ontwerprichtlijn — geen open taken; gedrag zit in o.a. Revolut-import, bankkoppelingen en admin-rapportage.)*
+
 - **Digitale geldstromen op de Revolut-rekening:** alleen vastleggen via **Revolut-import** (één bron van waarheid voor wat er echt op de rekening gebeurt).
 - **Verkopen (kaarten, tellingen):** wél **bijhouden**, maar **niet** als financiële waarheid naast de bank — gebruiken als **controle op de werkelijkheid**: lopen we **voor** op de rekening, **achter**, of is het **synchroon** met wat Revolut toont?
 - **Handmatig registreren** blijft zinvol voor wat **niet** (of niet betrouwbaar) via Revolut terugkomt: contant, correcties, uitzonderingen — zonder digitale inkomsten dubbel te boeken.
 
 ## Revolut vs tostikraam-verkoop
 
-- [ ] Overzicht **Revolut-saldo / mutaties** afzetten tegen **verwachte omzet uit verkoopregistratie** (verschil zichtbaar maken: voor / achter / synchroon).
-- [ ] **Avondeten** van dezelfde Revolut-rekening **anders labelen** dan lunchkraam-verkoop of standaarduitgaven (eigen categorie of doel), zodat de vergelijking met “alleen tosti” niet vervuild raakt.
+- [x] **Saldo / import:** Revolut-CSV-import (uitgaven + optioneel inkomsten als bank-omzet), saldo uit afschrift-kolom op **Boodschappen** (`AdminShopExpensesPage`), openstaande bankregels koppelen op **Financiën** (`AdminFinancePage`).
+- [ ] **Saldo vs verwachting in één beeld:** expliciet **voor / achter / synchroon** tov **verwachte omzet** (cumulatief of per periode) — nu wel **maandvergelijking** Revolut-credits vs app-omzet via CLI: `cmd/revolut-import` (reconcile-modus), nog geen dedicated in-app rapport met die legenda.
+- [x] **Avondeten vs lunchkraam:** zelfde rekening, **apart doel** (`lunchkraam` / `avondeten`) bij import en handmatige boekingen; omzet- en uitgaven**split** in dashboard, grafieken, overzichten en import-voorbeeld.
 
 ## Losse posten (buiten digitale Revolut-lijn)
 
-- [ ] **Handmatige uitgaven / correcties** voor alles wat **niet** uit de import komt, o.a.:
-  - contant;
-  - terugbetalingen / afspraken met andere speltakken of gasten zonder dezelfde flow als matrozenkaarten.
+- [x] **Handmatige uitgaven / kas:** contante en digitale uitgave + **contant bij kas** op **Boodschappen**; dubbele import vs handmatige bon → **wachtrij** (pending reviews).
+- [ ] **Overige correcties** expliciet modelleren (bijv. terugbetalingen, afspraken andere speltak/gasten) als jullie dat **niet** genoeg vinden onder bestaande boekingen + “bank zonder verkoop” op Financiën — productkeuze / korte workflow in UI.
 - [ ] Optioneel: **toelichting of tags** bij importregels (bijv. afwijkende Tikkie-groep) als **administratieve context**, zonder een tweede gelijke boeking te maken.
 
 ## Nog uit te werken in product / UI
 
-- [ ] **Verkoopcontrole-scherm of rapport:** verwacht (uit verkopen) vs werkelijk (Revolut) per periode, met duidelijke legenda.
-- [ ] Documentatie voor vrijwilligers: **stappenplan** — wat komt uit import, wat vul je handmatig in, hoe lees je “voor/achter”.
+- [ ] **Verkoopcontrole-scherm** (alles in één scherm met legenda *voor/achter/synchroon*): deels gedekt door **Dashboard** + **Overzichten** + **Financiën** + CLI-reconcile; nog geen aparte “controle”-pagina.
+- [ ] **Documentatie vrijwilligers:** kort **stappenplan** (import vs handmatig, waar saldo staat, hoe koppelen) — nu vooral in UI-teksten en [docs/ARCHITECTURE.md](ARCHITECTURE.md); geen aparte handleiding.
 
 ## Code health — backend
 
@@ -40,8 +42,15 @@
 - [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings).
 - [x] **Admin grafieken** (`AdminSalesCharts`): `roundCents` i.p.v. herhaalde `Math.round(x*100)/100`.
 - [x] **Zod** — response- en payload-types in `api.ts` via `z.infer<typeof …Schema>` gekoppeld aan [frontend/src/api.schemas.ts](frontend/src/api.schemas.ts) (sub-schema’s geëxporteerd waar nodig).
-- [ ] Optioneel: **`apiRequest`-factory** om herhaalde `fetch` + `parseError` + `parseApiResponse` te centraliseren.
-- [ ] Optioneel: **TanStack Query** als `useEffect`+fetch+loading+error+refetch op veel admin-pagina’s gaat kopiëren (nu nog niet strikt nodig).
+- [x] Optioneel: **`apiRequest`-factory** (`apiJson` / `apiVoid` / `apiFormJson` in [frontend/src/apiRequest.ts](frontend/src/apiRequest.ts)) — `api.ts` gebruikt dit centraal.
+- [x] Optioneel: **TanStack Query** — `QueryClientProvider` in [frontend/src/main.tsx](frontend/src/main.tsx); admin-pagina’s met server state gebruiken `useQuery` / `invalidateQueries` (o.a. dashboard, requests, users, settings, sales charts, expenses overview, finance, shop expenses).
+
+### Code review / vervolg (korte scan 2026-04-19)
+
+- **Admin-fetchpatroon:** geen resterende `useEffect`+`void api.*`-loads op admin-pagina’s; mutaties invalidaten gerichte `queryKeys`.
+- **Dubbele jaar/omzet-logica:** zelfde `salesYears` + `salesStats` + jaarselectie staat op meerdere plekken — optioneel één kleine hook (`useAdminSalesYearQueries` o.i.d.) om drift te beperken.
+- **Buiten admin:** `KraamPage`, `CardsPage`, `BuyPage`, `OrderTostiPage` houden nog **lokale state + handmatige refresh**; Query is daar optioneel tot het patroon lastig wordt.
+- **Backend** (ongewijzigd t.o.v. eerdere lijst): compactere store-error→HTTP mapping en `slog` i.p.v. losse `log.Printf` blijven nuttige vervolgstappen (zie secties hierboven).
 
 ## Libraries vs zelf bouwen (richtlijn)
 

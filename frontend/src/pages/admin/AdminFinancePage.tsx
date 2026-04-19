@@ -1,8 +1,10 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 import { formatEUR } from '../../utils/formatMoney'
 
 function formatFulfilledShort(iso: string): string {
@@ -32,134 +34,136 @@ type BankCreditsTab = 'open' | 'matched' | 'waived'
 export function AdminFinancePage() {
   const { user, csrf } = useAuth()
   const { alert, confirm } = useAlertDialog()
+  const queryClient = useQueryClient()
   const isOperatorOnly = useMemo(
     () => Boolean(user?.is_operator && !user?.is_admin),
     [user?.is_admin, user?.is_operator],
   )
 
-  const [years, setYears] = useState<number[]>([])
   const [year, setYear] = useState<number | null>(null)
-  const [yearsLoading, setYearsLoading] = useState(true)
-  const [salesStats, setSalesStats] = useState<api.AdminSalesStats | null>(null)
-  const [statsLoading, setStatsLoading] = useState(false)
   const [bankTab, setBankTab] = useState<BankCreditsTab>('open')
-  const [bankRows, setBankRows] = useState<api.BankCreditRow[]>([])
-  const [matchedRows, setMatchedRows] = useState<api.BankCreditRow[]>([])
-  const [waivedRows, setWaivedRows] = useState<api.BankCreditRow[]>([])
-  const [bankLoading, setBankLoading] = useState(false)
   const [unmatchingBankId, setUnmatchingBankId] = useState<number | null>(null)
   const [waivingBankId, setWaivingBankId] = useState<number | null>(null)
-  const [manualMatchDigital, setManualMatchDigital] = useState<api.BankCreditSuggestionCandidate[]>([])
-  const [manualMatchPhysical, setManualMatchPhysical] = useState<api.BankCreditSuggestionCandidate[]>([])
   const [manualMatchSelectId, setManualMatchSelectId] = useState('')
   const [suggestionsFor, setSuggestionsFor] = useState<number | null>(null)
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
-  const [suggestions, setSuggestions] = useState<api.BankCreditSuggestionCandidate[]>([])
   const [matchingId, setMatchingId] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (!user) return
-    void (async () => {
-      setYearsLoading(true)
-      try {
-        const ys = isOperatorOnly ? await api.getOperatorSalesYears() : await api.getAdminSalesYears()
-        setYears(ys)
-        setYear((prev) => {
-          if (prev !== null && ys.includes(prev)) return prev
-          return ys[0] ?? new Date().getFullYear()
-        })
-      } catch (e) {
-        setYears([])
-        setYear(new Date().getFullYear())
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setYearsLoading(false)
-      }
-    })()
-  }, [user, isOperatorOnly, alert])
-
-  const loadSales = useCallback(
-    async (y: number) => {
-      setStatsLoading(true)
-      try {
-        const s = isOperatorOnly ? await api.getOperatorSalesStats(y) : await api.getAdminSalesStats(y)
-        setSalesStats(s)
-      } catch (e) {
-        setSalesStats(null)
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setStatsLoading(false)
-      }
-    },
-    [alert, isOperatorOnly],
-  )
-
-  const loadBankLists = useCallback(
-    async (y: number) => {
-      setBankLoading(true)
-      try {
-        const getUn = isOperatorOnly ? api.getOperatorBankCreditsUnmatched : api.getAdminBankCreditsUnmatched
-        const getMat = isOperatorOnly ? api.getOperatorBankCreditsMatched : api.getAdminBankCreditsMatched
-        const getWv = isOperatorOnly ? api.getOperatorBankCreditsWaived : api.getAdminBankCreditsWaived
-        const [open, matched, waived] = await Promise.all([getUn(y), getMat(y), getWv(y)])
-        setBankRows(open.rows)
-        setMatchedRows(matched.rows)
-        setWaivedRows(waived.rows)
-      } catch (e) {
-        setBankRows([])
-        setMatchedRows([])
-        setWaivedRows([])
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Bankregels laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setBankLoading(false)
-      }
-    },
-    [alert, isOperatorOnly],
-  )
+  const yearsQuery = useQuery({
+    queryKey: queryKeys.admin.salesYears(isOperatorOnly),
+    queryFn: () => (isOperatorOnly ? api.getOperatorSalesYears() : api.getAdminSalesYears()),
+    enabled: Boolean(user),
+  })
 
   useEffect(() => {
-    if (year === null) return
-    void loadSales(year)
-    void loadBankLists(year)
-  }, [year, loadSales, loadBankLists])
+    if (!yearsQuery.data) return
+    const ys = yearsQuery.data
+    setYear((prev) => {
+      if (prev !== null && ys.includes(prev)) return prev
+      return ys[0] ?? new Date().getFullYear()
+    })
+  }, [yearsQuery.data])
+
+  useEffect(() => {
+    if (!yearsQuery.isError || !yearsQuery.error) return
+    setYear(new Date().getFullYear())
+    const msg = yearsQuery.error instanceof api.ApiError ? yearsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
+  }, [yearsQuery.isError, yearsQuery.error, alert])
+
+  const salesStatsQuery = useQuery({
+    queryKey: queryKeys.admin.salesStats(year ?? 0, isOperatorOnly),
+    queryFn: () =>
+      isOperatorOnly ? api.getOperatorSalesStats(year!) : api.getAdminSalesStats(year!),
+    enabled: year !== null && Boolean(user),
+  })
+
+  useEffect(() => {
+    if (!salesStatsQuery.isError || !salesStatsQuery.error) return
+    const msg = salesStatsQuery.error instanceof api.ApiError ? salesStatsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
+  }, [salesStatsQuery.isError, salesStatsQuery.error, alert])
+
+  const bankListsQuery = useQuery({
+    queryKey: queryKeys.admin.bankCreditLists(year ?? 0, isOperatorOnly),
+    queryFn: async () => {
+      const y = year!
+      const getUn = isOperatorOnly ? api.getOperatorBankCreditsUnmatched : api.getAdminBankCreditsUnmatched
+      const getMat = isOperatorOnly ? api.getOperatorBankCreditsMatched : api.getAdminBankCreditsMatched
+      const getWv = isOperatorOnly ? api.getOperatorBankCreditsWaived : api.getAdminBankCreditsWaived
+      const [open, matched, waived] = await Promise.all([getUn(y), getMat(y), getWv(y)])
+      return { bankRows: open.rows, matchedRows: matched.rows, waivedRows: waived.rows }
+    },
+    enabled: year !== null && Boolean(user),
+  })
+
+  useEffect(() => {
+    if (!bankListsQuery.isError || !bankListsQuery.error) return
+    const msg = bankListsQuery.error instanceof api.ApiError ? bankListsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Bankregels laden mislukt', message: msg, variant: 'error' })
+  }, [bankListsQuery.isError, bankListsQuery.error, alert])
+
+  const suggestionPanelQuery = useQuery({
+    queryKey: queryKeys.admin.bankSuggestionPanel(suggestionsFor ?? 0, isOperatorOnly),
+    queryFn: async () => {
+      const id = suggestionsFor
+      if (id === null) {
+        return {
+          suggestions: [] as api.BankCreditSuggestionCandidate[],
+          manualMatchDigital: [] as api.BankCreditSuggestionCandidate[],
+          manualMatchPhysical: [] as api.BankCreditSuggestionCandidate[],
+        }
+      }
+      const getSug = isOperatorOnly ? api.getOperatorBankCreditSuggestions : api.getAdminBankCreditSuggestions
+      const getCand = isOperatorOnly
+        ? api.getOperatorBankCreditMatchCandidates
+        : api.getAdminBankCreditMatchCandidates
+      const [sug, cand] = await Promise.all([getSug(id), getCand(id)])
+      return {
+        suggestions: sug.candidates,
+        manualMatchDigital: cand.digital,
+        manualMatchPhysical: cand.physical,
+      }
+    },
+    enabled: suggestionsFor !== null && Boolean(user),
+  })
+
+  useEffect(() => {
+    if (!suggestionPanelQuery.isError || !suggestionPanelQuery.error) return
+    const msg =
+      suggestionPanelQuery.error instanceof api.ApiError ? suggestionPanelQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Suggesties laden mislukt', message: msg, variant: 'error' })
+  }, [suggestionPanelQuery.isError, suggestionPanelQuery.error, alert])
+
+  useEffect(() => {
+    setManualMatchSelectId('')
+  }, [suggestionsFor])
+
+  const yearsLoading = yearsQuery.isLoading
+  const salesStats = salesStatsQuery.data ?? null
+  const statsLoading = salesStatsQuery.isFetching
+  const bankRows = bankListsQuery.data?.bankRows ?? []
+  const matchedRows = bankListsQuery.data?.matchedRows ?? []
+  const waivedRows = bankListsQuery.data?.waivedRows ?? []
+  const bankLoading = bankListsQuery.isFetching
+  const suggestions = suggestionPanelQuery.data?.suggestions ?? []
+  const manualMatchDigital = suggestionPanelQuery.data?.manualMatchDigital ?? []
+  const manualMatchPhysical = suggestionPanelQuery.data?.manualMatchPhysical ?? []
+  const suggestionsLoading = suggestionPanelQuery.isFetching && suggestionsFor !== null
 
   const yearOptions = useMemo(() => {
+    const yearsList = yearsQuery.data ?? []
     const yNow = new Date().getFullYear()
-    const base = years.length > 0 ? [...years] : year !== null ? [year] : [yNow]
+    const base = yearsList.length > 0 ? [...yearsList] : year !== null ? [year] : [yNow]
     const s = new Set(base)
     s.add(yNow)
     return Array.from(s).sort((a, b) => b - a)
-  }, [years, year])
+  }, [yearsQuery.data, year])
 
-  const loadSuggestions = useCallback(
-    async (bankId: number) => {
-      setSuggestionsLoading(true)
-      setSuggestionsFor(bankId)
-      setManualMatchDigital([])
-      setManualMatchPhysical([])
-      setManualMatchSelectId('')
-      try {
-        const getSug = isOperatorOnly ? api.getOperatorBankCreditSuggestions : api.getAdminBankCreditSuggestions
-        const getCand = isOperatorOnly ? api.getOperatorBankCreditMatchCandidates : api.getAdminBankCreditMatchCandidates
-        const [sug, cand] = await Promise.all([getSug(bankId), getCand(bankId)])
-        setSuggestions(sug.candidates)
-        setManualMatchDigital(cand.digital)
-        setManualMatchPhysical(cand.physical)
-      } catch (e) {
-        setSuggestions([])
-        setManualMatchDigital([])
-        setManualMatchPhysical([])
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Suggesties laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setSuggestionsLoading(false)
-      }
-    },
-    [alert, isOperatorOnly],
-  )
+  const refreshYearFinance = useCallback(() => {
+    if (year === null) return
+    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.bankCreditLists(year, isOperatorOnly) })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.salesStats(year, isOperatorOnly) })
+  }, [queryClient, year, isOperatorOnly])
 
   const onMatch = useCallback(
     async (bankCreditId: number, cardRequestId: number) => {
@@ -180,11 +184,7 @@ export function AdminFinancePage() {
         }
         void alert({ title: 'Gekoppeld', message: 'De bankregel is afgestemd.', variant: 'success' })
         setSuggestionsFor(null)
-        setSuggestions([])
-        if (year !== null) {
-          void loadBankLists(year)
-          void loadSales(year)
-        }
+        refreshYearFinance()
       } catch (e) {
         const msg = e instanceof api.ApiError ? e.message : 'Koppelen mislukt.'
         void alert({ title: 'Koppelen mislukt', message: msg, variant: 'error' })
@@ -192,7 +192,7 @@ export function AdminFinancePage() {
         setMatchingId(null)
       }
     },
-    [confirm, csrf, alert, isOperatorOnly, year, loadBankLists, loadSales],
+    [confirm, csrf, alert, isOperatorOnly, refreshYearFinance],
   )
 
   const onUnmatch = useCallback(
@@ -214,10 +214,7 @@ export function AdminFinancePage() {
           await api.postAdminBankCreditUnmatch(csrf, bankCreditId)
         }
         void alert({ title: 'Ontkoppeld', message: 'De koppeling is verwijderd.', variant: 'success' })
-        if (year !== null) {
-          void loadBankLists(year)
-          void loadSales(year)
-        }
+        refreshYearFinance()
       } catch (e) {
         const msg = e instanceof api.ApiError ? e.message : 'Ontkoppelen mislukt.'
         void alert({ title: 'Ontkoppelen mislukt', message: msg, variant: 'error' })
@@ -225,7 +222,7 @@ export function AdminFinancePage() {
         setUnmatchingBankId(null)
       }
     },
-    [confirm, csrf, alert, isOperatorOnly, year, loadBankLists, loadSales],
+    [confirm, csrf, alert, isOperatorOnly, refreshYearFinance],
   )
 
   const onWaive = useCallback(
@@ -247,10 +244,7 @@ export function AdminFinancePage() {
           await api.postAdminBankCreditWaive(csrf, bankCreditId)
         }
         void alert({ title: 'Afgehandeld', message: 'De regel staat niet meer bij open bank-omzet.', variant: 'success' })
-        if (year !== null) {
-          void loadBankLists(year)
-          void loadSales(year)
-        }
+        refreshYearFinance()
       } catch (e) {
         const msg = e instanceof api.ApiError ? e.message : 'Actie mislukt.'
         void alert({ title: 'Afhandelen mislukt', message: msg, variant: 'error' })
@@ -258,7 +252,7 @@ export function AdminFinancePage() {
         setWaivingBankId(null)
       }
     },
-    [confirm, csrf, alert, isOperatorOnly, year, loadBankLists, loadSales],
+    [confirm, csrf, alert, isOperatorOnly, refreshYearFinance],
   )
 
   return (
@@ -342,10 +336,6 @@ export function AdminFinancePage() {
               onClick={() => {
                 setBankTab('open')
                 setSuggestionsFor(null)
-                setSuggestions([])
-                setManualMatchDigital([])
-                setManualMatchPhysical([])
-                setManualMatchSelectId('')
               }}
               className={`rounded-md px-3 py-2 text-xs font-semibold ${
                 bankTab === 'open' ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50'
@@ -358,10 +348,6 @@ export function AdminFinancePage() {
               onClick={() => {
                 setBankTab('matched')
                 setSuggestionsFor(null)
-                setSuggestions([])
-                setManualMatchDigital([])
-                setManualMatchPhysical([])
-                setManualMatchSelectId('')
               }}
               className={`rounded-md px-3 py-2 text-xs font-semibold ${
                 bankTab === 'matched' ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50'
@@ -374,10 +360,6 @@ export function AdminFinancePage() {
               onClick={() => {
                 setBankTab('waived')
                 setSuggestionsFor(null)
-                setSuggestions([])
-                setManualMatchDigital([])
-                setManualMatchPhysical([])
-                setManualMatchSelectId('')
               }}
               className={`rounded-md px-3 py-2 text-xs font-semibold ${
                 bankTab === 'waived' ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50'
@@ -427,15 +409,7 @@ export function AdminFinancePage() {
                                 type="button"
                                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
                                 onClick={() => {
-                                  if (suggestionsFor === row.id) {
-                                    setSuggestionsFor(null)
-                                    setSuggestions([])
-                                    setManualMatchDigital([])
-                                    setManualMatchPhysical([])
-                                    setManualMatchSelectId('')
-                                    return
-                                  }
-                                  void loadSuggestions(row.id)
+                                  setSuggestionsFor((prev) => (prev === row.id ? null : row.id))
                                 }}
                               >
                                 {suggestionsFor === row.id ? 'Verberg suggesties' : 'Suggesties'}

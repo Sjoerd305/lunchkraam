@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState, type FormEvent } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 
 export function AdminLocalUsersPage() {
   const { csrf } = useAuth()
   const { alert } = useAlertDialog()
-  const [rows, setRows] = useState<api.AdminUserRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const listQuery = useQuery({
+    queryKey: queryKeys.admin.users,
+    queryFn: () => api.getAdminUsers(),
+  })
   const [creating, setCreating] = useState(false)
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -23,23 +28,13 @@ export function AdminLocalUsersPage() {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [matroosJeugdBusyId, setMatroosJeugdBusyId] = useState<number | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const list = await api.getAdminUsers()
-      setRows(list)
-    } catch (e) {
-      setRows([])
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Gebruikers laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [alert])
-
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!listQuery.isError || !listQuery.error) return
+    const msg = listQuery.error instanceof api.ApiError ? listQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Gebruikers laden mislukt', message: msg, variant: 'error' })
+  }, [listQuery.isError, listQuery.error, alert])
+
+  const rows = listQuery.data ?? []
 
   async function onCreate(e: FormEvent) {
     e.preventDefault()
@@ -59,7 +54,7 @@ export function AdminLocalUsersPage() {
       setNewIsAdmin(false)
       setNewIsOperator(true)
       setNewMustChangePassword(true)
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.users })
       await alert({
         title: 'Account aangemaakt',
         message: 'Het jeugd-/lokaal account kan nu inloggen met gebruikersnaam en wachtwoord.',
@@ -83,14 +78,16 @@ export function AdminLocalUsersPage() {
   }
 
   async function toggleMatroosJeugd(r: api.AdminUserRow, next: boolean) {
+    const key = queryKeys.admin.users
+    const prev = queryClient.getQueryData<api.AdminUserRow[]>(key)
+    queryClient.setQueryData(key, (old: api.AdminUserRow[] | undefined) =>
+      (old ?? []).map((row) => (row.id === r.id ? { ...row, is_matroos_jeugd: next } : row)),
+    )
     setMatroosJeugdBusyId(r.id)
-    setRows((prev) => prev.map((row) => (row.id === r.id ? { ...row, is_matroos_jeugd: next } : row)))
     try {
       await api.patchUserMatroosJeugd(csrf, r.id, next)
     } catch (e) {
-      setRows((prev) =>
-        prev.map((row) => (row.id === r.id ? { ...row, is_matroos_jeugd: r.is_matroos_jeugd } : row)),
-      )
+      if (prev) queryClient.setQueryData(key, prev)
       const msg = e instanceof api.ApiError ? e.message : 'Opslaan mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
     } finally {
@@ -109,7 +106,7 @@ export function AdminLocalUsersPage() {
         must_change_password: editMustChangePassword,
       })
       setEditId(null)
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.users })
       await alert({ title: 'Opgeslagen', message: 'Account bijgewerkt.', variant: 'success' })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Opslaan mislukt.'
@@ -205,7 +202,7 @@ export function AdminLocalUsersPage() {
         <div className="border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-900">Alle gebruikers</h2>
         </div>
-        {loading ? (
+        {listQuery.isLoading ? (
           <p className="px-6 py-10 text-sm text-slate-600">Laden…</p>
         ) : (
           <div className="overflow-x-auto">

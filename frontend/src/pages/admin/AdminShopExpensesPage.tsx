@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 import { formatEUR } from '../../utils/formatMoney'
+
+type ShopExpensesListBundle = {
+  rows: api.AdminShopExpense[]
+  receiptsByExpenseId: Record<number, api.ShopExpenseReceipt[]>
+}
 
 /** Manual boeking: contante uitgave, digitale uitgave (beide met verplichte bon), of contant bij de kas. */
 type ShopBookingKind = 'contant_expense' | 'digital_expense' | 'cash_in'
@@ -152,16 +159,13 @@ function revolutImportResultDetail(
 export function AdminShopExpensesPage() {
   const { csrf, user } = useAuth()
   const { alert, confirm } = useAlertDialog()
+  const queryClient = useQueryClient()
   const isOperatorOnly = useMemo(
     () => Boolean(user?.is_operator && !user?.is_admin),
     [user?.is_admin, user?.is_operator],
   )
 
-  const [years, setYears] = useState<number[]>([])
   const [year, setYear] = useState<number | null>(null)
-  const [yearsLoading, setYearsLoading] = useState(true)
-  const [rows, setRows] = useState<api.AdminShopExpense[]>([])
-  const [listLoading, setListLoading] = useState(false)
   const [amount, setAmount] = useState('')
   const [spentOn, setSpentOn] = useState(todayISO)
   const [purpose, setPurpose] = useState<api.ShopExpensePurpose>('lunchkraam')
@@ -169,7 +173,6 @@ export function AdminShopExpensesPage() {
   const [description, setDescription] = useState('')
   const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [receiptsByExpenseId, setReceiptsByExpenseId] = useState<Record<number, api.ShopExpenseReceipt[]>>({})
   const [uploadingReceiptId, setUploadingReceiptId] = useState<number | null>(null)
   const [patchingPurposeId, setPatchingPurposeId] = useState<number | null>(null)
 
@@ -191,41 +194,80 @@ export function AdminShopExpensesPage() {
   const [revolutGuessPurposeByTime, setRevolutGuessPurposeByTime] = useState(true)
   const [revolutCreditLunchEUR, setRevolutCreditLunchEUR] = useState('15')
   const [revolutCreditAvondetenEUR, setRevolutCreditAvondetenEUR] = useState('10')
-  const [revolutBalance, setRevolutBalance] = useState<api.RevolutBalance | null>(null)
-  const [revolutBalanceLoading, setRevolutBalanceLoading] = useState(false)
-  const [pendingReviews, setPendingReviews] = useState<api.PendingImportReview[]>([])
   const [reviewActioning, setReviewActioning] = useState<number | null>(null)
 
-  const loadRevolutBalance = useCallback(async () => {
-    if (!user) return
-    setRevolutBalanceLoading(true)
-    try {
-      const b = await api.getRevolutBalance(isOperatorOnly)
-      setRevolutBalance(b)
-    } catch {
-      setRevolutBalance(null)
-    } finally {
-      setRevolutBalanceLoading(false)
-    }
-  }, [user, isOperatorOnly])
-
-  const loadPendingReviews = useCallback(async () => {
-    if (!user) return
-    try {
-      const reviews = await api.getPendingImportReviews(isOperatorOnly)
-      setPendingReviews(reviews)
-    } catch {
-      setPendingReviews([])
-    }
-  }, [user, isOperatorOnly])
+  const yearsQuery = useQuery({
+    queryKey: queryKeys.admin.salesYears(isOperatorOnly),
+    queryFn: () => (isOperatorOnly ? api.getOperatorSalesYears() : api.getAdminSalesYears()),
+    enabled: Boolean(user),
+  })
 
   useEffect(() => {
-    void loadRevolutBalance()
-  }, [loadRevolutBalance])
+    if (!yearsQuery.data) return
+    const ys = yearsQuery.data
+    setYear((prev) => {
+      if (prev !== null && ys.includes(prev)) return prev
+      return ys[0] ?? new Date().getFullYear()
+    })
+  }, [yearsQuery.data])
 
   useEffect(() => {
-    void loadPendingReviews()
-  }, [loadPendingReviews])
+    if (!yearsQuery.isError || !yearsQuery.error) return
+    setYear(new Date().getFullYear())
+    const msg = yearsQuery.error instanceof api.ApiError ? yearsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
+  }, [yearsQuery.isError, yearsQuery.error, alert])
+
+  const listQuery = useQuery({
+    queryKey: queryKeys.admin.shopExpensesList(year ?? 0, isOperatorOnly),
+    queryFn: async (): Promise<ShopExpensesListBundle> => {
+      const y = year!
+      const list = isOperatorOnly ? await api.getOperatorShopExpenses(y) : await api.getAdminShopExpenses(y)
+      const receiptEntries = await Promise.all(
+        list.map(async (row) => {
+          try {
+            const receipts = await api.getShopExpenseReceipts(row.id, isOperatorOnly)
+            return [row.id, receipts] as const
+          } catch {
+            return [row.id, []] as const
+          }
+        }),
+      )
+      return { rows: list, receiptsByExpenseId: Object.fromEntries(receiptEntries) }
+    },
+    enabled: year !== null && Boolean(user),
+  })
+
+  useEffect(() => {
+    if (!listQuery.isError || !listQuery.error) return
+    const msg = listQuery.error instanceof api.ApiError ? listQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Uitgaven laden mislukt', message: msg, variant: 'error' })
+  }, [listQuery.isError, listQuery.error, alert])
+
+  const revolutBalanceQuery = useQuery({
+    queryKey: queryKeys.admin.revolutBalance(isOperatorOnly),
+    queryFn: () => api.getRevolutBalance(isOperatorOnly),
+    enabled: Boolean(user),
+    retry: false,
+  })
+
+  const pendingReviewsQuery = useQuery({
+    queryKey: queryKeys.admin.pendingReviews(isOperatorOnly),
+    queryFn: () => api.getPendingImportReviews(isOperatorOnly),
+    enabled: Boolean(user),
+    retry: false,
+  })
+
+  const yearsLoading = yearsQuery.isLoading
+  const rows = listQuery.data?.rows ?? []
+  const receiptsByExpenseId = listQuery.data?.receiptsByExpenseId ?? {}
+  const listLoading = listQuery.isFetching
+  const revolutBalance = revolutBalanceQuery.data ?? null
+  const revolutBalanceLoading = revolutBalanceQuery.isFetching
+  const pendingReviews = pendingReviewsQuery.data ?? []
+
+  const invalidateShopList = (y: number) =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.shopExpensesList(y, isOperatorOnly) })
 
   useEffect(() => {
     if (!revolutPreview) {
@@ -261,66 +303,6 @@ export function AdminShopExpensesPage() {
     }
     return { lunch, avo, total: lunch + avo }
   }, [revolutPreview, creditPurposeByKey, excludedCredit])
-
-  useEffect(() => {
-    if (!user) return
-    void (async () => {
-      setYearsLoading(true)
-      try {
-        const ys = isOperatorOnly
-          ? await api.getOperatorSalesYears()
-          : await api.getAdminSalesYears()
-        setYears(ys)
-        setYear((prev) => {
-          if (prev !== null && ys.includes(prev)) return prev
-          return ys[0] ?? new Date().getFullYear()
-        })
-      } catch (e) {
-        setYears([])
-        setYear(new Date().getFullYear())
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setYearsLoading(false)
-      }
-    })()
-  }, [user, isOperatorOnly, alert])
-
-  const loadList = useCallback(
-    async (y: number) => {
-      setListLoading(true)
-      try {
-        const list = isOperatorOnly
-          ? await api.getOperatorShopExpenses(y)
-          : await api.getAdminShopExpenses(y)
-        setRows(list)
-        const receiptEntries = await Promise.all(
-          list.map(async (row) => {
-            try {
-              const receipts = await api.getShopExpenseReceipts(row.id, isOperatorOnly)
-              return [row.id, receipts] as const
-            } catch {
-              return [row.id, []] as const
-            }
-          }),
-        )
-        setReceiptsByExpenseId(Object.fromEntries(receiptEntries))
-      } catch (e) {
-        setRows([])
-        setReceiptsByExpenseId({})
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Uitgaven laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setListLoading(false)
-      }
-    },
-    [alert, isOperatorOnly],
-  )
-
-  useEffect(() => {
-    if (year === null) return
-    void loadList(year)
-  }, [year, loadList])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -370,7 +352,7 @@ export function AdminShopExpensesPage() {
       setBookingKind('contant_expense')
       setSpentOn(todayISO())
       setNewReceiptFile(null)
-      await loadList(year)
+      await invalidateShopList(year)
       void alert({
         title: 'Opgeslagen',
         message:
@@ -390,23 +372,38 @@ export function AdminShopExpensesPage() {
   }
 
   const yearOptions = useMemo(() => {
+    const yearsList = yearsQuery.data ?? []
     const yNow = new Date().getFullYear()
-    const base = years.length > 0 ? [...years] : year !== null ? [year] : [yNow]
+    const base = yearsList.length > 0 ? [...yearsList] : year !== null ? [year] : [yNow]
     const s = new Set(base)
     s.add(yNow)
     return Array.from(s).sort((a, b) => b - a)
-  }, [years, year])
+  }, [yearsQuery.data, year])
 
   async function onPurposeChange(expenseId: number, nextPurpose: api.ShopExpensePurpose) {
+    if (year === null) return
     const prev = rows.find((x) => x.id === expenseId)
     if (!prev || prev.purpose === nextPurpose) return
-    setRows((rs) => rs.map((row) => (row.id === expenseId ? { ...row, purpose: nextPurpose } : row)))
+    const listKey = queryKeys.admin.shopExpensesList(year, isOperatorOnly)
+    queryClient.setQueryData(listKey, (old: ShopExpensesListBundle | undefined) => {
+      if (!old) return old
+      return { ...old, rows: old.rows.map((row) => (row.id === expenseId ? { ...row, purpose: nextPurpose } : row)) }
+    })
     setPatchingPurposeId(expenseId)
     try {
       const updated = await api.patchShopExpensePurpose(csrf, expenseId, nextPurpose, isOperatorOnly)
-      setRows((rs) => rs.map((row) => (row.id === expenseId ? updated : row)))
+      queryClient.setQueryData(listKey, (old: ShopExpensesListBundle | undefined) => {
+        if (!old) return old
+        return { ...old, rows: old.rows.map((row) => (row.id === expenseId ? updated : row)) }
+      })
     } catch (err) {
-      setRows((rs) => rs.map((row) => (row.id === expenseId ? { ...row, purpose: prev.purpose } : row)))
+      queryClient.setQueryData(listKey, (old: ShopExpensesListBundle | undefined) => {
+        if (!old) return old
+        return {
+          ...old,
+          rows: old.rows.map((row) => (row.id === expenseId ? { ...row, purpose: prev.purpose } : row)),
+        }
+      })
       const msg = err instanceof api.ApiError ? err.message : 'Bijwerken mislukt.'
       await alert({ title: 'Waarvoor wijzigen mislukt', message: msg, variant: 'error' })
     } finally {
@@ -424,7 +421,7 @@ export function AdminShopExpensesPage() {
     if (!ok || year === null) return
     try {
       await api.deleteShopExpense(csrf, id)
-      await loadList(year)
+      await invalidateShopList(year)
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Verwijderen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -436,10 +433,17 @@ export function AdminShopExpensesPage() {
     setUploadingReceiptId(expenseId)
     try {
       const receipt = await api.uploadShopExpenseReceipt(csrf, expenseId, file, isOperatorOnly)
-      setReceiptsByExpenseId((prev) => ({
-        ...prev,
-        [expenseId]: [...(prev[expenseId] ?? []), receipt],
-      }))
+      const listKey = queryKeys.admin.shopExpensesList(year, isOperatorOnly)
+      queryClient.setQueryData(listKey, (old: ShopExpensesListBundle | undefined) => {
+        if (!old) return old
+        return {
+          ...old,
+          receiptsByExpenseId: {
+            ...old.receiptsByExpenseId,
+            [expenseId]: [...(old.receiptsByExpenseId[expenseId] ?? []), receipt],
+          },
+        }
+      })
       await alert({ title: 'Bonfoto opgeslagen', message: 'De bonfoto is toegevoegd.', variant: 'success' })
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Uploaden mislukt.'
@@ -460,10 +464,17 @@ export function AdminShopExpensesPage() {
     if (!ok) return
     try {
       await api.deleteShopExpenseReceipt(csrf, expenseId, receiptId)
-      setReceiptsByExpenseId((prev) => ({
-        ...prev,
-        [expenseId]: (prev[expenseId] ?? []).filter((r) => r.id !== receiptId),
-      }))
+      const listKey = queryKeys.admin.shopExpensesList(year, isOperatorOnly)
+      queryClient.setQueryData(listKey, (old: ShopExpensesListBundle | undefined) => {
+        if (!old) return old
+        return {
+          ...old,
+          receiptsByExpenseId: {
+            ...old.receiptsByExpenseId,
+            [expenseId]: (old.receiptsByExpenseId[expenseId] ?? []).filter((r) => r.id !== receiptId),
+          },
+        }
+      })
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Verwijderen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -479,8 +490,8 @@ export function AdminShopExpensesPage() {
     setReviewActioning(reviewId)
     try {
       await api.mergePendingReview(csrf, reviewId, isOperatorOnly)
-      await loadPendingReviews()
-      await loadList(year)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReviews(isOperatorOnly) })
+      await invalidateShopList(year)
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Samenvoegen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -493,7 +504,7 @@ export function AdminShopExpensesPage() {
     setReviewActioning(reviewId)
     try {
       await api.dismissPendingReview(csrf, reviewId, isOperatorOnly)
-      await loadPendingReviews()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReviews(isOperatorOnly) })
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Overslaan mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -609,10 +620,10 @@ export function AdminShopExpensesPage() {
         variant: 'success',
       })
       if (!r.dry_run) {
-        void loadRevolutBalance()
-        void loadPendingReviews()
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.revolutBalance(isOperatorOnly) })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReviews(isOperatorOnly) })
       }
-      if (!r.dry_run && (r.debits_imported > 0 || r.credits_imported > 0)) await loadList(yearToRefresh)
+      if (!r.dry_run && (r.debits_imported > 0 || r.credits_imported > 0)) await invalidateShopList(yearToRefresh)
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Importeren mislukt.'
       await alert({ title: 'Revolut-import mislukt', message: msg, variant: 'error' })

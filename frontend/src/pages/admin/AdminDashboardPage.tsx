@@ -1,7 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { lazy, Suspense, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 import { formatEUR } from '../../utils/formatMoney'
 const AdminSalesCharts = lazy(async () => {
   const m = await import('./AdminSalesCharts')
@@ -44,41 +46,28 @@ function StatCard({
 
 export function AdminDashboardPage() {
   const { alert } = useAlertDialog()
-  const [stats, setStats] = useState<api.AdminDashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [failed, setFailed] = useState(false)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setFailed(false)
-    try {
-      const s = await api.getAdminDashboard()
-      setStats(s)
-    } catch (e) {
-      setFailed(true)
-      setStats(null)
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Overzicht laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [alert])
+  const q = useQuery({
+    queryKey: queryKeys.admin.dashboard,
+    queryFn: () => api.getAdminDashboard(),
+  })
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!q.isError || !q.error) return
+    const msg = q.error instanceof api.ApiError ? q.error.message : 'Laden mislukt.'
+    void alert({ title: 'Overzicht laden mislukt', message: msg, variant: 'error' })
+  }, [q.isError, q.error, alert])
 
-  if (loading && !stats) {
+  if (q.isPending && !q.data) {
     return <p className="text-slate-600">Cijfers laden…</p>
   }
 
-  if (failed && !stats) {
+  if (q.isError && !q.data) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-md">
         <p className="text-slate-600">Het overzicht kon niet worden geladen.</p>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => void q.refetch()}
           className="min-h-12 w-full max-w-xs rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
         >
           Opnieuw proberen
@@ -87,6 +76,7 @@ export function AdminDashboardPage() {
     )
   }
 
+  const stats = q.data
   if (!stats) {
     return null
   }

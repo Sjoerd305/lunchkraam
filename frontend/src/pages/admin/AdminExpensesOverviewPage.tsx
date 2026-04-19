@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 import { formatEUR } from '../../utils/formatMoney'
 
 function breadLabel(b: string): string {
@@ -52,55 +54,46 @@ export function AdminExpensesOverviewPage() {
     [user?.is_admin, user?.is_operator],
   )
 
-  const [years, setYears] = useState<number[]>([])
   const [year, setYear] = useState<number | null>(null)
-  const [yearsLoading, setYearsLoading] = useState(true)
-  const [salesStats, setSalesStats] = useState<api.AdminSalesStats | null>(null)
-  const [statsLoading, setStatsLoading] = useState(false)
+
+  const yearsQuery = useQuery({
+    queryKey: queryKeys.admin.salesYears(isOperatorOnly),
+    queryFn: () => (isOperatorOnly ? api.getOperatorSalesYears() : api.getAdminSalesYears()),
+    enabled: Boolean(user),
+  })
 
   useEffect(() => {
-    if (!user) return
-    void (async () => {
-      setYearsLoading(true)
-      try {
-        const ys = isOperatorOnly ? await api.getOperatorSalesYears() : await api.getAdminSalesYears()
-        setYears(ys)
-        setYear((prev) => {
-          if (prev !== null && ys.includes(prev)) return prev
-          return ys[0] ?? new Date().getFullYear()
-        })
-      } catch (e) {
-        setYears([])
-        setYear(new Date().getFullYear())
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setYearsLoading(false)
-      }
-    })()
-  }, [user, isOperatorOnly, alert])
-
-  const loadStats = useCallback(
-    async (y: number) => {
-      setStatsLoading(true)
-      try {
-        const s = isOperatorOnly ? await api.getOperatorSalesStats(y) : await api.getAdminSalesStats(y)
-        setSalesStats(s)
-      } catch (e) {
-        setSalesStats(null)
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setStatsLoading(false)
-      }
-    },
-    [alert, isOperatorOnly],
-  )
+    if (!yearsQuery.data) return
+    const ys = yearsQuery.data
+    setYear((prev) => {
+      if (prev !== null && ys.includes(prev)) return prev
+      return ys[0] ?? new Date().getFullYear()
+    })
+  }, [yearsQuery.data])
 
   useEffect(() => {
-    if (year === null) return
-    void loadStats(year)
-  }, [year, loadStats])
+    if (!yearsQuery.isError || !yearsQuery.error) return
+    setYear(new Date().getFullYear())
+    const msg = yearsQuery.error instanceof api.ApiError ? yearsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
+  }, [yearsQuery.isError, yearsQuery.error, alert])
+
+  const statsQuery = useQuery({
+    queryKey: queryKeys.admin.salesStats(year ?? 0, isOperatorOnly),
+    queryFn: () =>
+      isOperatorOnly ? api.getOperatorSalesStats(year!) : api.getAdminSalesStats(year!),
+    enabled: year !== null && Boolean(user),
+  })
+
+  useEffect(() => {
+    if (!statsQuery.isError || !statsQuery.error) return
+    const msg = statsQuery.error instanceof api.ApiError ? statsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
+  }, [statsQuery.isError, statsQuery.error, alert])
+
+  const salesStats = statsQuery.data ?? null
+  const yearsLoading = yearsQuery.isLoading
+  const statsLoading = statsQuery.isFetching
 
   const tostiRowsByMonth = useMemo(() => {
     if (!salesStats) return []
@@ -113,12 +106,13 @@ export function AdminExpensesOverviewPage() {
   }, [salesStats])
 
   const yearOptions = useMemo(() => {
+    const yearsList = yearsQuery.data ?? []
     const yNow = new Date().getFullYear()
-    const base = years.length > 0 ? [...years] : year !== null ? [year] : [yNow]
+    const base = yearsList.length > 0 ? [...yearsList] : year !== null ? [year] : [yNow]
     const s = new Set(base)
     s.add(yNow)
     return Array.from(s).sort((a, b) => b - a)
-  }, [years, year])
+  }, [yearsQuery.data, year])
 
   return (
     <div className="space-y-8">

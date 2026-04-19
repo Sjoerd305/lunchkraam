@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Bar,
@@ -14,6 +15,7 @@ import {
 } from 'recharts'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 import { formatEUR, roundCents } from '../../utils/formatMoney'
 
 const MONTH_SHORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
@@ -207,62 +209,49 @@ function CumFinanceTooltip({
 
 export function AdminSalesCharts() {
   const { alert } = useAlertDialog()
-  const [availableYears, setAvailableYears] = useState<number[]>([])
   const [year, setYear] = useState<number | null>(null)
-  const [yearsLoading, setYearsLoading] = useState(true)
   const [granularity, setGranularity] = useState<Granularity>('month')
-  const [stats, setStats] = useState<api.AdminSalesStats | null>(null)
-  const [statsLoading, setStatsLoading] = useState(false)
+
+  const yearsQuery = useQuery({
+    queryKey: queryKeys.admin.salesYears(false),
+    queryFn: () => api.getAdminSalesYears(),
+  })
 
   useEffect(() => {
-    void (async () => {
-      setYearsLoading(true)
-      try {
-        const ys = await api.getAdminSalesYears()
-        setAvailableYears(ys)
-        const yNow = new Date().getFullYear()
-        setYear((prev) => {
-          if (ys.length > 0) {
-            if (prev !== null && ys.includes(prev)) return prev
-            return ys[0] ?? yNow
-          }
-          return prev ?? yNow
-        })
-      } catch (e) {
-        setAvailableYears([])
-        setYear(new Date().getFullYear())
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setYearsLoading(false)
+    if (!yearsQuery.data) return
+    const ys = yearsQuery.data
+    const yNow = new Date().getFullYear()
+    setYear((prev) => {
+      if (ys.length > 0) {
+        if (prev !== null && ys.includes(prev)) return prev
+        return ys[0] ?? yNow
       }
-    })()
-  }, [alert])
-
-  const loadStats = useCallback(
-    async (y: number) => {
-      setStatsLoading(true)
-      try {
-        const s = await api.getAdminSalesStats(y)
-        setStats(s)
-      } catch (e) {
-        setStats(null)
-        const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-        void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
-      } finally {
-        setStatsLoading(false)
-      }
-    },
-    [alert],
-  )
+      return prev ?? yNow
+    })
+  }, [yearsQuery.data])
 
   useEffect(() => {
-    if (year === null) {
-      setStats(null)
-      return
-    }
-    void loadStats(year)
-  }, [year, loadStats])
+    if (!yearsQuery.isError || !yearsQuery.error) return
+    setYear(new Date().getFullYear())
+    const msg = yearsQuery.error instanceof api.ApiError ? yearsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
+  }, [yearsQuery.isError, yearsQuery.error, alert])
+
+  const statsQuery = useQuery({
+    queryKey: queryKeys.admin.salesStats(year ?? 0, false),
+    queryFn: () => api.getAdminSalesStats(year!),
+    enabled: year !== null,
+  })
+
+  useEffect(() => {
+    if (!statsQuery.isError || !statsQuery.error) return
+    const msg = statsQuery.error instanceof api.ApiError ? statsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
+  }, [statsQuery.isError, statsQuery.error, alert])
+
+  const stats = statsQuery.data ?? null
+  const yearsLoading = yearsQuery.isLoading
+  const statsLoading = statsQuery.isFetching
 
   const chartData = useMemo(() => {
     if (!stats?.monthly.length) return []
@@ -270,12 +259,13 @@ export function AdminSalesCharts() {
   }, [stats, granularity])
 
   const yearSelectOptions = useMemo(() => {
+    const yearsList = yearsQuery.data ?? []
     const yNow = new Date().getFullYear()
-    const base = availableYears.length > 0 ? [...availableYears] : year !== null ? [year] : [yNow]
+    const base = yearsList.length > 0 ? [...yearsList] : year !== null ? [year] : [yNow]
     const s = new Set(base)
     s.add(yNow)
     return Array.from(s).sort((a, b) => b - a)
-  }, [availableYears, year])
+  }, [yearsQuery.data, year])
 
   const hasFinanceData =
     stats !== null && (stats.year_fulfilled_count > 0 || stats.year_expenses_eur > 0)

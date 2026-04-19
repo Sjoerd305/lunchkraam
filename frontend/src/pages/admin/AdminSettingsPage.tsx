@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState, type FormEvent } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { queryKeys } from '../../queryKeys'
 
 export function AdminSettingsPage() {
   const { csrf } = useAuth()
   const { alert } = useAlertDialog()
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.admin.settings,
+    queryFn: () => api.getAdminSettings(),
+  })
   const [saving, setSaving] = useState(false)
   const [tikkieUrl, setTikkieUrl] = useState('')
   const [tikkieUrlAvondeten, setTikkieUrlAvondeten] = useState('')
@@ -15,27 +21,22 @@ export function AdminSettingsPage() {
   const [envFallback, setEnvFallback] = useState('')
   const [envFallbackAvondeten, setEnvFallbackAvondeten] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const s = await api.getAdminSettings()
-      setTikkieUrl(s.tikkie_url)
-      setTikkieUrlAvondeten(s.tikkie_url_avondeten)
-      setEffective(s.tikkie_url_effective)
-      setEffectiveAvondeten(s.tikkie_url_avondeten_effective)
-      setEnvFallback(s.tikkie_url_env_config)
-      setEnvFallbackAvondeten(s.tikkie_url_avondeten_env_config)
-    } catch (e) {
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Instellingen laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [alert])
+  useEffect(() => {
+    if (!settingsQuery.data) return
+    const s = settingsQuery.data
+    setTikkieUrl(s.tikkie_url)
+    setTikkieUrlAvondeten(s.tikkie_url_avondeten)
+    setEffective(s.tikkie_url_effective)
+    setEffectiveAvondeten(s.tikkie_url_avondeten_effective)
+    setEnvFallback(s.tikkie_url_env_config)
+    setEnvFallbackAvondeten(s.tikkie_url_avondeten_env_config)
+  }, [settingsQuery.data])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!settingsQuery.isError || !settingsQuery.error) return
+    const msg = settingsQuery.error instanceof api.ApiError ? settingsQuery.error.message : 'Laden mislukt.'
+    void alert({ title: 'Instellingen laden mislukt', message: msg, variant: 'error' })
+  }, [settingsQuery.isError, settingsQuery.error, alert])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -51,6 +52,7 @@ export function AdminSettingsPage() {
       setEffectiveAvondeten(s.tikkie_url_avondeten_effective)
       setEnvFallback(s.tikkie_url_env_config)
       setEnvFallbackAvondeten(s.tikkie_url_avondeten_env_config)
+      queryClient.setQueryData(queryKeys.admin.settings, s)
       await alert({ title: 'Opgeslagen', message: 'Tikkie-links zijn bijgewerkt.', variant: 'success' })
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Opslaan mislukt.'
@@ -60,7 +62,7 @@ export function AdminSettingsPage() {
     }
   }
 
-  if (loading) {
+  if (settingsQuery.isLoading) {
     return <p className="text-slate-600">Laden…</p>
   }
 
