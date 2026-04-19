@@ -23,12 +23,16 @@ func classifyFinanceControlDelta(revolutImportedEUR, appRevenueEUR, deltaEUR flo
 }
 
 type financeControlMonthRow struct {
-	Month             int     `json:"month"`
-	LabelNL           string  `json:"label_nl"`
-	RevolutImportsEUR float64 `json:"revolut_imports_eur"`
-	AppRevenueEUR     float64 `json:"app_revenue_eur"`
-	DeltaEUR          float64 `json:"delta_eur"`
-	Status            string  `json:"status"`
+	Month                     int     `json:"month"`
+	LabelNL                   string  `json:"label_nl"`
+	RevolutImportsEUR         float64 `json:"revolut_imports_eur"`
+	AppRevenueEUR             float64 `json:"app_revenue_eur"`
+	CorrectionsEUR            float64 `json:"corrections_eur"`
+	AppInclCorrectionsEUR     float64 `json:"app_incl_corrections_eur"`
+	DeltaEUR                  float64 `json:"delta_eur"`
+	Status                    string  `json:"status"`
+	DeltaInclCorrectionsEUR   float64 `json:"delta_incl_corrections_eur"`
+	StatusInclCorrections     string  `json:"status_incl_corrections"`
 }
 
 type financeControlResponse struct {
@@ -53,19 +57,31 @@ func (d *Deps) APIAdminFinanceControl(w http.ResponseWriter, r *http.Request) {
 		httpx.RespondInternalStoreError(w, r, "AdminRevolutImportedTotalsByMonth", err)
 		return
 	}
+	corrTotals, err := d.Store.SumFinanceCorrectionsByMonth(r.Context(), year)
+	if err != nil {
+		httpx.RespondInternalStoreError(w, r, "SumFinanceCorrectionsByMonth", err)
+		return
+	}
 
 	months := make([]financeControlMonthRow, 0, 12)
 	for i := 0; i < 12; i++ {
 		app := money.RoundEUR(buckets[i].RevenueEUR)
 		rev := money.RoundEUR(revTotals[i])
+		corr := money.RoundEUR(corrTotals[i])
+		appIncl := money.RoundEUR(app + corr)
 		delta := money.RoundEUR(rev - app)
+		deltaIncl := money.RoundEUR(rev - appIncl)
 		months = append(months, financeControlMonthRow{
-			Month:             i + 1,
-			LabelNL:           monthLabelNL(i + 1),
-			RevolutImportsEUR: rev,
-			AppRevenueEUR:     app,
-			DeltaEUR:          delta,
-			Status:            classifyFinanceControlDelta(rev, app, delta),
+			Month:                   i + 1,
+			LabelNL:                 monthLabelNL(i + 1),
+			RevolutImportsEUR:       rev,
+			AppRevenueEUR:           app,
+			CorrectionsEUR:          corr,
+			AppInclCorrectionsEUR:   appIncl,
+			DeltaEUR:                delta,
+			Status:                  classifyFinanceControlDelta(rev, app, delta),
+			DeltaInclCorrectionsEUR: deltaIncl,
+			StatusInclCorrections:   classifyFinanceControlDelta(rev, appIncl, deltaIncl),
 		})
 	}
 
@@ -75,7 +91,9 @@ func (d *Deps) APIAdminFinanceControl(w http.ResponseWriter, r *http.Request) {
 		Months:   months,
 		MethodNote: "Revolut-kolom: som van alle geïmporteerde bankregels (ontvangstdatum in die maand). " +
 			"App-kolom: vervulde kaartverkopen in die maand (Europe/Amsterdam) plus open bank-omzet uit import. " +
-			"Delta = Revolut − app (zelfde teken als cmd/revolut-import reconcile). " +
+			"Correcties: administratieve aanpassingen (Financiën → overige correcties); meestal negatief bij terugbetaling buiten het standaardpad. " +
+			"App incl. correcties = app + som correcties in die maand. " +
+			"Delta = Revolut − app (zelfde teken als cmd/revolut-import reconcile); Delta incl. correcties gebruikt de aangepaste app-kolom. " +
 			"Afwijkingen komen door timing (bijv. import in één maand, accordering in een andere).",
 	}
 	httpx.JSON(w, http.StatusOK, resp)

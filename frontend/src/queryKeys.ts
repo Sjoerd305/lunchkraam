@@ -23,6 +23,7 @@ export const queryKeys = {
     salesYears: (operator: boolean) => ['admin', 'sales-years', operator] as const,
     salesStats: (year: number, operator: boolean) => ['admin', 'sales-stats', year, operator] as const,
     financeControl: (year: number, operator: boolean) => ['admin', 'finance-control', year, operator] as const,
+    financeCorrections: (year: number) => ['admin', 'finance-corrections', year] as const,
     shopExpensesList: (year: number, operator: boolean) => ['admin', 'shop-expenses', year, operator] as const,
     revolutBalance: (operator: boolean) => ['admin', 'revolut-balance', operator] as const,
     pendingReviews: (operator: boolean) => ['admin', 'pending-reviews', operator] as const,

@@ -17,7 +17,7 @@
 ## Losse posten (buiten digitale Revolut-lijn)
 
 - [x] **Handmatige uitgaven / kas:** contante en digitale uitgave + **contant bij kas** op **Boodschappen**; dubbele import vs handmatige bon → **wachtrij** (pending reviews).
-- [ ] **Overige correcties** expliciet modelleren (bijv. terugbetalingen, afspraken andere speltak/gasten) als jullie dat **niet** genoeg vinden onder bestaande boekingen + “bank zonder verkoop” op Financiën — productkeuze / korte workflow in UI — **PR-L**.
+- [x] **Overige correcties:** tabel `finance_corrections` + admin-API + sectie op **Financiën**; Verkoopcontrole toont correcties en tweede delta/status. — **PR-L** (MVP).
 - [ ] Optioneel: **toelichting of tags** bij importregels (bijv. afwijkende Tikkie-groep) als **administratieve context**, zonder een tweede gelijke boeking te maken — **PR-M** (los of als fase 2 na **PR-L**).
 
 ## Nog uit te werken in product / UI
@@ -214,13 +214,13 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 |------|--------|
 | **Doel** | Modelleren van **correcties** (terugbetalingen, andere speltak, gasten, interne verrekeningen) die **niet** goed in huidige “uitgave / bank zonder verkoop / handmatige bon” passen — zonder dubbele digitale omzet. |
 | **Context** | Zie *Losse posten*; besluitvorming: voldoet “handmatige boeking + Financiën” of is een **expliciet type** nodig (audit, rapportage, filters). |
-| **Ontwerp (voor code)** | 1) Enum of `correction_kind` + optionele koppeling naar `shop_expense` / `bank_credit` / vrije tekst. 2) Impact op **Overzichten**, **Dashboard**, export (wel/niet meetellen in “verwacht”). 3) Rechten: alleen admin of ook operator. |
-| **Backend** | Migratie(s); store-functies; handlers; `httpx` + typed errors volgens repo-standaard; idempotency waar van toepassing. |
-| **Frontend** | Workflow op **Financiën** of **Boodschappen** (kort formulier + bevestiging); uitleg in UI waarom dit pad bestaat. |
+| **Ontwerp (MVP)** | Tabel `finance_corrections` met `kind` CHECK (4 waarden), `amount_eur` ongelijk nul (negatief toegestaan), `recorded_on` voor maand-som; **geen** FK naar `shop_expense`/`bank_credit` in v1. |
+| **Backend** | Migratie [00028_finance_corrections.sql](../migrations/00028_finance_corrections.sql); [internal/store/finance_corrections.go](../internal/store/finance_corrections.go); handlers list/create/delete onder `/api/admin/finance-corrections`; `SumFinanceCorrectionsByMonth` + uitbreiding `GET …/finance-control` met correcties- en tweede delta-kolom; `sales-years` merge met correctiejaren. |
+| **Frontend** | Sectie **Financiën** (alleen admin): formulier + tabel; **Verkoopcontrole**: extra kolommen; [docs/VOLUNTEERS.md](VOLUNTEERS.md) bijgewerkt. |
 | **Acceptatie** | Migraties reversibel of backup-plan; `go test`; handmatige scenario’s in staging; geen dubbele telling in PR-K rapportage zodra die bestaat (cross-check in PR-beschrijving). |
 | **Risico** | Medium–hoog (boekhoudkundige kant); mitigatie: kleine MVP (één correctietype) vóór uitbreiding. |
 | **Grootte** | Medium–groot. |
-| **Status** | **Gepland**. |
+| **Status** | **MVP gedaan** (april 2026): migratie + CRUD (admin) + integratie Verkoopcontrole; geen wijziging aan `sales-stats`/`AdminSalesByMonth` (correcties alleen in finance-control + Financiën-lijst). |
 
 ### PR-M — Optioneel: administratieve tags / toelichting bij importregels
 
@@ -275,7 +275,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 11. **PR-O** (vrijwilligersdoc) — **eerst** doen als laag risico; helpt uitlijnen copy voor **PR-K**.  
 12. **PR-N** (backend split sales / shop_expenses) — **afgerond**.  
 13. **PR-K** (financieel controle-overzicht) — MVP afgerond; verfijning optioneel.  
-14. **PR-L** (overige correcties) — productbesluit; kan **na PR-K** als rapportage daarop correctietypes moet tonen.  
+14. **PR-L** (overige correcties) — **MVP afgerond** (tabel + Financiën + Verkoopcontrole-kolommen); uitbreidingen (extra types, dashboard) optioneel.  
 15. **PR-M** (tags import) — optioneel, **na PR-L** of zelfstandig volgens prioriteit.
 
 ---
@@ -288,7 +288,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | *Production backlog — Backend* “api_admin_sales / shop_expenses splitsen” | **PR-N** (**gedaan**) |
 | *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G** (**gedaan**), **PR-H** (**gedaan**) |
 | *Revolut vs tostikraam* “saldo vs verwachting” + *Nog uit te werken* verkoopcontrole | **PR-K** (**MVP gedaan**; verfijning mogelijk) |
-| *Losse posten* “overige correcties” | **PR-L** (**gepland**) |
+| *Losse posten* “overige correcties” | **PR-L** (**MVP gedaan**; uitbreiding types/rapportage optioneel) |
 | *Losse posten* “tags / toelichting import” | **PR-M** (**optioneel**) |
 | *Nog uit te werken* vrijwilligersdocumentatie | **PR-O** (**basis gedaan**; optioneel uitbreiden) |
 | *Code health — backend* HTTP smoke / uitbreidbare `httptest` | **PR-C** (**gedaan**) |

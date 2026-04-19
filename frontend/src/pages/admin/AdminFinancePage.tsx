@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
+import type { DialogContextValue } from '../../components/alertDialogContext'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
 import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
@@ -30,6 +31,234 @@ function manualMatchOptionLabel(c: api.BankCreditSuggestionCandidate): string {
 
 function purposeLabel(p: api.ShopExpensePurpose): string {
   return p === 'avondeten' ? 'Avondeten' : 'Lunchkraam / tosti'
+}
+
+function financeCorrectionKindLabel(kind: api.FinanceCorrectionKind): string {
+  switch (kind) {
+    case 'refund_outside_app':
+      return 'Terugbetaling (buiten standaardpad)'
+    case 'other_branch_guest':
+      return 'Andere speltak / gast'
+    case 'internal_settlement':
+      return 'Interne verrekening'
+    case 'other':
+      return 'Overig'
+    default:
+      return kind
+  }
+}
+
+type FinanceCorrectionsSectionProps = {
+  year: number
+  csrf: string
+  alert: DialogContextValue['alert']
+  confirm: DialogContextValue['confirm']
+}
+
+function FinanceCorrectionsSection({ year, csrf, alert, confirm }: FinanceCorrectionsSectionProps) {
+  const queryClient = useQueryClient()
+  const [recordedOn, setRecordedOn] = useState(() => new Date().toISOString().slice(0, 10))
+  const [purpose, setPurpose] = useState<api.ShopExpensePurpose>('lunchkraam')
+  const [kind, setKind] = useState<api.FinanceCorrectionKind>('other')
+  const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const listQuery = useQuery({
+    queryKey: queryKeys.admin.financeCorrections(year),
+    queryFn: () => api.getAdminFinanceCorrections(year),
+  })
+
+  useQueryErrorAlert(listQuery, { title: 'Correcties laden mislukt', alert })
+
+  const invalidate = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.financeCorrections(year) })
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'finance-control'] })
+  }, [queryClient, year])
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    const raw = amount.trim().replace(',', '.')
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n === 0) {
+      void alert({ title: 'Ongeldig bedrag', message: 'Vul een bedrag in dat niet nul is (negatief mag).', variant: 'error' })
+      return
+    }
+    setSubmitting(true)
+    try {
+      await api.postAdminFinanceCorrection(csrf, {
+        recorded_on: recordedOn,
+        purpose,
+        kind,
+        amount_eur: n,
+        description: description.trim(),
+      })
+      void alert({ title: 'Opgeslagen', message: 'De correctie staat in de lijst en telt mee op Verkoopcontrole.', variant: 'success' })
+      setAmount('')
+      setDescription('')
+      invalidate()
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Opslaan mislukt.'
+      void alert({ title: 'Opslaan mislukt', message: msg, variant: 'error' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const onDelete = async (id: number) => {
+    const ok = await confirm({
+      title: 'Correctie verwijderen',
+      message: 'Deze regel verdwijnt uit rapportages en Verkoopcontrole.',
+      confirmLabel: 'Verwijderen',
+      cancelLabel: 'Annuleren',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setDeletingId(id)
+    try {
+      await api.deleteAdminFinanceCorrection(csrf, id)
+      void alert({ title: 'Verwijderd', message: 'De correctie is weggehaald.', variant: 'success' })
+      invalidate()
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Verwijderen mislukt.'
+      void alert({ title: 'Verwijderen mislukt', message: msg, variant: 'error' })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const rows = listQuery.data?.corrections ?? []
+
+  return (
+    <section className="surface-card space-y-4">
+      <h3 className="text-sm font-semibold text-slate-800">Overige correcties</h3>
+      <p className="text-sm text-slate-600">
+        Voor situaties die <strong className="font-semibold text-slate-800">niet</strong> in uitgaven (Boodschappen) of
+        “bank zonder verkoop” passen: terugbetalingen, andere speltak, interne verrekening. Dit is een administratieve
+        aanpassing aan de <strong className="font-semibold text-slate-800">app-kant</strong> van de vergelijking op{' '}
+        <Link to="/admin/finance-control" className="font-semibold text-brand-800 underline hover:text-brand-950">
+          Verkoopcontrole
+        </Link>{' '}
+        (kolom “correcties” en “app incl. correcties”). Geen tweede Revolut-boeking.
+      </p>
+
+      <form onSubmit={(e) => void onSubmit(e)} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="block text-xs font-semibold text-slate-600">
+          Datum (boekingsmaand)
+          <input
+            type="date"
+            value={recordedOn}
+            onChange={(e) => setRecordedOn(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            required
+          />
+        </label>
+        <label className="block text-xs font-semibold text-slate-600">
+          Doel
+          <select
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value as api.ShopExpensePurpose)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="lunchkraam">Lunchkraam / tosti</option>
+            <option value="avondeten">Avondeten</option>
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-slate-600">
+          Type
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as api.FinanceCorrectionKind)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="refund_outside_app">{financeCorrectionKindLabel('refund_outside_app')}</option>
+            <option value="other_branch_guest">{financeCorrectionKindLabel('other_branch_guest')}</option>
+            <option value="internal_settlement">{financeCorrectionKindLabel('internal_settlement')}</option>
+            <option value="other">{financeCorrectionKindLabel('other')}</option>
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-slate-600 sm:col-span-2 lg:col-span-1">
+          Bedrag (€, negatief = minder “app-verwachting”)
+          <input
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="-12,50"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums"
+            required
+          />
+        </label>
+        <label className="block text-xs font-semibold text-slate-600 sm:col-span-2">
+          Toelichting
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={500}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Kort waarom (max. 500 tekens)"
+          />
+        </label>
+        <div className="flex items-end sm:col-span-2 lg:col-span-3">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-brand-800 disabled:opacity-50"
+          >
+            {submitting ? 'Bezig…' : 'Correctie toevoegen'}
+          </button>
+        </div>
+      </form>
+
+      <div className="overflow-x-auto">
+        {listQuery.isFetching && rows.length === 0 ? (
+          <p className="text-sm text-slate-600">Laden…</p>
+        ) : rows.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-6 text-sm text-slate-600">
+            Geen correcties voor {year}.
+          </p>
+        ) : (
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="py-2 pr-3">Datum</th>
+                <th className="py-2 pr-3">Type</th>
+                <th className="py-2 pr-3">Doel</th>
+                <th className="py-2 pr-3 text-right">Bedrag</th>
+                <th className="py-2 pr-3">Toelichting</th>
+                <th className="py-2">Actie</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-slate-100">
+                  <td className="py-2.5 pr-3 whitespace-nowrap text-slate-800">{row.recorded_on}</td>
+                  <td className="py-2.5 pr-3 text-slate-700">{financeCorrectionKindLabel(row.kind)}</td>
+                  <td className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums font-medium text-slate-900">
+                    {formatEUR(row.amount_eur)}
+                  </td>
+                  <td className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
+                  <td className="py-2.5">
+                    <button
+                      type="button"
+                      disabled={deletingId !== null}
+                      className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-50 disabled:opacity-50"
+                      onClick={() => void onDelete(row.id)}
+                    >
+                      {deletingId === row.id ? 'Bezig…' : 'Verwijderen'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
+  )
 }
 
 type BankCreditsTab = 'open' | 'matched' | 'waived'
@@ -132,6 +361,8 @@ export function AdminFinancePage() {
     if (year === null) return
     void queryClient.invalidateQueries({ queryKey: queryKeys.admin.bankCreditLists(year, isOperatorOnly) })
     void queryClient.invalidateQueries({ queryKey: queryKeys.admin.salesStats(year, isOperatorOnly) })
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'finance-control'] })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.financeCorrections(year) })
   }, [queryClient, year, isOperatorOnly])
 
   const onMatch = useCallback(
@@ -623,6 +854,10 @@ export function AdminFinancePage() {
           </>
         )}
       </section>
+
+      {user?.is_admin && year !== null ? (
+        <FinanceCorrectionsSection year={year} csrf={csrf} alert={alert} confirm={confirm} />
+      ) : null}
     </div>
   )
 }

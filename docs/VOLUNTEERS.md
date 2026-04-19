@@ -39,6 +39,10 @@ DATABASE_URL=… ./revolut-import reconcile jaarafschrift.csv
 
 Dat toont per maand **Revolut+** (positieve bedragen), **App_omzet** en **Delta**. Het scherm **Verkoopcontrole** gebruikt dezelfde **Delta = Revolut − app**-definitie, maar haalt de Revolut-kant uit de **geïmporteerde** regels in de database (niet opnieuw uit een CSV-bestand). Kleine verschillen met `reconcile` kunnen door **ontvangstdatum** vs **voltooide datum** op het afschrift.
 
+## Overige correcties (alleen admin)
+
+Onder **Beheer → Financiën** (onderaan) kun je als **admin** **overige correcties** vastleggen: terugbetalingen of verrekeningen die niet in Boodschappen of bij “bank zonder verkoop” passen. Ze tellen **niet** als Revolut-import, maar wél mee in de extra kolommen op **Verkoopcontrole** (“correcties”, “app incl.”). Gebruik een **negatief** bedrag als de app-kant van de vergelijking omlaag moet.
+
 ## Verkoopcontrole (in de app)
 
 Onder **Beheer → Verkoopcontrole** zie je per maand:

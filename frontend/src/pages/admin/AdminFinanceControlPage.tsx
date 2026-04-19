@@ -80,9 +80,11 @@ export function AdminFinanceControlPage() {
         <p className="text-sm text-slate-600">
           Vergelijking per kalendermaand: <strong className="font-semibold text-slate-800">som geïmporteerde Revolut-regels</strong>{' '}
           (ontvangstdatum) tegen <strong className="font-semibold text-slate-800">app-omzet</strong> zoals elders in de
-          rapportage (vervulde verkopen + open bankregels). Dit volgt hetzelfde teken als{' '}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">revolut-import reconcile</code> (Delta = Revolut −
-          app). Afwijkingen zijn vaak timing: import in één maand, accordering in een andere.
+          rapportage (vervulde verkopen + open bankregels). Optioneel telt de tabel{' '}
+          <strong className="font-semibold text-slate-800">overige correcties</strong> (Financiën) mee bij “app incl.”
+          en de tweede delta/status. Dit volgt hetzelfde teken als{' '}
+          <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">revolut-import reconcile</code> voor de eerste
+          delta (Revolut − app). Afwijkingen zijn vaak timing: import in één maand, accordering in een andere.
         </p>
         <p className="text-sm text-slate-600">
           <Link to="/admin/finance" className="font-semibold text-brand-800 underline hover:text-brand-950">
@@ -145,35 +147,55 @@ export function AdminFinanceControlPage() {
             <p className="text-sm text-slate-600">Laden…</p>
           ) : payload ? (
             <>
-              <table className="min-w-[42rem] w-full border-collapse text-sm">
+              <table className="min-w-[58rem] w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="py-2 pr-4">Maand</th>
-                    <th className="py-2 pr-4 text-right">Revolut (import)</th>
-                    <th className="py-2 pr-4 text-right">App-omzet</th>
-                    <th className="py-2 pr-4 text-right">Delta</th>
-                    <th className="py-2">Status</th>
+                    <th className="py-2 pr-3">Maand</th>
+                    <th className="py-2 pr-3 text-right">Revolut</th>
+                    <th className="py-2 pr-3 text-right">App</th>
+                    <th className="py-2 pr-3 text-right">Correcties</th>
+                    <th className="py-2 pr-3 text-right">App incl.</th>
+                    <th className="py-2 pr-3 text-right">Δ</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3 text-right">Δ incl.</th>
+                    <th className="py-2">St. incl.</th>
                   </tr>
                 </thead>
                 <tbody>
                   {payload.months.map((row) => (
                     <tr key={row.month} className="border-b border-slate-100 last:border-0">
-                      <td className="py-2 pr-4 font-medium text-slate-800">
+                      <td className="py-2 pr-3 font-medium text-slate-800">
                         {row.label_nl}
                         <span className="ml-1 text-xs font-normal text-slate-500">({row.month})</span>
                       </td>
-                      <td className="py-2 pr-4 text-right tabular-nums text-slate-800">
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
                         {formatEUR(row.revolut_imports_eur)}
                       </td>
-                      <td className="py-2 pr-4 text-right tabular-nums text-slate-800">
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
                         {formatEUR(row.app_revenue_eur)}
                       </td>
-                      <td className="py-2 pr-4 text-right tabular-nums text-slate-800">{formatEUR(row.delta_eur)}</td>
-                      <td className="py-2">
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
+                        {formatEUR(row.corrections_eur)}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
+                        {formatEUR(row.app_incl_corrections_eur)}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">{formatEUR(row.delta_eur)}</td>
+                      <td className="py-2 pr-3">
                         <span
                           className={`inline-flex rounded-lg border px-2 py-0.5 text-xs font-semibold ${statusBadgeClasses(row.status)}`}
                         >
                           {statusLabelNl(row.status)}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
+                        {formatEUR(row.delta_incl_corrections_eur)}
+                      </td>
+                      <td className="py-2">
+                        <span
+                          className={`inline-flex rounded-lg border px-2 py-0.5 text-xs font-semibold ${statusBadgeClasses(row.status_incl_corrections)}`}
+                        >
+                          {statusLabelNl(row.status_incl_corrections)}
                         </span>
                       </td>
                     </tr>

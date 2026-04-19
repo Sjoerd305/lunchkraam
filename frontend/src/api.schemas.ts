@@ -331,8 +331,12 @@ export const financeControlMonthRowSchema = z.object({
   label_nl: stringWithDefault(''),
   revolut_imports_eur: floatWithDefault(0),
   app_revenue_eur: floatWithDefault(0),
+  corrections_eur: floatWithDefault(0),
+  app_incl_corrections_eur: floatWithDefault(0),
   delta_eur: floatWithDefault(0),
   status: financeControlMonthStatusSchema,
+  delta_incl_corrections_eur: floatWithDefault(0),
+  status_incl_corrections: financeControlMonthStatusSchema,
 })
 
 export const financeControlResponseSchema = z.object({
@@ -340,6 +344,29 @@ export const financeControlResponseSchema = z.object({
   timezone: stringWithDefault('Europe/Amsterdam'),
   months: z.array(financeControlMonthRowSchema).catch([]),
   method_note_nl: stringWithDefault(''),
+})
+
+export const financeCorrectionKindSchema = z.enum([
+  'refund_outside_app',
+  'other_branch_guest',
+  'internal_settlement',
+  'other',
+])
+
+export const financeCorrectionRowSchema = z.object({
+  id: intWithDefault(0),
+  recorded_on: stringWithDefault(''),
+  purpose: shopExpensePurposeSchema,
+  kind: financeCorrectionKindSchema,
+  amount_eur: floatWithDefault(0),
+  description: stringWithDefault(''),
+  created_at: stringWithDefault(''),
+  created_by_id: z.number().nullable().optional(),
+})
+
+export const financeCorrectionsListResponseSchema = z.object({
+  year: intWithDefault(0),
+  corrections: z.array(financeCorrectionRowSchema).catch([]),
 })
 
 export const shopExpenseSchema = z.object({

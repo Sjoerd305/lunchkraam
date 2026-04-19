@@ -60,7 +60,12 @@ func (d *Deps) APIAdminSalesYears(w http.ResponseWriter, r *http.Request) {
 		httpx.RespondInternalStoreError(w, r, "AdminBankCreditImportYears", err)
 		return
 	}
-	years := mergeFinanceYears(fulfilled, expenseYears, bankYears)
+	corrYears, err := d.Store.AdminFinanceCorrectionYears(r.Context())
+	if err != nil {
+		httpx.RespondInternalStoreError(w, r, "AdminFinanceCorrectionYears", err)
+		return
+	}
+	years := mergeFinanceYears(fulfilled, expenseYears, bankYears, corrYears)
 	httpx.JSON(w, http.StatusOK, map[string]any{"years": years})
 }
 

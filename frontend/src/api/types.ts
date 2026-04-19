@@ -10,6 +10,8 @@ import {
   adminSalesStatsResponseSchema,
   financeControlMonthStatusSchema,
   financeControlResponseSchema,
+  financeCorrectionKindSchema,
+  financeCorrectionRowSchema,
   adminSalesYearBreakdownSchema,
   adminSettingsResponseSchema,
   adminTostiKindBucketSchema,
@@ -73,6 +75,8 @@ export type AdminTostiKindBucket = z.infer<typeof adminTostiKindBucketSchema>
 export type AdminSalesStats = z.infer<typeof adminSalesStatsResponseSchema>
 export type FinanceControlMonthStatus = z.infer<typeof financeControlMonthStatusSchema>
 export type FinanceControlResponse = z.infer<typeof financeControlResponseSchema>
+export type FinanceCorrectionKind = z.infer<typeof financeCorrectionKindSchema>
+export type FinanceCorrectionRow = z.infer<typeof financeCorrectionRowSchema>
 export type ShopExpensePurpose = z.infer<typeof shopExpensePurposeSchema>
 export type BankCreditReconciliationStatus = z.infer<typeof bankCreditReconciliationStatusSchema>
 export type BankCreditRow = z.infer<typeof bankCreditRowSchema>
