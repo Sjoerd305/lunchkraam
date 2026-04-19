@@ -18,7 +18,7 @@ COPY . .
 COPY --from=frontend /f/dist ./frontend/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
-FROM alpine:3.20
+FROM alpine:3.23
 RUN apk add --no-cache ca-certificates tzdata su-exec
 WORKDIR /app
 COPY --from=gobuild /out/server /app/server
