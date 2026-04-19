@@ -6,6 +6,7 @@ import {
   adminSettingsResponseSchema,
   adminUsersResponseSchema,
   avondetenRegistrationsResponseSchema,
+  bankCreditMatchCandidatesResponseSchema,
   bankCreditSuggestionsResponseSchema,
   bankCreditsListResponseSchema,
   buyInfoResponseSchema,
@@ -200,6 +201,8 @@ export type AdminSalesStats = {
 
 export type ShopExpensePurpose = 'lunchkraam' | 'avondeten'
 
+export type BankCreditReconciliationStatus = 'open' | 'matched_sale' | 'waived'
+
 export type BankCreditRow = {
   id: number
   amount_eur: number
@@ -208,6 +211,7 @@ export type BankCreditRow = {
   purpose: ShopExpensePurpose
   source: string
   external_id: string
+  reconciliation_status: BankCreditReconciliationStatus
   matched_card_request_id: number | null
 }
 
@@ -229,6 +233,12 @@ export type BankCreditSuggestionCandidate = {
 export type BankCreditSuggestionsPayload = {
   bank_credit_id: number
   candidates: BankCreditSuggestionCandidate[]
+}
+
+export type BankCreditMatchCandidatesPayload = {
+  bank_credit_id: number
+  digital: BankCreditSuggestionCandidate[]
+  physical: BankCreditSuggestionCandidate[]
 }
 
 export type AdminShopExpense = {
@@ -1102,6 +1112,18 @@ export async function getOperatorBankCreditsMatched(year: number): Promise<BankC
   return parseApiResponse(bankCreditsListResponseSchema, await res.json())
 }
 
+export async function getAdminBankCreditsWaived(year: number): Promise<BankCreditsListPayload> {
+  const res = await fetch(`/api/admin/bank-credits/waived?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+}
+
+export async function getOperatorBankCreditsWaived(year: number): Promise<BankCreditsListPayload> {
+  const res = await fetch(`/api/operator/bank-credits/waived?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+}
+
 export async function getAdminBankCreditSuggestions(bankCreditId: number): Promise<BankCreditSuggestionsPayload> {
   const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/suggestions`, { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
@@ -1112,6 +1134,18 @@ export async function getOperatorBankCreditSuggestions(bankCreditId: number): Pr
   const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/suggestions`, { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
   return parseApiResponse(bankCreditSuggestionsResponseSchema, await res.json())
+}
+
+export async function getAdminBankCreditMatchCandidates(bankCreditId: number): Promise<BankCreditMatchCandidatesPayload> {
+  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/match-candidates`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditMatchCandidatesResponseSchema, await res.json())
+}
+
+export async function getOperatorBankCreditMatchCandidates(bankCreditId: number): Promise<BankCreditMatchCandidatesPayload> {
+  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/match-candidates`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditMatchCandidatesResponseSchema, await res.json())
 }
 
 export async function postAdminBankCreditMatch(
@@ -1166,6 +1200,34 @@ export async function postAdminBankCreditUnmatch(csrf: string, bankCreditId: num
 
 export async function postOperatorBankCreditUnmatch(csrf: string, bankCreditId: number): Promise<void> {
   const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/unmatch`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: '{}',
+  })
+  if (!res.ok) throw await parseError(res)
+  parseApiResponse(okResponseSchema, await res.json())
+}
+
+export async function postAdminBankCreditWaive(csrf: string, bankCreditId: number): Promise<void> {
+  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/waive`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: '{}',
+  })
+  if (!res.ok) throw await parseError(res)
+  parseApiResponse(okResponseSchema, await res.json())
+}
+
+export async function postOperatorBankCreditWaive(csrf: string, bankCreditId: number): Promise<void> {
+  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/waive`, {
     method: 'POST',
     credentials: 'include',
     headers: {

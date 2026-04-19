@@ -63,7 +63,7 @@ SELECT (EXTRACT(MONTH FROM received_on))::int AS m,
        COALESCE(SUM(amount_eur) FILTER (WHERE purpose = 'avondeten'), 0)::float8 AS avondeten_total
 FROM bank_credit_imports
 WHERE (EXTRACT(YEAR FROM received_on))::int = $1
-  AND matched_card_request_id IS NULL
+  AND reconciliation_status = 'open'
 GROUP BY 1
 ORDER BY 1`,
 		year,

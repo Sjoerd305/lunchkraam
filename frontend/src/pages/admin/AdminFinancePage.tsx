@@ -8,11 +8,29 @@ function formatEUR(n: number): string {
   return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
 }
 
+function formatFulfilledShort(iso: string): string {
+  if (!iso) return ''
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return iso
+  return new Intl.DateTimeFormat('nl-NL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(t))
+}
+
+function manualMatchOptionLabel(c: api.BankCreditSuggestionCandidate): string {
+  const who = c.user_display?.trim() || c.user_email || 'Onbekend'
+  return `#${c.card_request_id} · ${who} · ${formatEUR(c.sale_price_eur)} · ${formatFulfilledShort(c.fulfilled_at)}`
+}
+
 function purposeLabel(p: api.ShopExpensePurpose): string {
   return p === 'avondeten' ? 'Avondeten' : 'Lunchkraam / tosti'
 }
 
-type BankCreditsTab = 'open' | 'matched'
+type BankCreditsTab = 'open' | 'matched' | 'waived'
 
 export function AdminFinancePage() {
   const { user, csrf } = useAuth()
@@ -30,8 +48,13 @@ export function AdminFinancePage() {
   const [bankTab, setBankTab] = useState<BankCreditsTab>('open')
   const [bankRows, setBankRows] = useState<api.BankCreditRow[]>([])
   const [matchedRows, setMatchedRows] = useState<api.BankCreditRow[]>([])
+  const [waivedRows, setWaivedRows] = useState<api.BankCreditRow[]>([])
   const [bankLoading, setBankLoading] = useState(false)
   const [unmatchingBankId, setUnmatchingBankId] = useState<number | null>(null)
+  const [waivingBankId, setWaivingBankId] = useState<number | null>(null)
+  const [manualMatchDigital, setManualMatchDigital] = useState<api.BankCreditSuggestionCandidate[]>([])
+  const [manualMatchPhysical, setManualMatchPhysical] = useState<api.BankCreditSuggestionCandidate[]>([])
+  const [manualMatchSelectId, setManualMatchSelectId] = useState('')
   const [suggestionsFor, setSuggestionsFor] = useState<number | null>(null)
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const [suggestions, setSuggestions] = useState<api.BankCreditSuggestionCandidate[]>([])
@@ -82,12 +105,15 @@ export function AdminFinancePage() {
       try {
         const getUn = isOperatorOnly ? api.getOperatorBankCreditsUnmatched : api.getAdminBankCreditsUnmatched
         const getMat = isOperatorOnly ? api.getOperatorBankCreditsMatched : api.getAdminBankCreditsMatched
-        const [open, matched] = await Promise.all([getUn(y), getMat(y)])
+        const getWv = isOperatorOnly ? api.getOperatorBankCreditsWaived : api.getAdminBankCreditsWaived
+        const [open, matched, waived] = await Promise.all([getUn(y), getMat(y), getWv(y)])
         setBankRows(open.rows)
         setMatchedRows(matched.rows)
+        setWaivedRows(waived.rows)
       } catch (e) {
         setBankRows([])
         setMatchedRows([])
+        setWaivedRows([])
         const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
         void alert({ title: 'Bankregels laden mislukt', message: msg, variant: 'error' })
       } finally {
@@ -115,13 +141,20 @@ export function AdminFinancePage() {
     async (bankId: number) => {
       setSuggestionsLoading(true)
       setSuggestionsFor(bankId)
+      setManualMatchDigital([])
+      setManualMatchPhysical([])
+      setManualMatchSelectId('')
       try {
-        const p = isOperatorOnly
-          ? await api.getOperatorBankCreditSuggestions(bankId)
-          : await api.getAdminBankCreditSuggestions(bankId)
-        setSuggestions(p.candidates)
+        const getSug = isOperatorOnly ? api.getOperatorBankCreditSuggestions : api.getAdminBankCreditSuggestions
+        const getCand = isOperatorOnly ? api.getOperatorBankCreditMatchCandidates : api.getAdminBankCreditMatchCandidates
+        const [sug, cand] = await Promise.all([getSug(bankId), getCand(bankId)])
+        setSuggestions(sug.candidates)
+        setManualMatchDigital(cand.digital)
+        setManualMatchPhysical(cand.physical)
       } catch (e) {
         setSuggestions([])
+        setManualMatchDigital([])
+        setManualMatchPhysical([])
         const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
         void alert({ title: 'Suggesties laden mislukt', message: msg, variant: 'error' })
       } finally {
@@ -198,15 +231,48 @@ export function AdminFinancePage() {
     [confirm, csrf, alert, isOperatorOnly, year, loadBankLists, loadSales],
   )
 
+  const onWaive = useCallback(
+    async (bankCreditId: number) => {
+      const ok = await confirm({
+        title: 'Afhandelen zonder verkoop',
+        message:
+          'Deze bankregel verdwijnt uit “open bank-omzet”. Gebruik dit bij terugbetalingen of als er geen kaartverkoop in de app hoort. Dit is geen volledige boekhouding — alleen het interne rapport.',
+        confirmLabel: 'Afhandelen',
+        cancelLabel: 'Annuleren',
+        tone: 'danger',
+      })
+      if (!ok) return
+      setWaivingBankId(bankCreditId)
+      try {
+        if (isOperatorOnly) {
+          await api.postOperatorBankCreditWaive(csrf, bankCreditId)
+        } else {
+          await api.postAdminBankCreditWaive(csrf, bankCreditId)
+        }
+        void alert({ title: 'Afgehandeld', message: 'De regel staat niet meer bij open bank-omzet.', variant: 'success' })
+        if (year !== null) {
+          void loadBankLists(year)
+          void loadSales(year)
+        }
+      } catch (e) {
+        const msg = e instanceof api.ApiError ? e.message : 'Actie mislukt.'
+        void alert({ title: 'Afhandelen mislukt', message: msg, variant: 'error' })
+      } finally {
+        setWaivingBankId(null)
+      }
+    },
+    [confirm, csrf, alert, isOperatorOnly, year, loadBankLists, loadSales],
+  )
+
   return (
     <div className="space-y-8">
       <section className="surface-card space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">Financiën en afstemming</h2>
         <p className="text-sm text-slate-600">
           Omzet in rapporten is <strong className="font-semibold text-slate-800">verkochte kaarten</strong> (geaccordeerd
-          in de app) plus <strong className="font-semibold text-slate-800">Revolut-bijschrijvingen die nog niet</strong>{' '}
-          aan een verkoop zijn gekoppeld. Koppel een bankregel aan de juiste kaartverkoop zodat Tikkie → Revolut niet
-          dubbel telt.
+          in de app) plus <strong className="font-semibold text-slate-800">Revolut-bijschrijvingen die nog “open” staan</strong>{' '}
+          (niet gekoppeld aan een verkoop en niet als zonder verkoop afgehandeld). Koppel waar mogelijk; anders
+          afhandelen zonder verkoop (bijv. terugbetaling).
         </p>
         <p className="text-sm text-slate-600">
           <Link to="/admin/expenses-overview" className="font-semibold text-brand-800 underline hover:text-brand-950">
@@ -280,6 +346,9 @@ export function AdminFinancePage() {
                 setBankTab('open')
                 setSuggestionsFor(null)
                 setSuggestions([])
+                setManualMatchDigital([])
+                setManualMatchPhysical([])
+                setManualMatchSelectId('')
               }}
               className={`rounded-md px-3 py-2 text-xs font-semibold ${
                 bankTab === 'open' ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50'
@@ -293,20 +362,39 @@ export function AdminFinancePage() {
                 setBankTab('matched')
                 setSuggestionsFor(null)
                 setSuggestions([])
+                setManualMatchDigital([])
+                setManualMatchPhysical([])
+                setManualMatchSelectId('')
               }}
               className={`rounded-md px-3 py-2 text-xs font-semibold ${
                 bankTab === 'matched' ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
-              Gekoppeld ({matchedRows.length})
+              Met verkoop ({matchedRows.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBankTab('waived')
+                setSuggestionsFor(null)
+                setSuggestions([])
+                setManualMatchDigital([])
+                setManualMatchPhysical([])
+                setManualMatchSelectId('')
+              }}
+              className={`rounded-md px-3 py-2 text-xs font-semibold ${
+                bankTab === 'waived' ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Zonder verkoop ({waivedRows.length})
             </button>
           </div>
         </div>
         {bankTab === 'open' ? (
           <>
             <p className="text-sm text-slate-600">
-              Zie suggesties per regel en kies de passende geaccordeerde verkoop. Alleen regels die nog niet gekoppeld
-              zijn, staan in dit tabblad.
+              Suggesties zoeken op bedrag, doel en ongeveer dezelfde datum (±14 dagen rond de Revolut-datum; Revolut kan
+              later boeken). Staat de verkoop er niet tussen, kies dan handmatig een <strong className="font-semibold text-slate-800">openstaande Tikkie-verkoop</strong> in de lijst (digitaal of fysiek) — zelfde bedrag en doel als de bankregel.
             </p>
             {bankLoading && bankRows.length === 0 ? (
               <p className="text-sm text-slate-600">Laden…</p>
@@ -323,7 +411,7 @@ export function AdminFinancePage() {
                       <th className="py-2 pr-3">Bedrag</th>
                       <th className="py-2 pr-3">Doel</th>
                       <th className="py-2 pr-3">Omschrijving</th>
-                      <th className="py-2">Actie</th>
+                      <th className="py-2">Acties</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -337,20 +425,33 @@ export function AdminFinancePage() {
                           <td className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
                           <td className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
                           <td className="py-2.5">
-                            <button
-                              type="button"
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                              onClick={() => {
-                                if (suggestionsFor === row.id) {
-                                  setSuggestionsFor(null)
-                                  setSuggestions([])
-                                  return
-                                }
-                                void loadSuggestions(row.id)
-                              }}
-                            >
-                              {suggestionsFor === row.id ? 'Verberg suggesties' : 'Suggesties'}
-                            </button>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                              <button
+                                type="button"
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                                onClick={() => {
+                                  if (suggestionsFor === row.id) {
+                                    setSuggestionsFor(null)
+                                    setSuggestions([])
+                                    setManualMatchDigital([])
+                                    setManualMatchPhysical([])
+                                    setManualMatchSelectId('')
+                                    return
+                                  }
+                                  void loadSuggestions(row.id)
+                                }}
+                              >
+                                {suggestionsFor === row.id ? 'Verberg suggesties' : 'Suggesties'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={waivingBankId !== null}
+                                className="rounded-lg border border-slate-400 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                                onClick={() => void onWaive(row.id)}
+                              >
+                                {waivingBankId === row.id ? 'Bezig…' : 'Zonder verkoop'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                         {suggestionsFor === row.id ? (
@@ -360,7 +461,9 @@ export function AdminFinancePage() {
                                 <p className="text-sm text-slate-600">Suggesties laden…</p>
                               ) : suggestions.length === 0 ? (
                                 <p className="text-sm text-slate-600">
-                                  Geen automatische kandidaten. Controleer bedrag, doel en datum.
+                                  Geen automatische kandidaten in het zoekvenster. Kies handmatig een verkoop in de
+                                  dropdown hieronder (zelfde bedrag en doel), of gebruik &ldquo;Zonder verkoop&rdquo; als
+                                  de regel niet bij een kaart hoort.
                                 </p>
                               ) : (
                                 <ul className="space-y-2">
@@ -394,6 +497,69 @@ export function AdminFinancePage() {
                                   ))}
                                 </ul>
                               )}
+                              <div className="mt-4 border-t border-slate-200 pt-3">
+                                <p className="mb-2 text-xs font-medium text-slate-700">Handmatig koppelen</p>
+                                <p className="mb-2 text-xs text-slate-600">
+                                  Alleen geaccordeerde Tikkie-verkopen met hetzelfde bedrag en doel als deze bankregel.
+                                </p>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-slate-600">
+                                    <span className="text-xs font-medium text-slate-700">Kaartverkoop</span>
+                                    <select
+                                      value={manualMatchSelectId}
+                                      onChange={(e) => setManualMatchSelectId(e.target.value)}
+                                      className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                                    >
+                                      <option value="">— Kies een verkoop —</option>
+                                      <optgroup label="Digitaal (app)">
+                                        {manualMatchDigital.length === 0 ? (
+                                          <option value="__no_digital__" disabled>
+                                            Geen openstaande digitale verkopen voor dit bedrag
+                                          </option>
+                                        ) : (
+                                          manualMatchDigital.map((c) => (
+                                            <option key={c.card_request_id} value={String(c.card_request_id)}>
+                                              {manualMatchOptionLabel(c)}
+                                            </option>
+                                          ))
+                                        )}
+                                      </optgroup>
+                                      <optgroup label="Fysiek (kraam)">
+                                        {manualMatchPhysical.length === 0 ? (
+                                          <option value="__no_physical__" disabled>
+                                            Geen openstaande fysieke verkopen voor dit bedrag
+                                          </option>
+                                        ) : (
+                                          manualMatchPhysical.map((c) => (
+                                            <option key={c.card_request_id} value={String(c.card_request_id)}>
+                                              {manualMatchOptionLabel(c)}
+                                            </option>
+                                          ))
+                                        )}
+                                      </optgroup>
+                                    </select>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    disabled={matchingId !== null || manualMatchSelectId === ''}
+                                    className="shrink-0 rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-50"
+                                    onClick={() => {
+                                      const n = parseInt(manualMatchSelectId, 10)
+                                      if (!Number.isFinite(n) || n <= 0) {
+                                        void alert({
+                                          title: 'Geen verkoop gekozen',
+                                          message: 'Kies een kaartverkoop in de lijst.',
+                                          variant: 'error',
+                                        })
+                                        return
+                                      }
+                                      void onMatch(row.id, n)
+                                    }}
+                                  >
+                                    Koppelen
+                                  </button>
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         ) : null}
@@ -404,11 +570,11 @@ export function AdminFinancePage() {
               </div>
             )}
           </>
-        ) : (
+        ) : bankTab === 'matched' ? (
           <>
             <p className="text-sm text-slate-600">
-              Gekoppelde regels tellen niet meer dubbel bij bank-omzet. Ontkoppel alleen bij een fout; daarna staat de
-              regel weer bij &ldquo;Nog te koppelen&rdquo;.
+              Gekoppeld aan een geaccordeerde verkoop: telt niet dubbel bij bank-omzet. Ontkoppel alleen bij een fout;
+              daarna staat de regel weer bij &ldquo;Nog te koppelen&rdquo;.
             </p>
             {bankLoading && matchedRows.length === 0 ? (
               <p className="text-sm text-slate-600">Laden…</p>
@@ -449,6 +615,56 @@ export function AdminFinancePage() {
                             onClick={() => void onUnmatch(row.id)}
                           >
                             {unmatchingBankId === row.id ? 'Bezig…' : 'Ontkoppelen'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-slate-600">
+              Afgehandeld zonder kaartverkoop in de app (bijv. terugbetaling). Telt niet mee bij open bank-omzet.{' '}
+              <strong className="font-semibold text-slate-800">Ontkoppelen</strong> zet de regel terug naar open.
+            </p>
+            {bankLoading && waivedRows.length === 0 ? (
+              <p className="text-sm text-slate-600">Laden…</p>
+            ) : waivedRows.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-6 text-sm text-slate-600">
+                Geen op deze manier afgehandelde regels voor dit jaar.
+              </p>
+            ) : (
+              <div className="surface-card overflow-x-auto">
+                <table className="w-full min-w-[36rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="py-2 pr-3">Datum</th>
+                      <th className="py-2 pr-3">Bedrag</th>
+                      <th className="py-2 pr-3">Doel</th>
+                      <th className="py-2 pr-3">Omschrijving</th>
+                      <th className="py-2">Actie</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {waivedRows.map((row) => (
+                      <tr key={row.id} className="border-b border-slate-100 align-top">
+                        <td className="py-2.5 pr-3 whitespace-nowrap text-slate-800">{row.received_on}</td>
+                        <td className="py-2.5 pr-3 tabular-nums font-medium text-slate-900">
+                          {formatEUR(row.amount_eur)}
+                        </td>
+                        <td className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
+                        <td className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
+                        <td className="py-2.5">
+                          <button
+                            type="button"
+                            disabled={unmatchingBankId !== null}
+                            className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-50 disabled:opacity-50"
+                            onClick={() => void onUnmatch(row.id)}
+                          >
+                            {unmatchingBankId === row.id ? 'Bezig…' : 'Terug naar open'}
                           </button>
                         </td>
                       </tr>

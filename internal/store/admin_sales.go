@@ -32,7 +32,7 @@ SELECT
     (SELECT COALESCE(SUM(bci.amount_eur), 0)::float8 FROM bank_credit_imports bci
        WHERE (EXTRACT(YEAR FROM bci.received_on))::int =
              (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int
-         AND bci.matched_card_request_id IS NULL)
+         AND bci.reconciliation_status = 'open')
   ) AS year_rev,
   (SELECT COALESCE(SUM(sale_price_eur), 0)::float8 FROM card_requests cr
      WHERE cr.status = 'fulfilled' AND cr.fulfilled_at IS NOT NULL
@@ -41,11 +41,11 @@ SELECT
   (SELECT COALESCE(SUM(bci.amount_eur), 0)::float8 FROM bank_credit_imports bci
      WHERE (EXTRACT(YEAR FROM bci.received_on))::int =
            (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int
-       AND bci.matched_card_request_id IS NULL) AS year_rev_bank_unmatched,
+       AND bci.reconciliation_status = 'open') AS year_rev_bank_unmatched,
   (SELECT COUNT(*)::bigint FROM bank_credit_imports bci
      WHERE (EXTRACT(YEAR FROM bci.received_on))::int =
            (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int
-       AND bci.matched_card_request_id IS NULL) AS year_bank_unmatched_n,
+       AND bci.reconciliation_status = 'open') AS year_bank_unmatched_n,
   (SELECT COALESCE(SUM(se.amount_eur), 0)::float8 FROM shop_expenses se
      WHERE (EXTRACT(YEAR FROM se.spent_on))::int =
            (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int) AS year_exp`

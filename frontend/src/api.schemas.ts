@@ -479,6 +479,10 @@ export const adminDashboardResponseSchema = z.object({
   year_net_eur: floatWithDefault(0),
 })
 
+const bankCreditReconciliationStatusSchema = z
+  .enum(['open', 'matched_sale', 'waived'])
+  .catch('open')
+
 const bankCreditRowSchema = z.object({
   id: intWithDefault(0),
   amount_eur: floatWithDefault(0),
@@ -487,6 +491,7 @@ const bankCreditRowSchema = z.object({
   purpose: shopExpensePurposeSchema,
   source: stringWithDefault(''),
   external_id: stringWithDefault(''),
+  reconciliation_status: bankCreditReconciliationStatusSchema,
   matched_card_request_id: z.preprocess(
     (v) => (v === undefined ? null : v),
     z.union([z.number(), z.null()]),
@@ -514,6 +519,12 @@ const bankCreditSuggestionCandidateSchema = z.object({
 export const bankCreditSuggestionsResponseSchema = z.object({
   bank_credit_id: intWithDefault(0),
   candidates: z.array(bankCreditSuggestionCandidateSchema).catch([]),
+})
+
+export const bankCreditMatchCandidatesResponseSchema = z.object({
+  bank_credit_id: intWithDefault(0),
+  digital: z.array(bankCreditSuggestionCandidateSchema).catch([]),
+  physical: z.array(bankCreditSuggestionCandidateSchema).catch([]),
 })
 
 export const okResponseSchema = z.object({

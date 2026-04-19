@@ -149,9 +149,12 @@ func main() {
 					r.Get("/operator/sales-stats", h.APIAdminSalesStats)
 					r.Get("/operator/bank-credits/unmatched", h.APIAdminBankCreditsUnmatched)
 					r.Get("/operator/bank-credits/matched", h.APIAdminBankCreditsMatched)
+					r.Get("/operator/bank-credits/waived", h.APIAdminBankCreditsWaived)
+					r.Get("/operator/bank-credits/{id}/match-candidates", h.APIAdminBankCreditMatchCandidates)
 					r.Get("/operator/bank-credits/{id}/suggestions", h.APIAdminBankCreditSuggestions)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/bank-credits/{id}/match", h.APIAdminBankCreditMatch)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/bank-credits/{id}/unmatch", h.APIAdminBankCreditUnmatch)
+					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/bank-credits/{id}/waive", h.APIAdminBankCreditWaive)
 					r.Get("/operator/revolut-balance", h.APIRevolutBalance)
 					r.Get("/operator/shop-expenses", h.APIAdminShopExpensesList)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/operator/shop-expenses", h.APIAdminShopExpenseCreate)
@@ -189,9 +192,12 @@ func main() {
 					r.Get("/admin/sales-stats", h.APIAdminSalesStats)
 					r.Get("/admin/bank-credits/unmatched", h.APIAdminBankCreditsUnmatched)
 					r.Get("/admin/bank-credits/matched", h.APIAdminBankCreditsMatched)
+					r.Get("/admin/bank-credits/waived", h.APIAdminBankCreditsWaived)
+					r.Get("/admin/bank-credits/{id}/match-candidates", h.APIAdminBankCreditMatchCandidates)
 					r.Get("/admin/bank-credits/{id}/suggestions", h.APIAdminBankCreditSuggestions)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/admin/bank-credits/{id}/match", h.APIAdminBankCreditMatch)
 					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/admin/bank-credits/{id}/unmatch", h.APIAdminBankCreditUnmatch)
+					r.With(httprate.Limit(30, time.Minute, httprate.WithKeyFuncs(apimw.KeyByUserID))).Post("/admin/bank-credits/{id}/waive", h.APIAdminBankCreditWaive)
 					r.Get("/admin/revolut-balance", h.APIRevolutBalance)
 					r.Get("/admin/shop-expenses", h.APIAdminShopExpensesList)
 					r.Post("/admin/shop-expenses", h.APIAdminShopExpenseCreate)
@@ -258,6 +264,7 @@ func main() {
 
 func spaFallback(dist string) http.HandlerFunc {
 	root := http.Dir(dist)
+	indexPath := filepath.Join(dist, "index.html")
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -269,11 +276,17 @@ func spaFallback(dist string) http.HandlerFunc {
 			if err == nil {
 				defer f.Close()
 				if st, err := f.Stat(); err == nil && !st.IsDir() {
-					http.ServeFile(w, r, filepath.Join(dist, rel))
+					p := filepath.Join(dist, rel)
+					if strings.EqualFold(filepath.Base(p), "index.html") {
+						// Fresh index.html after deploy so hashed /assets/*.js URLs stay in sync with disk.
+						w.Header().Set("Cache-Control", "no-cache")
+					}
+					http.ServeFile(w, r, p)
 					return
 				}
 			}
 		}
-		http.ServeFile(w, r, filepath.Join(dist, "index.html"))
+		w.Header().Set("Cache-Control", "no-cache")
+		http.ServeFile(w, r, indexPath)
 	}
 }

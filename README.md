@@ -65,6 +65,8 @@ Zet minimaal:
 
 Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 
+**SPA na deploy:** Vite zet gehashte bundels onder `/assets/`; `index.html` verwijst naar die namen. De server zet op het shell-document **`Cache-Control: no-cache`**, zodat browsers na een release opnieuw het juiste `index.html` ophalen. Zet je **Cloudflare (of andere CDN) niet op “cache everything”** voor HTML zonder dit te respecteren — dan kan een oud `index.html` nog naar een **verwijderde** chunk wijzen; de server antwoordt dan met **404 `text/plain`**, en dynamische imports (bijv. admin-grafieken) falen in de console.
+
 ## Rollen
 
 - **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, **betalingswachtrij**, **boodschappen & uitgaven**). In instellingen kun je o.a. een aparte Tikkie voor de avondetenkaart zetten (aanvullend op `.env`).
@@ -73,7 +75,7 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 
 Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYMENT_AMOUNT_EUR` / admin-tarieven de historische omzet niet verstoren.
 
-**Omzetrapportage en Revolut:** jaarcijfers tellen geaccordeerde **kaartverkopen** plus **Revolut-bijschrijvingen die nog niet** aan een verkoop zijn gekoppeld. Zo voorkom je dubbele telling (Tikkie in de app en dezelfde storting op de bank). Koppelen en zo nodig **ontkoppelen** doe je onder **Beheer → Financiën** (`/admin/finance`); na koppeling telt de bankregel niet meer mee als losse omzetpost.
+**Omzetrapportage en Revolut:** jaarcijfers tellen geaccordeerde **kaartverkopen** plus **Revolut-bijschrijvingen die nog open staan** (niet gekoppeld en niet als *afgehandeld zonder verkoop* gemarkeerd). Zo voorkom je dubbele telling (Tikkie in de app en dezelfde storting op de bank). Koppelen, **ontkoppelen** en *zonder verkoop afhandelen* doe je onder **Beheer → Financiën** (`/admin/finance`); na koppeling telt de bankregel niet meer mee als losse omzetpost. *Afgehandeld zonder verkoop* haalt de regel uit de open-bank-omzet in deze rapportage maar is geen vervanging voor een aparte grootboek-export of terugboeking in je boekhoudpakket.
 
 ## Fysieke kaarten
 
