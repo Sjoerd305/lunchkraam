@@ -62,7 +62,8 @@
 - [x] **Pending import merge:** transactionele merge via [internal/store/pending_import_reviews.go](internal/store/pending_import_reviews.go) (`MergePendingImportReview`); integratie-check [internal/store/pending_import_reviews_merge_test.go](internal/store/pending_import_reviews_merge_test.go) met `TEST_DATABASE_URL`.
 - [x] **Generieke 500 + DB-fouten:** [internal/httpx/logged_errors.go](internal/httpx/logged_errors.go) (`RespondInternalStoreError`) op `"Databasefout."`-paden in handlers.
 - [x] **Bank credit store:** types/errors + `scanBankCreditListRow` naar [internal/store/bank_credit_types.go](internal/store/bank_credit_types.go) (lijst-SQL blijft in `bank_credit_reconciliation.go`).
-- [ ] **Nog te splitsen / afsmullen:** o.a. [internal/handlers/shop_expenses_revolut_import.go](internal/handlers/shop_expenses_revolut_import.go), [internal/handlers/api_admin_sales.go](internal/handlers/api_admin_sales.go) (DTO-rounding helper), [internal/store/shop_expenses.go](internal/store/shop_expenses.go).
+- [x] **Revolut shop import (HTTP-laag):** opgesplitst — dunne handlers in [internal/handlers/shop_expenses_revolut_import.go](../internal/handlers/shop_expenses_revolut_import.go); formulier/CSV/response-helpers in `revolut_shop_expenses_*.go` (zelfde package).
+- [ ] **Nog te splitsen / afsmullen:** o.a. [internal/handlers/api_admin_sales.go](internal/handlers/api_admin_sales.go) (DTO-rounding helper), [internal/store/shop_expenses.go](internal/store/shop_expenses.go).
 
 **Frontend**
 
@@ -96,11 +97,12 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Veld | Inhoud |
 |------|--------|
 | **Doel** | Dunne HTTP-laag, reviewbare units; minder merge-conflicten op één megabestand. |
-| **Context** | [internal/handlers/shop_expenses_revolut_import.go](../internal/handlers/shop_expenses_revolut_import.go) is groot (~375+ regels); staat ook in *Production backlog* onder “nog te splitsen”. |
-| **Wijzigingen** | 1) Pure logica (CSV-validatie, dry-run samenvatting, response-DTO’s) naar `internal/handlers/revolut_shop_expenses_helpers.go` of `internal/revolutimport/` façade — **geen** gedragwijziging in de eerste commit. 2) Handlers blijven: `ReadJSON` → aanroep helper → `httpx` store-errors / JSON response. 3) Bestaande import-tests uitbreiden of smoke-test op preview-response als er nog geen dekkingsgraad is. |
-| **Acceptatie** | `go test ./...` groen; handmatig: Revolut preview + import (dry-run en echt) op staging. |
-| **Risico** | Medium (geldpad) — daarom **geen** functionele refactor in dezelfde PR als verplaatsing; tweede PR mag performance/UX tunen. |
+| **Context** | Was één bestand ~375+ regels; zie *Production backlog — code*. |
+| **Wijzigingen (uitgevoerd)** | 1) [internal/handlers/revolut_shop_expenses_form.go](../internal/handlers/revolut_shop_expenses_form.go) — `maxRevolutCSVFormBytes`, formulier-parsers, `parseRevolutDefaultPurpose`, `revolutCommonUIForm` / `parseRevolutCommonUIForm`, `validateRevolutCreditImportAmounts`. 2) [internal/handlers/revolut_shop_expenses_read.go](../internal/handlers/revolut_shop_expenses_read.go) — `readRevolutShopExpenseCSV` (multipart + `revolutcsv.Parse`, uniforme JSON-fouten). 3) [internal/handlers/revolut_shop_expenses_response.go](../internal/handlers/revolut_shop_expenses_response.go) — `writeShopRevolutPreviewJSON` / `writeShopRevolutImportJSON` (zelfde response-keys als voorheen). 4) [internal/handlers/shop_expenses_revolut_import.go](../internal/handlers/shop_expenses_revolut_import.go) — alleen `APIShopExpensesRevolutPreview` en `APIShopExpensesRevolutImport` (orchestratie). **Geen** wijziging in `revolutimport`-domeinlogica. |
+| **Acceptatie** | `go test ./...` groen; handmatig op staging: Revolut preview + import (dry-run en echt). |
+| **Risico** | Medium (geldpad) — diff is vooral verplaatsing; bij twijfel side-by-side JSON-response vergelijken. |
 | **Grootte** | Medium. |
+| **Status** | **Gedaan** (structuursplit; optionele extra tests kunnen in aparte PR). |
 
 ### PR-C — Backend: optioneel `httptest`-smoke op publieke / auth-routes
 
@@ -186,7 +188,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 ### Aanbevolen merge-volgorde
 
 1. **PR-A** (CI-tests) — **afgerond**; beschermt alle volgende wijzigingen op `production` pushes.  
-2. **PR-B** of **PR-E** (grote structurele wijziging terwijl tests groen zijn).  
+2. **PR-B** (Revolut handler-split) — **afgerond**. Vervolg: **PR-E** of **PR-F** (grote structurele frontend-wijziging).  
 3. **PR-D** (CLI cosmetica) — losstaand, elk moment.  
 4. **PR-F** (api-modularisatie) — vóór of na **PR-G/H** afhankelijk van conflict-pijn.  
 5. **PR-G** / **PR-H** (Query-migraties) — in deel-PR’s als review-capaciteit beperkt is.  
