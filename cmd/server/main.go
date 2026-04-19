@@ -30,7 +30,7 @@ func warnIfReceiptsDirNotWritable(dir string) {
 	if strings.TrimSpace(dir) == "" {
 		return
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		log.Printf("warning: bonfoto-map %q: mkdir: %v — uploads mislukken tot dit is opgelost.", dir, err)
 		return
 	}

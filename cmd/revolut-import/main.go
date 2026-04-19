@@ -29,6 +29,31 @@ import (
 	"lunchkraam/internal/store"
 )
 
+// readStatementFile reads a user-chosen path by opening the parent with os.OpenRoot
+// and only the file name in that root, so a single final path component is passed to Open (CWE-22 / G304).
+func readStatementFile(path string) ([]byte, error) {
+	abs, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return nil, err
+	}
+	base := filepath.Base(abs)
+	if base == "." || base == ".." || base == "" {
+		return nil, fmt.Errorf("ongeldig pad: %q", path)
+	}
+	parent := filepath.Dir(abs)
+	r, err := os.OpenRoot(parent)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	f, err := r.Open(base)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
 func main() {
 	log.SetFlags(0)
 	if len(os.Args) < 2 {
@@ -111,14 +136,7 @@ func runImport(args []string) int {
 		log.Printf("import: invalid -purpose %q", *purpose)
 		return 2
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		log.Printf("import: open file: %v", err)
-		return 1
-	}
-	defer f.Close()
-
-	raw, err := io.ReadAll(f)
+	raw, err := readStatementFile(path)
 	if err != nil {
 		log.Printf("import: read file: %v", err)
 		return 1
@@ -241,14 +259,13 @@ func runReconcile(args []string) int {
 		return 1
 	}
 
-	f, err := os.Open(path)
+	raw, err := readStatementFile(path)
 	if err != nil {
-		log.Printf("reconcile: open file: %v", err)
+		log.Printf("reconcile: read file: %v", err)
 		return 1
 	}
-	defer f.Close()
 
-	rows, err := revolutcsv.Parse(f)
+	rows, err := revolutcsv.Parse(bytes.NewReader(raw))
 	if err != nil {
 		log.Printf("reconcile: parse csv: %v", err)
 		return 1
@@ -319,10 +336,12 @@ func runReconcile(args []string) int {
 		}
 		fmt.Printf("Year %d\n", y)
 		fmt.Printf("%-10s %14s %14s %14s\n", "Month", "Revolut+", "App_omzet", "Delta")
-		for m := 1; m <= 12; m++ {
+		// 12 = len(buckets); iterate index i so static analysis (G602) can prove bucket access in range.
+		for i := 0; i < 12; i++ {
+			m := i + 1
 			key := y*100 + m
 			rev := creditsByKey[key]
-			app := buckets[m-1].RevenueEUR
+			app := buckets[i].RevenueEUR
 			if rev == 0 && app == 0 {
 				continue
 			}

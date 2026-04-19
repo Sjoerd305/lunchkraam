@@ -139,7 +139,7 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := os.MkdirAll(d.Config.ReceiptsDir, 0o755); err != nil {
+	if err := os.MkdirAll(d.Config.ReceiptsDir, 0o750); err != nil {
 		log.Printf("shop expense receipt upload: mkdir %q: %v", d.Config.ReceiptsDir, err)
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kan opslagmap niet maken.")
 		return
@@ -152,7 +152,7 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 	}
 	filename := fmt.Sprintf("expense_%d_%s.jpg", expenseID, name)
 	path := filepath.Join(d.Config.ReceiptsDir, filename)
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		log.Printf("shop expense receipt upload: write %q: %v", path, err)
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan bonfoto mislukt (controleer schrijfrechten op RECEIPTS_DIR).")
 		return
