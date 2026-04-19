@@ -27,21 +27,22 @@ jobs:
 
       # Zelfde image als Dockerfile frontend-stage — voorkomt dat `npm ci` op ubuntu
       # groen is terwijl `docker build` faalt door lockfile/npm-resolververschillen.
-      - name: Frontend install and lint (node:25-alpine, matches Docker)
+      - name: Frontend install, lint, and test (node:25-alpine, matches Docker)
         run: |
           docker run --rm \
             -v "${GITHUB_WORKSPACE}/frontend:/f:rw" \
             -w /f \
             node:25-alpine \
-            sh -c 'npm ci && npm run lint'
+            sh -c 'npm ci && npm run lint && npm test'
 
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
-      - name: Go static checks and compile
+      - name: Go vet, test, and compile
         run: |
           go vet ./...
+          go test ./... -count=1
           go build -trimpath -ldflags="-s -w" -o /tmp/lunchkraam-server ./cmd/server
 
       - name: Verify production Docker image builds
