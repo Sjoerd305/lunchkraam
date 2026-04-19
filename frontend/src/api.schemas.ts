@@ -26,6 +26,7 @@ export const cardKindSchema = z.enum(['tosti', 'avondeten']).catch('tosti')
 export const paymentMethodSchema = z.enum(['tikkie', 'contant']).catch('tikkie')
 export const cardSourceSchema = z.enum(['online', 'physical']).catch('online')
 export const shopExpensePurposeSchema = z.enum(['lunchkraam', 'avondeten']).catch('lunchkraam')
+export const shopExpensePaymentChannelSchema = z.enum(['contant', 'digitaal', 'kas_bij']).catch('contant')
 
 export const userSchema = z.object({
   id: intWithDefault(0),
@@ -326,6 +327,7 @@ export const shopExpenseSchema = z.object({
   spent_on: stringWithDefault(''),
   description: stringWithDefault(''),
   purpose: shopExpensePurposeSchema,
+  payment_channel: shopExpensePaymentChannelSchema,
   created_at: stringWithDefault(''),
   source: stringWithDefault('manual'),
   external_id: stringWithDefault(''),
@@ -430,6 +432,7 @@ export const pendingImportReviewSchema = z.object({
     spent_on: stringWithDefault(''),
     description: stringWithDefault(''),
     purpose: shopExpensePurposeSchema,
+    payment_channel: shopExpensePaymentChannelSchema,
     source: stringWithDefault('manual'),
   }),
   created_at: stringWithDefault(''),

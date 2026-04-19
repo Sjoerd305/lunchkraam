@@ -195,14 +195,15 @@ export function AdminExpensesOverviewPage() {
                   label="Uitgaven dit jaar"
                   value={formatEUR(salesStats.year_expenses_eur)}
                   tone="slate"
-                  hint={`Lunchkraam ${formatEUR(salesStats.year_breakdown.expenses_eur.lunchkraam)} · Avondeten ${formatEUR(
-                    salesStats.year_breakdown.expenses_eur.avondeten,
-                  )}`}
+                  hint={`Som boodschappenboekingen (contante en digitale uitgaven, min contant bij kas). Lunchkraam ${formatEUR(
+                    salesStats.year_breakdown.expenses_eur.lunchkraam,
+                  )} · Avondeten ${formatEUR(salesStats.year_breakdown.expenses_eur.avondeten)}`}
                 />
                 <FinanceStatCard
-                  label="Saldo (omzet − uitgaven)"
+                  label="Saldo (omzet − boekingen)"
                   value={formatEUR(salesStats.year_net_eur)}
                   tone={salesStats.year_net_eur >= 0 ? 'brand' : 'amber'}
+                  hint="Omzet min dezelfde som als bij Uitgaven (contant bij kas telt mee als negatief bedrag)."
                 />
               </div>
               <FinanceStatCard
@@ -223,7 +224,7 @@ export function AdminExpensesOverviewPage() {
                       <th className="py-2 pr-4">Omzet</th>
                       <th className="py-2 pr-4">Verkocht (app)</th>
                       <th className="py-2 pr-4">Bank (open)</th>
-                      <th className="py-2 pr-4">Uitgaven</th>
+                      <th className="py-2 pr-4">Boekingen</th>
                       <th className="py-2">Netto</th>
                     </tr>
                   </thead>

@@ -15,16 +15,30 @@ const (
 	ShopExpenseSourceRevolut = "revolut"
 )
 
+// Manual shop expense movement (API); stored as signed amount_eur (positive = uitgave, negative = bij kas).
+const (
+	ShopExpenseMovementExpense = "expense"
+	ShopExpenseMovementCashIn  = "cash_in"
+)
+
+// Payment channel (DB shop_expenses.payment_channel); must match amount sign (see CHECK constraints).
+const (
+	ShopExpensePaymentContant  = "contant"
+	ShopExpensePaymentDigitaal = "digitaal"
+	ShopExpensePaymentKasBij   = "kas_bij"
+)
+
 // ShopExpense is a grocery / supply cost entry (amount on calendar date spent_on).
 type ShopExpense struct {
-	ID          int64
-	AmountEUR   float64
-	SpentOn     time.Time
-	Description string
-	Purpose     string
-	Source      string
-	ExternalID  string
-	CreatedAt   time.Time
+	ID             int64
+	AmountEUR      float64
+	SpentOn        time.Time
+	Description    string
+	Purpose        string
+	PaymentChannel string
+	Source         string
+	ExternalID     string
+	CreatedAt      time.Time
 }
 
 type ShopExpenseReceipt struct {
@@ -43,22 +57,24 @@ type AdminExpenseMonthAgg struct {
 	AvondetenEUR  float64
 }
 
-// InsertShopExpense records a positive expense; spentOn is the calendar date (time-of-day ignored).
+// InsertShopExpense records a manual booking; spentOn is the calendar date (time-of-day ignored).
+// amountEUR must be non-zero (positive = uitgave, negative = contant bij de kas).
+// paymentChannel must be contant or digitaal when amountEUR > 0, or kas_bij when amountEUR < 0 (caller validates).
 // purpose must be lunchkraam or avondeten (caller validates).
-func (s *Store) InsertShopExpense(ctx context.Context, createdBy int64, amountEUR float64, spentOn time.Time, description, purpose string) (*ShopExpense, error) {
-	if amountEUR <= 0 {
-		return nil, fmt.Errorf("bedrag moet groter dan nul zijn")
+func (s *Store) InsertShopExpense(ctx context.Context, createdBy int64, amountEUR float64, spentOn time.Time, description, purpose, paymentChannel string) (*ShopExpense, error) {
+	if amountEUR == 0 {
+		return nil, fmt.Errorf("bedrag mag niet nul zijn")
 	}
 	desc := strings.TrimSpace(description)
 	dateStr := spentOn.UTC().Format("2006-01-02")
 	row := s.pool.QueryRow(ctx, `
-INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by)
-VALUES ($1, $2::date, $3, $4, $5)
-RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')`,
-		amountEUR, dateStr, desc, purpose, createdBy,
+INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by, payment_channel)
+VALUES ($1, $2::date, $3, $4, $5, $6)
+RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, payment_channel, created_at, source, COALESCE(external_id, '')`,
+		amountEUR, dateStr, desc, purpose, createdBy, paymentChannel,
 	)
 	var e ShopExpense
-	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.PaymentChannel, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 		return nil, err
 	}
 	return &e, nil
@@ -93,18 +109,19 @@ func (s *Store) UpsertImportedShopExpense(
 		created = *createdBy
 	}
 	row := s.pool.QueryRow(ctx, `
-INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by, source, external_id)
-VALUES ($1, $2::date, $3, $4, $5, $6, $7)
+INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by, source, external_id, payment_channel)
+VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (source, external_id) DO UPDATE SET
     amount_eur = EXCLUDED.amount_eur,
     spent_on = EXCLUDED.spent_on,
     description = EXCLUDED.description,
-    purpose = EXCLUDED.purpose
-RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')`,
-		amountEUR, dateStr, desc, purpose, created, source, externalID,
+    purpose = EXCLUDED.purpose,
+    payment_channel = EXCLUDED.payment_channel
+RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, payment_channel, created_at, source, COALESCE(external_id, '')`,
+		amountEUR, dateStr, desc, purpose, created, source, externalID, ShopExpensePaymentDigitaal,
 	)
 	var e ShopExpense
-	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.PaymentChannel, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 		return nil, err
 	}
 	return &e, nil
@@ -129,11 +146,11 @@ func (s *Store) UpdateShopExpensePurpose(ctx context.Context, id int64, purpose 
 	}
 	row := s.pool.QueryRow(ctx, `
 UPDATE shop_expenses SET purpose = $1 WHERE id = $2
-RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')`,
+RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, payment_channel, created_at, source, COALESCE(external_id, '')`,
 		purpose, id,
 	)
 	var e ShopExpense
-	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.PaymentChannel, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -144,11 +161,11 @@ RETURNING id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, 
 
 func (s *Store) ShopExpenseByID(ctx context.Context, id int64) (*ShopExpense, error) {
 	row := s.pool.QueryRow(ctx, `
-SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, payment_channel, created_at, source, COALESCE(external_id, '')
 FROM shop_expenses
 WHERE id = $1`, id)
 	var e ShopExpense
-	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+	if err := row.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.PaymentChannel, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -274,7 +291,7 @@ RETURNING id, shop_expense_id, storage_path, content_type, size_bytes, sha256, c
 // ListShopExpensesByYear returns expenses for a calendar year (spent_on), newest first.
 func (s *Store) ListShopExpensesByYear(ctx context.Context, year int) ([]ShopExpense, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, payment_channel, created_at, source, COALESCE(external_id, '')
 FROM shop_expenses
 WHERE (EXTRACT(YEAR FROM spent_on))::int = $1
 ORDER BY spent_on DESC, id DESC`,
@@ -287,7 +304,7 @@ ORDER BY spent_on DESC, id DESC`,
 	var out []ShopExpense
 	for rows.Next() {
 		var e ShopExpense
-		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.PaymentChannel, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

@@ -241,12 +241,19 @@ export type BankCreditMatchCandidatesPayload = {
   physical: BankCreditSuggestionCandidate[]
 }
 
+/** Manual POST /shop-expenses: expense = uitgave (positief bedrag); cash_in = contant bij de kas (stored as negative amount_eur). */
+export type ShopExpenseMovement = 'expense' | 'cash_in'
+
+/** DB shop_expenses.payment_channel (uitgave: contant | digitaal; bij kas: kas_bij). */
+export type ShopExpensePaymentChannel = 'contant' | 'digitaal' | 'kas_bij'
+
 export type AdminShopExpense = {
   id: number
   amount_eur: number
   spent_on: string
   description: string
   purpose: ShopExpensePurpose
+  payment_channel: ShopExpensePaymentChannel
   created_at: string
   source: string
   external_id: string
@@ -332,6 +339,7 @@ export type PendingImportReview = {
     spent_on: string
     description: string
     purpose: ShopExpensePurpose
+    payment_channel: ShopExpensePaymentChannel
     source: string
   }
   created_at: string
@@ -844,7 +852,14 @@ export async function getOperatorShopExpenses(year: number): Promise<AdminShopEx
 
 export async function createOperatorShopExpense(
   csrf: string,
-  body: { amount_eur: number; spent_on: string; description: string; purpose: ShopExpensePurpose },
+  body: {
+    amount_eur: number
+    spent_on: string
+    description: string
+    purpose: ShopExpensePurpose
+    movement?: ShopExpenseMovement
+    payment_channel?: ShopExpensePaymentChannel
+  },
 ): Promise<AdminShopExpense> {
   const res = await fetch('/api/operator/shop-expenses', {
     method: 'POST',
@@ -874,7 +889,14 @@ export async function getAdminShopExpenses(year: number): Promise<AdminShopExpen
 
 export async function createShopExpense(
   csrf: string,
-  body: { amount_eur: number; spent_on: string; description: string; purpose: ShopExpensePurpose },
+  body: {
+    amount_eur: number
+    spent_on: string
+    description: string
+    purpose: ShopExpensePurpose
+    movement?: ShopExpenseMovement
+    payment_channel?: ShopExpensePaymentChannel
+  },
 ): Promise<AdminShopExpense> {
   const res = await fetch('/api/admin/shop-expenses', {
     method: 'POST',

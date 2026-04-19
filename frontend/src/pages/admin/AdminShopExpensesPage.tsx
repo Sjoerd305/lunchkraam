@@ -4,6 +4,9 @@ import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
 
+/** Manual boeking: contante uitgave, digitale uitgave (beide met verplichte bon), of contant bij de kas. */
+type ShopBookingKind = 'contant_expense' | 'digital_expense' | 'cash_in'
+
 function formatEUR(n: number): string {
   return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
 }
@@ -18,6 +21,22 @@ function todayISO(): string {
 
 function shopExpensePurposeLabel(p: api.ShopExpensePurpose): string {
   return p === 'avondeten' ? 'Avondeten' : 'Lunchkraam'
+}
+
+function shopExpenseKindLabel(row: api.AdminShopExpense): string {
+  if (row.amount_eur < 0) return 'Bij kas'
+  if (row.payment_channel === 'digitaal') return 'Digitaal'
+  return 'Contant'
+}
+
+function shopExpenseKindBadgeClass(row: api.AdminShopExpense): string {
+  if (row.amount_eur < 0) {
+    return 'rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-900'
+  }
+  if (row.payment_channel === 'digitaal') {
+    return 'rounded-md bg-indigo-50 px-2 py-0.5 font-medium text-indigo-900'
+  }
+  return 'rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-800'
 }
 
 function formatDateTimeShortNL(iso: string | null): string {
@@ -149,6 +168,7 @@ export function AdminShopExpensesPage() {
   const [amount, setAmount] = useState('')
   const [spentOn, setSpentOn] = useState(todayISO)
   const [purpose, setPurpose] = useState<api.ShopExpensePurpose>('lunchkraam')
+  const [bookingKind, setBookingKind] = useState<ShopBookingKind>('contant_expense')
   const [description, setDescription] = useState('')
   const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -308,10 +328,12 @@ export function AdminShopExpensesPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (year === null) return
-    if (!newReceiptFile) {
+    const receiptRequired = bookingKind !== 'cash_in'
+    if (receiptRequired && !newReceiptFile) {
       void alert({
         title: 'Bonfoto verplicht',
-        message: 'Selecteer eerst een bonfoto voordat je de uitgave toevoegt.',
+        message:
+          'Selecteer een bonfoto voor een uitgave (contant of digitaal), of kies “Contant bij de kas” als er geen bon is.',
         variant: 'error',
       })
       return
@@ -323,18 +345,45 @@ export function AdminShopExpensesPage() {
     }
     setSubmitting(true)
     try {
-      const body = { amount_eur: n, spent_on: spentOn, description: description.trim(), purpose }
+      const body =
+        bookingKind === 'cash_in'
+          ? {
+              amount_eur: n,
+              spent_on: spentOn,
+              description: description.trim(),
+              purpose,
+              movement: 'cash_in' as const,
+            }
+          : {
+              amount_eur: n,
+              spent_on: spentOn,
+              description: description.trim(),
+              purpose,
+              payment_channel: bookingKind === 'digital_expense' ? ('digitaal' as const) : ('contant' as const),
+            }
       const createdExpense = isOperatorOnly
         ? await api.createOperatorShopExpense(csrf, body)
         : await api.createShopExpense(csrf, body)
-      await api.uploadShopExpenseReceipt(csrf, createdExpense.id, newReceiptFile, isOperatorOnly)
+      if (newReceiptFile) {
+        await api.uploadShopExpenseReceipt(csrf, createdExpense.id, newReceiptFile, isOperatorOnly)
+      }
       setAmount('')
       setDescription('')
       setPurpose('lunchkraam')
+      setBookingKind('contant_expense')
       setSpentOn(todayISO())
       setNewReceiptFile(null)
       await loadList(year)
-      void alert({ title: 'Opgeslagen', message: 'Uitgave is toegevoegd.', variant: 'success' })
+      void alert({
+        title: 'Opgeslagen',
+        message:
+          bookingKind === 'cash_in'
+            ? 'Boeking is toegevoegd.'
+            : bookingKind === 'digital_expense'
+              ? 'Digitale uitgave is toegevoegd.'
+              : 'Contante uitgave is toegevoegd.',
+        variant: 'success',
+      })
     } catch (err) {
       const msg = err instanceof api.ApiError ? err.message : 'Opslaan mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -580,15 +629,58 @@ export function AdminShopExpensesPage() {
       <div>
         <h2 className="text-xl font-semibold text-slate-900">Boodschappen &amp; uitgaven</h2>
         <p className="mt-2 text-slate-600">
-          Boek boodschappen voor de lunchkraam en voor het avondeten (beide uit dezelfde omzet). Omzet = geaccordeerde
-          kaartverkopen dit jaar; uitgaven = alle geboekte boodschappen dit jaar.
+          Boek boodschappen voor de lunchkraam en voor het avondeten (beide uit dezelfde omzet). Je kunt een{' '}
+          <strong className="font-semibold text-slate-800">contante uitgave</strong>, een{' '}
+          <strong className="font-semibold text-slate-800">digitale uitgave</strong> (bijv. pin; met bonfoto), of{' '}
+          <strong className="font-semibold text-slate-800">los contant bij de kas</strong> boeken (verhoogt het saldo
+          in het jaaroverzicht). Omzet = geaccordeerde kaartverkopen dit jaar; de kolom uitgaven op Overzichten is de
+          som van deze boekingen (uitgaven min contant bij).
           {isOperatorOnly ? ' Verkochte tosti’s op basis van levermoment.' : ''}
         </p>
       </div>
 
       <section className="surface-card">
-        <h3 className="text-sm font-semibold text-slate-800">Nieuwe uitgave</h3>
+        <h3 className="text-sm font-semibold text-slate-800">Nieuwe boeking</h3>
+        <p className="mt-1 text-xs text-slate-600">
+          Contante en digitale uitgave: bon verplicht. Contant bij de kas: optioneel een foto; het bedrag telt als
+          storting (netto stijgt in het jaaroverzicht).
+        </p>
         <form onSubmit={(e) => void onSubmit(e)} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <fieldset className="block text-sm sm:col-span-2 lg:col-span-3">
+            <legend className="font-medium text-slate-700">Soort</legend>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 has-[:checked]:border-brand-600 has-[:checked]:ring-1 has-[:checked]:ring-brand-600">
+                <input
+                  type="radio"
+                  name="shop-booking-kind"
+                  checked={bookingKind === 'contant_expense'}
+                  onChange={() => setBookingKind('contant_expense')}
+                  className="text-brand-700"
+                />
+                <span className="text-slate-800">Contante uitgave (af)</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 has-[:checked]:border-brand-600 has-[:checked]:ring-1 has-[:checked]:ring-brand-600">
+                <input
+                  type="radio"
+                  name="shop-booking-kind"
+                  checked={bookingKind === 'digital_expense'}
+                  onChange={() => setBookingKind('digital_expense')}
+                  className="text-brand-700"
+                />
+                <span className="text-slate-800">Digitale uitgave (af)</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 has-[:checked]:border-brand-600 has-[:checked]:ring-1 has-[:checked]:ring-brand-600">
+                <input
+                  type="radio"
+                  name="shop-booking-kind"
+                  checked={bookingKind === 'cash_in'}
+                  onChange={() => setBookingKind('cash_in')}
+                  className="text-brand-700"
+                />
+                <span className="text-slate-800">Contant bij de kas (bij)</span>
+              </label>
+            </div>
+          </fieldset>
           <label className="block text-sm sm:col-span-1">
             <span className="font-medium text-slate-700">Bedrag (€)</span>
             <input
@@ -633,7 +725,9 @@ export function AdminShopExpensesPage() {
             />
           </label>
           <div className="block text-sm sm:col-span-2 lg:col-span-3">
-            <span className="font-medium text-slate-700">Bonfoto (verplicht)</span>
+            <span className="font-medium text-slate-700">
+              Bonfoto{bookingKind === 'cash_in' ? ' (optioneel)' : ' (verplicht)'}
+            </span>
             <div className="mt-1.5 flex flex-wrap gap-2">
               <label className="btn-secondary inline-flex min-h-11 cursor-pointer items-center px-4 text-sm font-semibold">
                 Camera
@@ -660,7 +754,9 @@ export function AdminShopExpensesPage() {
           <div className="flex items-end sm:col-span-2 lg:col-span-3">
             <button
               type="submit"
-              disabled={submitting || year === null || !newReceiptFile}
+              disabled={
+                submitting || year === null || (bookingKind !== 'cash_in' && !newReceiptFile)
+              }
               className="btn-primary min-h-11 px-5"
             >
               {submitting ? 'Bezig…' : 'Toevoegen'}
@@ -1102,7 +1198,7 @@ export function AdminShopExpensesPage() {
           <p className="mt-6 text-sm text-slate-600">Laden…</p>
         ) : rows.length === 0 ? (
           <p className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-slate-600">
-            Geen uitgaven in {year ?? 'dit jaar'}.
+            Geen boekingen in {year ?? 'dit jaar'}.
           </p>
         ) : (
           <div className="mt-4 overflow-x-auto">
@@ -1111,6 +1207,7 @@ export function AdminShopExpensesPage() {
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="py-2 pr-4">Datum</th>
                   <th className="py-2 pr-4">Bedrag</th>
+                  <th className="py-2 pr-4">Soort</th>
                   <th className="py-2 pr-4">Waarvoor</th>
                   <th className="py-2 pr-4">Bron</th>
                   <th className="py-2 pr-4">Omschrijving</th>
@@ -1124,6 +1221,9 @@ export function AdminShopExpensesPage() {
                     <td className="py-3 pr-4 tabular-nums text-slate-800">{r.spent_on}</td>
                     <td className="py-3 pr-4 font-medium tabular-nums text-slate-900">
                       {formatEUR(r.amount_eur)}
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-slate-600">
+                      <span className={shopExpenseKindBadgeClass(r)}>{shopExpenseKindLabel(r)}</span>
                     </td>
                     <td className="py-3 pr-4 text-slate-700">
                       <select

@@ -25,6 +25,34 @@ func parseShopExpensePurpose(s string) (string, bool) {
 	}
 }
 
+func parseShopExpenseMovement(s string) (string, bool) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	switch s {
+	case "", store.ShopExpenseMovementExpense:
+		return store.ShopExpenseMovementExpense, true
+	case store.ShopExpenseMovementCashIn:
+		return store.ShopExpenseMovementCashIn, true
+	default:
+		return "", false
+	}
+}
+
+// resolveShopExpensePaymentChannel maps API movement + optional payment_channel to DB values.
+func resolveShopExpensePaymentChannel(movement, raw string) (string, bool) {
+	if movement == store.ShopExpenseMovementCashIn {
+		return store.ShopExpensePaymentKasBij, true
+	}
+	s := strings.TrimSpace(strings.ToLower(raw))
+	switch s {
+	case "", store.ShopExpensePaymentContant:
+		return store.ShopExpensePaymentContant, true
+	case store.ShopExpensePaymentDigitaal:
+		return store.ShopExpensePaymentDigitaal, true
+	default:
+		return "", false
+	}
+}
+
 func parseShopExpenseAmount(s string) (float64, bool) {
 	s = strings.TrimSpace(strings.ReplaceAll(s, ",", "."))
 	if s == "" {
@@ -59,10 +87,12 @@ func (d *Deps) APIAdminShopExpensesList(w http.ResponseWriter, r *http.Request) 
 func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request) {
 	u := auth.MustUserFromContext(r.Context())
 	var body struct {
-		AmountEUR   any    `json:"amount_eur"`
-		SpentOn     string `json:"spent_on"`
-		Description string `json:"description"`
-		Purpose     string `json:"purpose"`
+		AmountEUR        any    `json:"amount_eur"`
+		SpentOn          string `json:"spent_on"`
+		Description      string `json:"description"`
+		Purpose          string `json:"purpose"`
+		Movement         string `json:"movement"`
+		PaymentChannel   string `json:"payment_channel"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
 	if err := dec.Decode(&body); err != nil {
@@ -107,7 +137,21 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		httpx.JSONError(w, http.StatusBadRequest, "invalid_purpose", "Doel moet lunchkraam of avondeten zijn.")
 		return
 	}
-	e, err := d.Store.InsertShopExpense(r.Context(), u.ID, amount, t, body.Description, purpose)
+	movement, ok := parseShopExpenseMovement(body.Movement)
+	if !ok {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_movement", "Soort is ongeldig (kies uitgave of contant bij).")
+		return
+	}
+	signedAmount := amount
+	if movement == store.ShopExpenseMovementCashIn {
+		signedAmount = -amount
+	}
+	paymentChannel, ok := resolveShopExpensePaymentChannel(movement, body.PaymentChannel)
+	if !ok {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_payment_channel", "Betaalmethode is ongeldig (kies contant of digitaal voor een uitgave).")
+		return
+	}
+	e, err := d.Store.InsertShopExpense(r.Context(), u.ID, signedAmount, t, body.Description, purpose, paymentChannel)
 	if err != nil {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan mislukt.")
 		return
@@ -117,14 +161,15 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 
 func shopExpenseJSON(e *store.ShopExpense) map[string]any {
 	return map[string]any{
-		"id":          e.ID,
-		"amount_eur":  e.AmountEUR,
-		"spent_on":    e.SpentOn.Format("2006-01-02"),
-		"description": e.Description,
-		"purpose":     e.Purpose,
-		"created_at":  e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
-		"source":      e.Source,
-		"external_id": e.ExternalID,
+		"id":               e.ID,
+		"amount_eur":       e.AmountEUR,
+		"spent_on":         e.SpentOn.Format("2006-01-02"),
+		"description":      e.Description,
+		"purpose":          e.Purpose,
+		"payment_channel":  e.PaymentChannel,
+		"created_at":       e.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
+		"source":           e.Source,
+		"external_id":      e.ExternalID,
 	}
 }
 

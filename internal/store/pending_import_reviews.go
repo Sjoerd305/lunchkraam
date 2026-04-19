@@ -32,7 +32,7 @@ type PendingReviewWithMatch struct {
 func (s *Store) FindMatchingManualExpenses(ctx context.Context, amountEUR float64, spentOn time.Time) ([]ShopExpense, error) {
 	dateStr := spentOn.UTC().Format("2006-01-02")
 	rows, err := s.pool.Query(ctx, `
-SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, created_at, source, COALESCE(external_id, '')
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, payment_channel, created_at, source, COALESCE(external_id, '')
 FROM shop_expenses
 WHERE source = 'manual'
   AND amount_eur = $1
@@ -46,7 +46,7 @@ WHERE source = 'manual'
 	var out []ShopExpense
 	for rows.Next() {
 		var e ShopExpense
-		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
+		if err := rows.Scan(&e.ID, &e.AmountEUR, &e.SpentOn, &e.Description, &e.Purpose, &e.PaymentChannel, &e.CreatedAt, &e.Source, &e.ExternalID); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -97,7 +97,7 @@ SELECT
     p.id, p.amount_eur::float8, p.spent_on, COALESCE(p.description, ''), p.purpose,
     p.source, p.external_id, p.matched_expense_id, p.created_by, p.created_at,
     e.id, e.amount_eur::float8, e.spent_on, COALESCE(e.description, ''), e.purpose,
-    e.created_at, e.source, COALESCE(e.external_id, '')
+    e.payment_channel, e.created_at, e.source, COALESCE(e.external_id, '')
 FROM pending_import_reviews p
 JOIN shop_expenses e ON e.id = p.matched_expense_id
 ORDER BY p.created_at DESC`)
@@ -112,7 +112,7 @@ ORDER BY p.created_at DESC`)
 			&r.Review.ID, &r.Review.AmountEUR, &r.Review.SpentOn, &r.Review.Description, &r.Review.Purpose,
 			&r.Review.Source, &r.Review.ExternalID, &r.Review.MatchedExpenseID, &r.Review.CreatedBy, &r.Review.CreatedAt,
 			&r.MatchedExpense.ID, &r.MatchedExpense.AmountEUR, &r.MatchedExpense.SpentOn, &r.MatchedExpense.Description, &r.MatchedExpense.Purpose,
-			&r.MatchedExpense.CreatedAt, &r.MatchedExpense.Source, &r.MatchedExpense.ExternalID,
+			&r.MatchedExpense.PaymentChannel, &r.MatchedExpense.CreatedAt, &r.MatchedExpense.Source, &r.MatchedExpense.ExternalID,
 		); err != nil {
 			return nil, err
 		}
