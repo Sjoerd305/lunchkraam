@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
@@ -27,6 +28,109 @@ function formatDateTimeShortNL(iso: string | null): string {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(d)
+}
+
+function revolutSkipReasonLines(
+  s: api.RevolutImportSkipReasons,
+  mode: 'debit' | 'credit',
+): { count: number; text: string }[] {
+  const rows: { count: number; text: string }[] = []
+  const push = (n: number, text: string) => {
+    if (n > 0) rows.push({ count: n, text })
+  }
+  push(s.filter_not_completed, 'Niet voltooid of geannuleerd (statusfilter).')
+  push(s.filter_currency_mismatch, 'Past niet bij het gekozen valuta-filter.')
+  push(s.filter_type_skipped, 'Transactietype staat op de overslaan-lijst.')
+  if (mode === 'debit') {
+    push(s.not_debit, 'Geen afschrijving (bedrag is nul of positief).')
+  }
+  if (mode === 'credit') {
+    push(s.not_credit, 'Geen te importeren ontvangst (nul of negatief bedrag).')
+    push(
+      s.amount_not_standard_card_price,
+      'Positieve regels die om een andere reden niet als omzet zijn geboekt (zeldzaam; meld bij herhaling).',
+    )
+  }
+  push(s.missing_external_id, 'Geen transactie-ID in het bestand én vingerafdruk staat uit.')
+  push(s.user_excluded, 'Handmatig uitgesloten in het voorbeeld (wordt niet geïmporteerd).')
+  push(s.other, 'Overig (onverwacht; meld dit als het vaak voorkomt).')
+  return rows
+}
+
+function revolutImportResultDetail(
+  r: api.RevolutShopExpenseImportResult,
+  opts: { lunchEur: string; avoEur: string },
+): ReactNode {
+  const debitLines = revolutSkipReasonLines(r.debit_skip_reasons, 'debit')
+  const creditLines = r.credits_enabled ? revolutSkipReasonLines(r.credit_skip_reasons, 'credit') : []
+
+  return (
+    <div className="space-y-5 text-left">
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Uitgaven → deze pagina</h4>
+        <p className="mt-1 text-xs text-slate-600">
+          Afschrijvingen worden als regels in de tabel <strong>Boekingen</strong> gezet (bron Revolut). Herimport
+          werkt bij; sommige regels gaan naar controle bij een mogelijke dubbele handmatige uitgave.
+        </p>
+        {r.debits_skipped > 0 ? (
+          <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">
+            {debitLines.map((row) => (
+              <li key={row.text}>
+                <span className="tabular-nums font-medium text-slate-900">{row.count}×</span> {row.text}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-slate-600">Geen uitgaven-regels overgeslagen.</p>
+        )}
+      </div>
+
+      {r.credits_enabled ? (
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Inkomsten → omzet (niet deze tabel)</h4>
+          <p className="mt-1 text-xs text-slate-600">
+            Alle <strong>positieve</strong> ontvangsten in het bestand worden als bank-omzet geboekt (mits filters
+            zoals “alleen voltooid”). Bedragen die exact overeenkomen met je ingestelde lunch- (€{opts.lunchEur}) en/of
+            avondetenkaartprijs (€{opts.avoEur}) krijgen dat doel automatisch; andere bedragen krijgen hetzelfde doel
+            als bij uitgaven: met <strong>Raad doel op tijd</strong> volgens het tijdvenster, anders het gekozen
+            standaard-doel. Aanpassen kan in het voorbeeld onder <em>Waarvoor ink.</em> De omzet telt mee op{' '}
+            <Link to="/admin/expenses-overview" className="font-medium text-brand-700 underline hover:text-brand-900">
+              Overzichten
+            </Link>
+            , niet als regels in de boodschappenlijst hieronder.
+          </p>
+          {r.credits_imported > 0 || r.credits_skipped > 0 ? (
+            <p className="mt-2 text-xs text-slate-700">
+              <span className="font-medium text-slate-900">Deze run:</span> lunchkraam-omzet:{' '}
+              <span className="tabular-nums">{r.credits_imported_lunchkraam}</span>{' '}
+              {r.dry_run ? 'zou(den) tellen' : 'geboekt'}, avondeten-omzet:{' '}
+              <span className="tabular-nums">{r.credits_imported_avondeten}</span>{' '}
+              {r.dry_run ? 'zou(den) tellen' : 'geboekt'} (samen <span className="tabular-nums">{r.credits_imported}</span>
+              ).
+              {r.credits_inferred_non_standard > 0 ? (
+                <>
+                  {' '}
+                  Daarvan <span className="tabular-nums font-medium text-slate-900">{r.credits_inferred_non_standard}</span>{' '}
+                  {r.dry_run ? 'zou(den) ' : ''}het kaartbedrag niet exact matchen (doel afgeleid of handmatig gekozen).
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          {r.credits_skipped > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">
+              {creditLines.map((row) => (
+                <li key={row.text}>
+                  <span className="tabular-nums font-medium text-slate-900">{row.count}×</span> {row.text}
+                </li>
+              ))}
+            </ul>
+          ) : r.credits_imported > 0 ? (
+            <p className="mt-2 text-xs text-slate-600">Geen inkomsten-regels overgeslagen.</p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function AdminShopExpensesPage() {
@@ -60,6 +164,12 @@ export function AdminShopExpensesPage() {
   const [revolutCurrencyEUR, setRevolutCurrencyEUR] = useState(true)
   const [revolutCompletedOnly, setRevolutCompletedOnly] = useState(true)
   const [revolutSubmitting, setRevolutSubmitting] = useState(false)
+  const [revolutPreviewLoading, setRevolutPreviewLoading] = useState(false)
+  const [revolutPreview, setRevolutPreview] = useState<api.RevolutPreviewResponse | null>(null)
+  const [excludedDebit, setExcludedDebit] = useState<Record<string, boolean>>({})
+  const [excludedCredit, setExcludedCredit] = useState<Record<string, boolean>>({})
+  const [debitPurposeByKey, setDebitPurposeByKey] = useState<Record<string, api.ShopExpensePurpose>>({})
+  const [creditPurposeByKey, setCreditPurposeByKey] = useState<Record<string, api.ShopExpensePurpose>>({})
   const [revolutImportCredits, setRevolutImportCredits] = useState(true)
   const [revolutGuessPurposeByTime, setRevolutGuessPurposeByTime] = useState(true)
   const [revolutCreditLunchEUR, setRevolutCreditLunchEUR] = useState('15')
@@ -99,6 +209,41 @@ export function AdminShopExpensesPage() {
   useEffect(() => {
     void loadPendingReviews()
   }, [loadPendingReviews])
+
+  useEffect(() => {
+    if (!revolutPreview) {
+      setDebitPurposeByKey({})
+      setCreditPurposeByKey({})
+      return
+    }
+    const d: Record<string, api.ShopExpensePurpose> = {}
+    const c: Record<string, api.ShopExpensePurpose> = {}
+    for (const pr of revolutPreview.rows) {
+      if (pr.debit.selectable && pr.debit.row_key) {
+        d[pr.debit.row_key] = pr.debit.purpose === 'avondeten' ? 'avondeten' : 'lunchkraam'
+      }
+      if (pr.credit.selectable && pr.credit.row_key) {
+        c[pr.credit.row_key] = pr.credit.purpose === 'avondeten' ? 'avondeten' : 'lunchkraam'
+      }
+    }
+    setDebitPurposeByKey(d)
+    setCreditPurposeByKey(c)
+  }, [revolutPreview])
+
+  const previewCreditSplit = useMemo(() => {
+    if (!revolutPreview?.credits_enabled) return null
+    let lunch = 0
+    let avo = 0
+    for (const pr of revolutPreview.rows) {
+      const ck = pr.credit.row_key
+      if (!pr.credit.selectable || !ck) continue
+      if (excludedCredit[ck]) continue
+      const p = creditPurposeByKey[ck] ?? pr.credit.purpose ?? 'lunchkraam'
+      if (p === 'lunchkraam') lunch++
+      else avo++
+    }
+    return { lunch, avo, total: lunch + avo }
+  }, [revolutPreview, creditPurposeByKey, excludedCredit])
 
   useEffect(() => {
     if (!user) return
@@ -311,6 +456,44 @@ export function AdminShopExpensesPage() {
     }
   }
 
+  async function runRevolutPreview() {
+    if (!user) {
+      await alert({
+        title: 'Niet ingelogd',
+        message: 'Log opnieuw in om een voorbeeld te tonen.',
+        variant: 'error',
+      })
+      return
+    }
+    if (!revolutFile) {
+      await alert({ title: 'Geen bestand', message: 'Kies een Revolut CSV-export.', variant: 'error' })
+      return
+    }
+    setRevolutPreviewLoading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', revolutFile)
+      fd.append('purpose', revolutPurpose)
+      fd.append('fingerprint_missing_id', revolutFingerprint ? '1' : '0')
+      fd.append('completed_only', revolutCompletedOnly ? '1' : '0')
+      if (revolutSkipTypes.trim()) fd.append('skip_types', revolutSkipTypes.trim())
+      fd.append('currency', revolutCurrencyEUR ? 'EUR' : '')
+      fd.append('import_credits', revolutImportCredits ? '1' : '0')
+      fd.append('guess_purpose_by_time', revolutGuessPurposeByTime ? '1' : '0')
+      fd.append('credit_lunch_eur', revolutCreditLunchEUR.trim())
+      fd.append('credit_avondeten_eur', revolutCreditAvondetenEUR.trim())
+      const p = await api.previewRevolutShopExpenses(csrf, fd, isOperatorOnly)
+      setRevolutPreview(p)
+      setExcludedDebit({})
+      setExcludedCredit({})
+    } catch (err) {
+      const msg = err instanceof api.ApiError ? err.message : 'Voorbeeld laden mislukt.'
+      await alert({ title: 'Voorbeeld mislukt', message: msg, variant: 'error' })
+    } finally {
+      setRevolutPreviewLoading(false)
+    }
+  }
+
   async function runRevolutImport() {
     if (!user) {
       await alert({
@@ -339,21 +522,46 @@ export function AdminShopExpensesPage() {
       fd.append('guess_purpose_by_time', revolutGuessPurposeByTime ? '1' : '0')
       fd.append('credit_lunch_eur', revolutCreditLunchEUR.trim())
       fd.append('credit_avondeten_eur', revolutCreditAvondetenEUR.trim())
+      const debitExcluded = Object.keys(excludedDebit).filter((k) => excludedDebit[k])
+      const creditExcluded = Object.keys(excludedCredit).filter((k) => excludedCredit[k])
+      if (debitExcluded.length > 0 || creditExcluded.length > 0) {
+        fd.append('exclude_json', JSON.stringify({ debit: debitExcluded, credit: creditExcluded }))
+      }
+      if (revolutPreview) {
+        const purposeDebit: Record<string, string> = {}
+        const purposeCredit: Record<string, string> = {}
+        for (const pr of revolutPreview.rows) {
+          const dk = pr.debit.row_key
+          if (pr.debit.selectable && dk && debitPurposeByKey[dk]) purposeDebit[dk] = debitPurposeByKey[dk]
+          const ck = pr.credit.row_key
+          if (pr.credit.selectable && ck && creditPurposeByKey[ck]) purposeCredit[ck] = creditPurposeByKey[ck]
+        }
+        if (Object.keys(purposeDebit).length > 0 || Object.keys(purposeCredit).length > 0) {
+          fd.append('purpose_overrides_json', JSON.stringify({ debit: purposeDebit, credit: purposeCredit }))
+        }
+      }
       const r = await api.importRevolutShopExpenses(csrf, fd, isOperatorOnly)
+      const lunchEur = revolutCreditLunchEUR.trim() || '15'
+      const avoEur = revolutCreditAvondetenEUR.trim() || '10'
       const debitLine = r.dry_run
-        ? `Uitgaven (proef): ${r.debits_imported} geïmporteerd, ${r.debits_skipped} overgeslagen.`
-        : `Uitgaven: ${r.debits_imported} geïmporteerd of bijgewerkt, ${r.debits_skipped} overgeslagen.`
+        ? `Uitgaven (proef): ${r.debits_imported} zouden worden geboekt, ${r.debits_skipped} regels overgeslagen.`
+        : `Uitgaven: ${r.debits_imported} geïmporteerd of bijgewerkt, ${r.debits_skipped} regels overgeslagen.`
       const pendingLine =
         !r.dry_run && r.debits_pending_review > 0
-          ? `${r.debits_pending_review} mogelijke duplica${r.debits_pending_review === 1 ? 'at' : 'ten'} gevonden (controleer hieronder).`
+          ? `${r.debits_pending_review} mogelijke duplica${r.debits_pending_review === 1 ? 'at' : 'ten'} in de wachtrij hieronder.`
           : ''
       const creditLine =
         r.credits_enabled &&
         (r.dry_run
-          ? `Inkomsten (proef): ${r.credits_imported} zouden worden geboekt, ${r.credits_skipped} overgeslagen.`
-          : `Inkomsten: ${r.credits_imported} geboekt, ${r.credits_skipped} overgeslagen.`)
+          ? `Inkomsten (proef): ${r.credits_imported} zouden als omzet worden geboekt, ${r.credits_skipped} regels overgeslagen.`
+          : `Inkomsten (omzet): ${r.credits_imported} geboekt, ${r.credits_skipped} regels overgeslagen.`)
       const msg = [debitLine, pendingLine, creditLine].filter(Boolean).join('\n')
-      await alert({ title: r.dry_run ? 'Proefrun' : 'Revolut-import', message: msg, variant: 'success' })
+      await alert({
+        title: r.dry_run ? 'Proefrun' : 'Revolut-import',
+        message: msg,
+        detail: revolutImportResultDetail(r, { lunchEur, avoEur }),
+        variant: 'success',
+      })
       if (!r.dry_run) {
         void loadRevolutBalance()
         void loadPendingReviews()
@@ -502,7 +710,8 @@ export function AdminShopExpensesPage() {
           ochtend ca. 08:00–13:00 → lunchkraam, avond ca. 16:00–19:00 → avondeten; anders het gekozen standaarddoel).
           Optioneel worden <strong>tegoeden</strong> die exact €15 of €10 zijn (instelbaar) als omzet in de grafieken
           meegeteld: €15 → lunchkraam, €10 → avondeten. Tel die bedragen niet dubbel met al in de app geaccordeerde
-          kaartverkopen.
+          kaartverkopen. <strong>Inkomsten uit deze import</strong> verschijnen niet in de tabel Boekingen op deze pagina;
+          die staan bij <Link to="/admin/expenses-overview">Overzichten</Link> in de omzet.
         </p>
         <form
           id="revolut-shop-import-form"
@@ -518,7 +727,12 @@ export function AdminShopExpensesPage() {
               type="file"
               accept=".csv,text/csv"
               className="input-control mt-1.5"
-              onChange={(e) => setRevolutFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                setRevolutFile(e.target.files?.[0] ?? null)
+                setRevolutPreview(null)
+                setExcludedDebit({})
+                setExcludedCredit({})
+              }}
             />
           </label>
           <label className="block text-sm">
@@ -636,7 +850,15 @@ export function AdminShopExpensesPage() {
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
             <button
               type="button"
-              disabled={revolutSubmitting || !revolutFile}
+              disabled={revolutPreviewLoading || revolutSubmitting || !revolutFile}
+              className="btn-secondary min-h-11 px-5"
+              onClick={() => void runRevolutPreview()}
+            >
+              {revolutPreviewLoading ? 'Voorbeeld…' : 'Voorbeeld tonen'}
+            </button>
+            <button
+              type="button"
+              disabled={revolutPreviewLoading || revolutSubmitting || !revolutFile}
               className="btn-primary min-h-11 px-5"
               onClick={() => void runRevolutImport()}
             >
@@ -644,6 +866,153 @@ export function AdminShopExpensesPage() {
             </button>
           </div>
         </form>
+        {revolutPreview ? (
+          <div className="mt-6 border-t border-slate-200 pt-6">
+            <h4 className="text-sm font-semibold text-slate-900">Transactievoorbeeld ({revolutPreview.rows.length} regels)</h4>
+            <p className="mt-1 text-xs text-slate-600">
+              Vink <strong>Meenemen</strong> uit om een geplande uitgave- of inkomstenactie over te slaan bij import. Kies
+              per regel <strong>Waarvoor</strong> (lunchkraam of avondeten) vóór je importeert — dat overschrijft
+              tijdafleiding voor uitgaven en het standaard kaartbedrag-label voor inkomsten. Bedragen wijzig je in het CSV.
+            </p>
+            <div className="mt-3 max-h-[min(70vh,28rem)] overflow-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[72rem] text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-slate-100 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-600">
+                  <tr>
+                    <th className="px-2 py-2">#</th>
+                    <th className="px-2 py-2">Datum</th>
+                    <th className="px-2 py-2">Bedrag</th>
+                    <th className="px-2 py-2">Type</th>
+                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2">Omschrijving</th>
+                    <th className="px-2 py-2">Waarvoor uit</th>
+                    <th className="px-2 py-2">Uitgave</th>
+                    <th className="px-2 py-2 text-center">Uit.</th>
+                    <th className="px-2 py-2">Waarvoor ink.</th>
+                    <th className="px-2 py-2">Inkomsten</th>
+                    <th className="px-2 py-2 text-center">Ink.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {revolutPreview.rows.map((pr) => {
+                    const dk = pr.debit.row_key ?? ''
+                    const ck = pr.credit.row_key ?? ''
+                    const debitIn = pr.debit.selectable && dk ? !excludedDebit[dk] : false
+                    const creditIn = pr.credit.selectable && ck ? !excludedCredit[ck] : false
+                    return (
+                      <tr key={pr.line} className="align-top text-slate-800">
+                        <td className="px-2 py-1.5 tabular-nums text-slate-500">{pr.line}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">
+                          {formatDateTimeShortNL(pr.completed_at)}
+                        </td>
+                        <td className="px-2 py-1.5 tabular-nums font-medium">{formatEUR(pr.amount_eur)}</td>
+                        <td className="px-2 py-1.5 text-slate-600">{pr.type || '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-600">{pr.state || '—'}</td>
+                        <td className="max-w-[14rem] px-2 py-1.5 break-words text-slate-700">{pr.description || '—'}</td>
+                        <td className="px-2 py-1.5">
+                          {pr.debit.selectable && dk ? (
+                            <select
+                              className="select-control max-w-[10.5rem] py-1 text-xs"
+                              value={debitPurposeByKey[dk] ?? 'lunchkraam'}
+                              onChange={(e) => {
+                                const v = e.target.value as api.ShopExpensePurpose
+                                setDebitPurposeByKey((prev) => ({ ...prev, [dk]: v }))
+                              }}
+                            >
+                              <option value="lunchkraam">Lunchkraam</option>
+                              <option value="avondeten">Avondeten</option>
+                            </select>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5 text-slate-600">{pr.debit.label_nl}</td>
+                        <td className="px-2 py-1.5 text-center">
+                          {pr.debit.selectable && dk ? (
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300"
+                              checked={debitIn}
+                              title="Meenemen als uitgave"
+                              onChange={(e) => {
+                                setExcludedDebit((prev) => {
+                                  const next = { ...prev }
+                                  if (e.target.checked) delete next[dk]
+                                  else next[dk] = true
+                                  return next
+                                })
+                              }}
+                            />
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {pr.credit.selectable && ck ? (
+                            <select
+                              className="select-control max-w-[10.5rem] py-1 text-xs"
+                              value={creditPurposeByKey[ck] ?? 'lunchkraam'}
+                              onChange={(e) => {
+                                const v = e.target.value as api.ShopExpensePurpose
+                                setCreditPurposeByKey((prev) => ({ ...prev, [ck]: v }))
+                              }}
+                            >
+                              <option value="lunchkraam">Lunchkraam</option>
+                              <option value="avondeten">Avondeten</option>
+                            </select>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5 text-slate-600">{pr.credit.label_nl}</td>
+                        <td className="px-2 py-1.5 text-center">
+                          {pr.credit.selectable && ck ? (
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300"
+                              checked={creditIn}
+                              title="Meenemen als omzet"
+                              onChange={(e) => {
+                                setExcludedCredit((prev) => {
+                                  const next = { ...prev }
+                                  if (e.target.checked) delete next[ck]
+                                  else next[ck] = true
+                                  return next
+                                })
+                              }}
+                            />
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Samenvatting voorbeeld: {revolutPreview.debits_imported} uitgaven-acties, {revolutPreview.debits_skipped}{' '}
+              uitgaven overgeslagen
+              {revolutPreview.debits_pending_review > 0
+                ? `, ${revolutPreview.debits_pending_review} naar controle`
+                : ''}
+              {revolutPreview.credits_enabled
+                ? ` · ${revolutPreview.credits_imported} inkomsten-acties, ${revolutPreview.credits_skipped} inkomsten overgeslagen`
+                : ''}
+              .
+              {revolutPreview.credits_enabled && revolutPreview.credits_inferred_non_standard > 0
+                ? ` Daarvan ${revolutPreview.credits_inferred_non_standard} met een afwijkend bedrag t.o.v. de ingestelde kaartprijzen (doel via tijdvenster of standaard-doel; aanpasbaar onder Waarvoor ink.).`
+                : ''}
+              {previewCreditSplit && previewCreditSplit.total > 0 ? (
+                <>
+                  {' '}
+                  Inkomsten meegenomen (na je keuzes): lunchkraam {previewCreditSplit.lunch}, avondeten{' '}
+                  {previewCreditSplit.avo} (samen {previewCreditSplit.total}).
+                </>
+              ) : null}
+            </p>
+          </div>
+        ) : null}
       </section>
 
       {pendingReviews.length > 0 && (

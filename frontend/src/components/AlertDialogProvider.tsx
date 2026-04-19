@@ -8,7 +8,7 @@ import {
 } from './alertDialogContext'
 
 type Panel =
-  | { kind: 'alert'; title: string; message: string; variant: AlertVariant }
+  | { kind: 'alert'; title: string; message: string; variant: AlertVariant; detail?: ReactNode }
   | {
       kind: 'confirm'
       title: string
@@ -44,6 +44,7 @@ export function AlertDialogProvider({ children }: { children: ReactNode }) {
         title: opts.title,
         message: opts.message,
         variant: opts.variant ?? 'success',
+        detail: opts.detail,
       })
     })
   }, [])
@@ -103,7 +104,7 @@ export function AlertDialogProvider({ children }: { children: ReactNode }) {
               aria-modal="true"
               aria-labelledby="alert-dialog-title"
               aria-describedby="alert-dialog-desc"
-              className={`mx-auto w-full max-w-md rounded-2xl border-2 bg-white p-6 shadow-2xl sm:max-h-[min(90vh,32rem)] ${
+              className={`mx-auto w-full max-w-md rounded-2xl border-2 bg-white p-6 shadow-2xl sm:max-h-[min(90vh,36rem)] ${
                 panel.variant === 'error' ? 'border-red-200' : 'border-brand-200'
               }`}
               onClick={(e) => e.stopPropagation()}
@@ -111,12 +112,13 @@ export function AlertDialogProvider({ children }: { children: ReactNode }) {
               <h2 id="alert-dialog-title" className="text-lg font-bold text-slate-900">
                 {panel.title}
               </h2>
-              <p
+              <div
                 id="alert-dialog-desc"
-                className="mt-3 max-h-[50vh] overflow-y-auto text-sm leading-relaxed text-slate-600"
+                className="mt-3 max-h-[min(65vh,28rem)] overflow-y-auto text-sm leading-relaxed text-slate-600"
               >
-                {panel.message}
-              </p>
+                <p className="whitespace-pre-line">{panel.message}</p>
+                {panel.detail ? <div className="mt-4 border-t border-slate-200 pt-4">{panel.detail}</div> : null}
+              </div>
               <button
                 type="button"
                 autoFocus

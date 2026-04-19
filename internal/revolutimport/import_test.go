@@ -57,6 +57,44 @@ func TestImportDebitsDryRunSample(t *testing.T) {
 	if res.Imported != 2 || res.Skipped != 1 {
 		t.Fatalf("got imported=%d skipped=%d", res.Imported, res.Skipped)
 	}
+	if res.Skipped != res.SkipReasons.Total() {
+		t.Fatalf("skipped vs reasons: %d vs %d (%+v)", res.Skipped, res.SkipReasons.Total(), res.SkipReasons)
+	}
+	if res.SkipReasons.NotDebit != 1 {
+		t.Fatalf("skip reasons %+v", res.SkipReasons)
+	}
+}
+
+func TestImportDebitRowsPurposeOverride(t *testing.T) {
+	csv := `Date completed (UTC);Type;Description;Amount;Payment currency;State;ID
+2026-06-15 09:00:00;CARD_PAYMENT;AH;-5,00;EUR;COMPLETED;tx-morn
+`
+	rows, err := revolutcsv.Parse(strings.NewReader(csv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotPurpose string
+	res, err := ImportDebitRows(context.Background(), nil, rows, Options{
+		Purpose:               "lunchkraam",
+		GuessPurposeByTime:    true,
+		Currency:              "EUR",
+		CompletedOnly:         true,
+		FingerprintMissingID:  false,
+		DryRun:                true,
+		DebitPurposeOverrides: map[string]string{"tx-morn": "avondeten"},
+		OnDryRunRow: func(_, _ string, _ float64, purpose, _ string) {
+			gotPurpose = purpose
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 1 {
+		t.Fatalf("imported=%d", res.Imported)
+	}
+	if gotPurpose != "avondeten" {
+		t.Fatalf("purpose=%q want avondeten (override)", gotPurpose)
+	}
 }
 
 func TestImportDebitRowsGuessPurposeByTimeEveningDebit(t *testing.T) {
@@ -112,6 +150,38 @@ func TestImportDebitsDutchAppFingerprint(t *testing.T) {
 	if res.Imported != 1 || res.Skipped != 1 {
 		t.Fatalf("got imported=%d skipped=%d", res.Imported, res.Skipped)
 	}
+	if res.SkipReasons.FilterNotCompleted != 1 {
+		t.Fatalf("skip reasons %+v", res.SkipReasons)
+	}
+}
+
+func TestImportDebitRowsDryRunExcludesByExternalID(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "revolutcsv", "testdata", "sample_revolut_nl.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := revolutcsv.Parse(strings.NewReader(string(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := map[string]struct{}{"txn-sample-001": {}}
+	res, err := ImportDebitRows(context.Background(), nil, rows, Options{
+		Purpose:                 "lunchkraam",
+		Currency:                "EUR",
+		CompletedOnly:           true,
+		FingerprintMissingID:    false,
+		DryRun:                  true,
+		ExcludeDebitExternalIDs: ex,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 1 || res.Skipped != 2 {
+		t.Fatalf("got imported=%d skipped=%d (want 1 imported, 2 skipped)", res.Imported, res.Skipped)
+	}
+	if res.SkipReasons.UserExcluded != 1 {
+		t.Fatalf("user_excluded=%d", res.SkipReasons.UserExcluded)
+	}
 }
 
 func TestImportCreditRowsDryRun15And10(t *testing.T) {
@@ -125,6 +195,8 @@ Geld toevoegen,Betaalrekening,2025-04-02 10:00:00,2025-04-02 10:00:01,Anders,"1,
 		t.Fatal(err)
 	}
 	res, err := ImportCreditRows(context.Background(), nil, rows, CreditOptions{
+		Purpose:              "lunchkraam",
+		GuessPurposeByTime:   true,
 		Currency:             "EUR",
 		CompletedOnly:        true,
 		FingerprintMissingID: true,
@@ -135,7 +207,111 @@ Geld toevoegen,Betaalrekening,2025-04-02 10:00:00,2025-04-02 10:00:01,Anders,"1,
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Imported != 2 || res.Skipped != 1 {
-		t.Fatalf("got imported=%d skipped=%d", res.Imported, res.Skipped)
+	if res.Imported != 3 || res.Skipped != 0 {
+		t.Fatalf("got imported=%d skipped=%d (want 3 imported, 0 skipped)", res.Imported, res.Skipped)
+	}
+	if res.Skipped != res.SkipReasons.Total() {
+		t.Fatalf("skipped vs reasons: %d vs %d (%+v)", res.Skipped, res.SkipReasons.Total(), res.SkipReasons)
+	}
+	if res.SkipReasons.AmountNotStandard != 0 || res.CreditsLunchkraam != 2 || res.CreditsAvondeten != 1 || res.CreditsInferredNonStandard != 1 {
+		t.Fatalf("credits breakdown reasons=%+v lunch=%d avo=%d inferred=%d", res.SkipReasons, res.CreditsLunchkraam, res.CreditsAvondeten, res.CreditsInferredNonStandard)
+	}
+}
+
+func TestImportCreditRowsNonStandardWithPurposeOverride(t *testing.T) {
+	csv := `Type,Product,Startdatum,Datum voltooid,Beschrijving,Bedrag,Kosten,Valuta,Status,Saldo
+Geld toevoegen,Betaalrekening,2025-04-02 10:00:00,2025-04-02 10:00:01,Anders,"1,8",0,EUR,VOLTOOID,26
+`
+	rows, err := revolutcsv.Parse(strings.NewReader(csv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := rows[0]
+	fp := revolutcsv.FingerprintExternalID(row.CompletedDate, row.AmountEUR, row.Description, row.Type)
+	extID := "credit:" + fp
+
+	var gotPurpose string
+	res, err := ImportCreditRows(context.Background(), nil, rows, CreditOptions{
+		Purpose:                "lunchkraam",
+		GuessPurposeByTime:     true,
+		Currency:               "EUR",
+		CompletedOnly:          true,
+		FingerprintMissingID:   true,
+		DryRun:                 true,
+		LunchkraamAmountEUR:    15,
+		AvondetenAmountEUR:     10,
+		CreditPurposeOverrides: map[string]string{extID: "avondeten"},
+		OnDryRunCreditRow: func(_, _ string, _ float64, purpose, _ string) {
+			gotPurpose = purpose
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 1 || res.Skipped != 0 {
+		t.Fatalf("got imported=%d skipped=%d (want 1 imported, 0 skipped)", res.Imported, res.Skipped)
+	}
+	if gotPurpose != "avondeten" {
+		t.Fatalf("purpose=%q want avondeten", gotPurpose)
+	}
+	if res.CreditsAvondeten != 1 || res.CreditsLunchkraam != 0 {
+		t.Fatalf("credit split lunch=%d avo=%d", res.CreditsLunchkraam, res.CreditsAvondeten)
+	}
+	if res.CreditsInferredNonStandard != 1 {
+		t.Fatalf("CreditsInferredNonStandard=%d want 1", res.CreditsInferredNonStandard)
+	}
+}
+
+func TestImportCreditRowsInferredUsesDefaultPurposeWhenGuessOff(t *testing.T) {
+	csv := `Type,Product,Startdatum,Datum voltooid,Beschrijving,Bedrag,Kosten,Valuta,Status,Saldo
+Geld toevoegen,Betaalrekening,2025-04-02 10:00:00,2025-04-02 10:00:01,Anders,"1,8",0,EUR,VOLTOOID,26
+`
+	rows, err := revolutcsv.Parse(strings.NewReader(csv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportCreditRows(context.Background(), nil, rows, CreditOptions{
+		Purpose:              "avondeten",
+		GuessPurposeByTime:   false,
+		Currency:             "EUR",
+		CompletedOnly:        true,
+		FingerprintMissingID: true,
+		DryRun:               true,
+		LunchkraamAmountEUR:  15,
+		AvondetenAmountEUR:   10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 1 || res.Skipped != 0 {
+		t.Fatalf("imported=%d skipped=%d", res.Imported, res.Skipped)
+	}
+	if res.CreditsAvondeten != 1 || res.CreditsLunchkraam != 0 {
+		t.Fatalf("credit split lunch=%d avo=%d", res.CreditsLunchkraam, res.CreditsAvondeten)
+	}
+	if res.CreditsInferredNonStandard != 1 {
+		t.Fatalf("CreditsInferredNonStandard=%d", res.CreditsInferredNonStandard)
+	}
+}
+
+func TestImportCreditRowsInvalidPurpose(t *testing.T) {
+	csv := `Date completed (UTC);Type;Description;Amount;Payment currency;State;ID
+2026-06-15 10:00:00;TOPUP;x;5,00;EUR;COMPLETED;id1
+`
+	rows, err := revolutcsv.Parse(strings.NewReader(csv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ImportCreditRows(context.Background(), nil, rows, CreditOptions{
+		Purpose:              "bogus",
+		Currency:             "EUR",
+		CompletedOnly:        true,
+		FingerprintMissingID: false,
+		DryRun:               true,
+		LunchkraamAmountEUR:  15,
+		AvondetenAmountEUR:   10,
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid purpose")
 	}
 }

@@ -325,15 +325,83 @@ export const shopExpensesResponseSchema = z.object({
   expenses: z.array(shopExpenseSchema).catch([]),
 })
 
+const emptyRevolutSkipReasons = {
+  filter_not_completed: 0,
+  filter_currency_mismatch: 0,
+  filter_type_skipped: 0,
+  not_debit: 0,
+  not_credit: 0,
+  amount_not_standard_card_price: 0,
+  missing_external_id: 0,
+  user_excluded: 0,
+  other: 0,
+} as const
+
+export const revolutSkipReasonsSchema = z.preprocess(
+  (v) => (v != null && typeof v === 'object' ? v : emptyRevolutSkipReasons),
+  z.object({
+    filter_not_completed: intWithDefault(0),
+    filter_currency_mismatch: intWithDefault(0),
+    filter_type_skipped: intWithDefault(0),
+    not_debit: intWithDefault(0),
+    not_credit: intWithDefault(0),
+    amount_not_standard_card_price: intWithDefault(0),
+    missing_external_id: intWithDefault(0),
+    user_excluded: intWithDefault(0),
+    other: intWithDefault(0),
+  }),
+)
+
+export const revolutPreviewBranchSchema = z.object({
+  outcome: stringWithDefault(''),
+  label_nl: stringWithDefault(''),
+  selectable: z.boolean().catch(false),
+  row_key: z.string().optional(),
+  purpose: shopExpensePurposeSchema.optional(),
+})
+
+export const revolutPreviewRowSchema = z.object({
+  line: intWithDefault(0),
+  completed_at: stringWithDefault(''),
+  amount_eur: floatWithDefault(0),
+  description: stringWithDefault(''),
+  type: stringWithDefault(''),
+  state: stringWithDefault(''),
+  currency: stringWithDefault(''),
+  external_id_raw: stringWithDefault(''),
+  debit: revolutPreviewBranchSchema.catch({ outcome: '', label_nl: '', selectable: false }),
+  credit: revolutPreviewBranchSchema.catch({ outcome: '', label_nl: '', selectable: false }),
+})
+
+export const revolutPreviewResponseSchema = z.object({
+  rows: z.array(revolutPreviewRowSchema).catch([]),
+  debits_imported: intWithDefault(0),
+  debits_skipped: intWithDefault(0),
+  debits_pending_review: intWithDefault(0),
+  debit_skip_reasons: revolutSkipReasonsSchema,
+  credits_imported: intWithDefault(0),
+  credits_skipped: intWithDefault(0),
+  credits_enabled: z.boolean().catch(false),
+  credit_skip_reasons: revolutSkipReasonsSchema,
+  credits_imported_lunchkraam: intWithDefault(0),
+  credits_imported_avondeten: intWithDefault(0),
+  credits_inferred_non_standard: intWithDefault(0),
+})
+
 export const revolutShopExpenseImportResponseSchema = z.object({
   imported: intWithDefault(0),
   skipped: intWithDefault(0),
   debits_imported: intWithDefault(0),
   debits_skipped: intWithDefault(0),
   debits_pending_review: intWithDefault(0),
+  debit_skip_reasons: revolutSkipReasonsSchema,
   credits_imported: intWithDefault(0),
   credits_skipped: intWithDefault(0),
   credits_enabled: z.boolean().catch(false),
+  credit_skip_reasons: revolutSkipReasonsSchema,
+  credits_imported_lunchkraam: intWithDefault(0),
+  credits_imported_avondeten: intWithDefault(0),
+  credits_inferred_non_standard: intWithDefault(0),
   dry_run: z.boolean().catch(false),
 })
 

@@ -64,7 +64,7 @@ Import flags:
   -completed-only          Skip rows with a non-empty State other than COMPLETED (default true)
   -fingerprint-missing-id  Derive external_id when the CSV has no id column
   -migrate                 Run goose migrations from -migrations dir before import
-  -import-credits          Also import positive lines matching -credit-lunch-eur / -credit-avondeten-eur as omzet
+  -import-credits          Also import positive lines as omzet (exact -credit-* match or inferred purpose like debits)
   -credit-lunch-eur float  Standard lunchkraam (tosti) card amount (default 15; 0 = skip this tier)
   -credit-avondeten-eur float  Standard avondeten card amount (default 10; 0 = skip this tier)
   -guess-purpose-time      Infer debit purpose from transaction time in Europe/Amsterdam (default true; use=false for fixed -purpose)
@@ -179,10 +179,12 @@ func runImport(args []string) int {
 		log.Printf("import debits: %v", err)
 		return 1
 	}
-	log.Printf("debits: %d upserts (dry-run=%v), %d skipped", res.Imported, res.DryRun, res.Skipped)
+	log.Printf("debits: %d upserts (dry-run=%v), %d skipped %+v", res.Imported, res.DryRun, res.Skipped, res.SkipReasons)
 
 	if *importCredits {
 		co := revolutimport.CreditOptions{
+			Purpose:              *purpose,
+			GuessPurposeByTime:   *guessPurposeTime,
 			Currency:             *currency,
 			SkipTypesCSV:         *skipTypes,
 			CompletedOnly:        *completedOnly,
@@ -203,7 +205,8 @@ func runImport(args []string) int {
 			log.Printf("import credits: %v", cerr)
 			return 1
 		}
-		log.Printf("credits: %d upserts (dry-run=%v), %d skipped", cres.Imported, cres.DryRun, cres.Skipped)
+		log.Printf("credits: %d upserts (dry-run=%v), %d skipped lunch=%d avo=%d inferred_non_std=%d %+v",
+			cres.Imported, cres.DryRun, cres.Skipped, cres.CreditsLunchkraam, cres.CreditsAvondeten, cres.CreditsInferredNonStandard, cres.SkipReasons)
 	}
 
 	if !*dryRun && st != nil {

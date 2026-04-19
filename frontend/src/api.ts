@@ -19,6 +19,7 @@ import {
   pendingImportReviewsResponseSchema,
   registeredCountResponseSchema,
   revolutBalanceResponseSchema,
+  revolutPreviewResponseSchema,
   revolutShopExpenseImportResponseSchema,
   shopExpenseSchema,
   shopExpenseReceiptSchema,
@@ -196,15 +197,68 @@ export type AdminShopExpense = {
   external_id: string
 }
 
+export type RevolutImportSkipReasons = {
+  filter_not_completed: number
+  filter_currency_mismatch: number
+  filter_type_skipped: number
+  not_debit: number
+  not_credit: number
+  amount_not_standard_card_price: number
+  missing_external_id: number
+  user_excluded: number
+  other: number
+}
+
+export type RevolutPreviewBranch = {
+  outcome: string
+  label_nl: string
+  selectable: boolean
+  row_key?: string
+  purpose?: ShopExpensePurpose
+}
+
+export type RevolutPreviewRow = {
+  line: number
+  completed_at: string
+  amount_eur: number
+  description: string
+  type: string
+  state: string
+  currency: string
+  external_id_raw: string
+  debit: RevolutPreviewBranch
+  credit: RevolutPreviewBranch
+}
+
+export type RevolutPreviewResponse = {
+  rows: RevolutPreviewRow[]
+  debits_imported: number
+  debits_skipped: number
+  debits_pending_review: number
+  debit_skip_reasons: RevolutImportSkipReasons
+  credits_imported: number
+  credits_skipped: number
+  credits_enabled: boolean
+  credit_skip_reasons: RevolutImportSkipReasons
+  credits_imported_lunchkraam: number
+  credits_imported_avondeten: number
+  credits_inferred_non_standard: number
+}
+
 export type RevolutShopExpenseImportResult = {
   imported: number
   skipped: number
   debits_imported: number
   debits_skipped: number
   debits_pending_review: number
+  debit_skip_reasons: RevolutImportSkipReasons
   credits_imported: number
   credits_skipped: number
   credits_enabled: boolean
+  credit_skip_reasons: RevolutImportSkipReasons
+  credits_imported_lunchkraam: number
+  credits_imported_avondeten: number
+  credits_inferred_non_standard: number
   dry_run: boolean
 }
 
@@ -823,6 +877,22 @@ export async function importRevolutShopExpenses(
   })
   if (!res.ok) throw await parseError(res)
   return parseApiResponse(revolutShopExpenseImportResponseSchema, await res.json())
+}
+
+export async function previewRevolutShopExpenses(
+  csrf: string,
+  formData: FormData,
+  isOperatorOnly: boolean,
+): Promise<RevolutPreviewResponse> {
+  const prefix = isOperatorOnly ? '/api/operator' : '/api/admin'
+  const res = await fetch(`${prefix}/shop-expenses/revolut-import/preview`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrf },
+    body: formData,
+  })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(revolutPreviewResponseSchema, await res.json())
 }
 
 export async function getRevolutBalance(isOperatorOnly: boolean): Promise<RevolutBalance> {

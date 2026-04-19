@@ -39,13 +39,20 @@ type Options struct {
 	FingerprintMissingID bool
 	CreatedBy            *int64 // optional users.id for created_by
 	DryRun               bool
+	// ExcludeDebitExternalIDs skips rows by effective Revolut expense external_id (after fingerprinting).
+	ExcludeDebitExternalIDs map[string]struct{}
+	// DebitPurposeOverrides sets waarvoor (lunchkraam|avondeten) per expense external_id after time/default logic.
+	DebitPurposeOverrides map[string]string
 	// OnDryRunRow is called for each row that would be upserted when DryRun is true (optional).
 	OnDryRunRow func(externalID, spentOnISO string, amount float64, purpose, description string)
 }
 
 // CreditOptions configures importing positive Revolut lines as bank_credit_imports (omzet).
-// Rows match if the (rounded) amount equals LunchkraamAmountEUR and/or AvondetenAmountEUR (>0).
+// Rows whose amount exactly matches LunchkraamAmountEUR and/or AvondetenAmountEUR (>0) get purpose from that match.
+// Other positive inflows use Purpose and GuessPurposeByTime (same rules as debit import / shop_expenses).
 type CreditOptions struct {
+	Purpose              string // lunchkraam | avondeten; default when GuessPurposeByTime is false, or fallback for time windows
+	GuessPurposeByTime   bool   // if true, infer lunchkraam vs avondeten from CompletedDate (Amsterdam) for non-standard amounts
 	Currency             string
 	SkipTypesCSV         string
 	CompletedOnly        bool
@@ -54,7 +61,30 @@ type CreditOptions struct {
 	DryRun               bool
 	LunchkraamAmountEUR  float64 // e.g. 15; 0 = do not match this amount
 	AvondetenAmountEUR   float64 // e.g. 10; 0 = do not match this amount
-	OnDryRunCreditRow    func(externalID, receivedISO string, amount float64, purpose, description string)
+	// ExcludeCreditExternalIDs skips by full stored external_id (includes "credit:" prefix).
+	ExcludeCreditExternalIDs map[string]struct{}
+	// CreditPurposeOverrides sets waarvoor per full credit external_id (after "credit:" prefix), only for imported credits.
+	CreditPurposeOverrides map[string]string
+	OnDryRunCreditRow      func(externalID, receivedISO string, amount float64, purpose, description string)
+}
+
+// SkipReasonCounts explains non-imported rows for one import pass (debits or credits).
+type SkipReasonCounts struct {
+	FilterNotCompleted     int `json:"filter_not_completed"`
+	FilterCurrencyMismatch int `json:"filter_currency_mismatch"`
+	FilterTypeSkipped      int `json:"filter_type_skipped"`
+	NotDebit               int `json:"not_debit"`                      // amount ≥ 0 (not an outflow line)
+	NotCredit              int `json:"not_credit"`                     // amount ≤ 0 (not an inflow line)
+	AmountNotStandard      int `json:"amount_not_standard_card_price"` // legacy: credit path no longer skips for this; kept for JSON stability
+	MissingExternalID      int `json:"missing_external_id"`
+	UserExcluded           int `json:"user_excluded"`
+	Other                  int `json:"other"` // unexpected classifier; should stay zero
+}
+
+// Total returns the sum of all skip counters (must equal Result.Skipped for that pass).
+func (s SkipReasonCounts) Total() int {
+	return s.FilterNotCompleted + s.FilterCurrencyMismatch + s.FilterTypeSkipped +
+		s.NotDebit + s.NotCredit + s.AmountNotStandard + s.MissingExternalID + s.UserExcluded + s.Other
 }
 
 // Result is returned after scanning the CSV (and optionally writing to the DB).
@@ -63,6 +93,12 @@ type Result struct {
 	Skipped       int
 	PendingReview int // rows flagged for duplicate review instead of imported
 	DryRun        bool
+	SkipReasons   SkipReasonCounts
+	// CreditsLunchkraam / CreditsAvondeten are set only by ImportCreditRows.
+	CreditsLunchkraam int
+	CreditsAvondeten  int
+	// CreditsInferredNonStandard counts positive inflows booked as omzet without an exact standard card-amount match.
+	CreditsInferredNonStandard int
 }
 
 // ParseSkipTypes builds a set of uppercase type names to skip.
@@ -88,27 +124,56 @@ func BuildExpenseDescription(row revolutcsv.Row) string {
 	return strings.TrimSpace(b.String())
 }
 
-// RowPassesFilters applies currency, type-skip, and completed-state filters.
-func RowPassesFilters(row revolutcsv.Row, currency string, skip map[string]struct{}, completedOnly bool) bool {
+// RowFilterOutcome returns whether the row passes global filters and, if not, a stable reason code.
+func RowFilterOutcome(row revolutcsv.Row, currency string, skip map[string]struct{}, completedOnly bool) (ok bool, reason string) {
 	if completedOnly {
 		st := strings.TrimSpace(strings.ToUpper(row.State))
 		if st != "" && !isCompletedState(st) {
-			return false
+			return false, "filter_not_completed"
 		}
 	}
 	cur := strings.TrimSpace(strings.ToUpper(row.Currency))
 	if currency != "" {
 		if cur != "" && cur != strings.ToUpper(strings.TrimSpace(currency)) {
-			return false
+			return false, "filter_currency_mismatch"
 		}
 	}
 	typ := strings.TrimSpace(strings.ToUpper(row.Type))
 	if typ != "" {
 		if _, ok := skip[typ]; ok {
-			return false
+			return false, "filter_type_skipped"
 		}
 	}
-	return true
+	return true, ""
+}
+
+func incSkipReason(sr *SkipReasonCounts, reason string) {
+	switch reason {
+	case "filter_not_completed":
+		sr.FilterNotCompleted++
+	case "filter_currency_mismatch":
+		sr.FilterCurrencyMismatch++
+	case "filter_type_skipped":
+		sr.FilterTypeSkipped++
+	case "not_debit":
+		sr.NotDebit++
+	case "not_credit":
+		sr.NotCredit++
+	case "amount_not_standard_card_price":
+		sr.AmountNotStandard++
+	case "missing_external_id":
+		sr.MissingExternalID++
+	case "user_excluded":
+		sr.UserExcluded++
+	default:
+		sr.Other++
+	}
+}
+
+// RowPassesFilters applies currency, type-skip, and completed-state filters.
+func RowPassesFilters(row revolutcsv.Row, currency string, skip map[string]struct{}, completedOnly bool) bool {
+	ok, _ := RowFilterOutcome(row, currency, skip, completedOnly)
+	return ok
 }
 
 func isCompletedState(st string) bool {
@@ -128,6 +193,15 @@ func SpentOnDateAmsterdam(t time.Time, loc *time.Location) time.Time {
 
 func round2(v float64) float64 {
 	return math.Round(v*100) / 100
+}
+
+// NormalizeShopExpensePurpose returns lunchkraam or avondeten when s is a valid purpose label.
+func NormalizeShopExpensePurpose(s string) (string, bool) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "lunchkraam" || s == "avondeten" {
+		return s, true
+	}
+	return "", false
 }
 
 // creditPurposeForAmount maps a positive statement amount to lunchkraam (tosti) or avondeten revenue.
@@ -170,75 +244,51 @@ func ImportDebitRows(ctx context.Context, st *store.Store, rows []revolutcsv.Row
 	res.DryRun = o.DryRun
 
 	for _, row := range rows {
-		if !RowPassesFilters(row, o.Currency, skip, o.CompletedOnly) {
+		c, err := classifyDebitRow(ctx, st, row, o, skip, loc)
+		if err != nil {
+			return res, err
+		}
+		if c.Skip {
 			res.Skipped++
+			incSkipReason(&res.SkipReasons, c.SkipReason)
 			continue
-		}
-		if row.AmountEUR >= 0 {
-			res.Skipped++
-			continue
-		}
-		amt := -row.AmountEUR
-		extID := strings.TrimSpace(row.ExternalID)
-		if extID == "" {
-			if !o.FingerprintMissingID {
-				res.Skipped++
-				continue
-			}
-			extID = revolutcsv.FingerprintExternalID(row.CompletedDate, row.AmountEUR, row.Description, row.Type)
-		}
-		spentOn := SpentOnDateAmsterdam(row.CompletedDate, loc)
-		desc := BuildExpenseDescription(row)
-		purpose := o.Purpose
-		if o.GuessPurposeByTime {
-			purpose = DebitPurposeFromCompletedTime(row.CompletedDate, loc, o.Purpose)
 		}
 		if o.DryRun {
-			if o.OnDryRunRow != nil {
-				o.OnDryRunRow(extID, spentOn.Format("2006-01-02"), amt, purpose, desc)
+			if c.PendingReview {
+				res.PendingReview++
+				continue
 			}
-			res.Imported++
+			if c.NewOrUpdate {
+				if o.OnDryRunRow != nil {
+					o.OnDryRunRow(c.ExtID, c.SpentOn.Format("2006-01-02"), c.Amt, c.Purpose, c.Desc)
+				}
+				res.Imported++
+			}
 			continue
 		}
-
-		// Check if this Revolut row already exists in shop_expenses (re-import).
-		alreadyImported, err := st.ShopExpenseExistsBySourceAndExternalID(ctx, store.ShopExpenseSourceRevolut, extID)
-		if err != nil {
-			return res, fmt.Errorf("exists check %s: %w", extID, err)
-		}
-		if alreadyImported {
-			// Re-import: just update the existing row, no duplicate detection needed.
-			if _, err := st.UpsertImportedShopExpense(ctx, store.ShopExpenseSourceRevolut, extID, o.CreatedBy, amt, spentOn, desc, purpose); err != nil {
-				return res, fmt.Errorf("upsert %s: %w", extID, err)
-			}
-			res.Imported++
-			continue
-		}
-
-		// New Revolut row: check for matching manual expenses (same amount + date).
-		matches, err := st.FindMatchingManualExpenses(ctx, amt, spentOn)
-		if err != nil {
-			return res, fmt.Errorf("duplicate check %s: %w", extID, err)
-		}
-		if len(matches) > 0 {
-			// Flag for review instead of importing directly.
-			if _, err := st.InsertPendingImportReview(ctx, amt, spentOn, desc, purpose, store.ShopExpenseSourceRevolut, extID, matches[0].ID, o.CreatedBy); err != nil {
-				return res, fmt.Errorf("pending review %s: %w", extID, err)
+		if c.PendingReview {
+			if _, err := st.InsertPendingImportReview(ctx, c.Amt, c.SpentOn, c.Desc, c.Purpose, store.ShopExpenseSourceRevolut, c.ExtID, c.PendingMatchedManualID, o.CreatedBy); err != nil {
+				return res, fmt.Errorf("pending review %s: %w", c.ExtID, err)
 			}
 			res.PendingReview++
 			continue
 		}
-
-		if _, err := st.UpsertImportedShopExpense(ctx, store.ShopExpenseSourceRevolut, extID, o.CreatedBy, amt, spentOn, desc, purpose); err != nil {
-			return res, fmt.Errorf("upsert %s: %w", extID, err)
+		if _, err := st.UpsertImportedShopExpense(ctx, store.ShopExpenseSourceRevolut, c.ExtID, o.CreatedBy, c.Amt, c.SpentOn, c.Desc, c.Purpose); err != nil {
+			return res, fmt.Errorf("upsert %s: %w", c.ExtID, err)
 		}
 		res.Imported++
+	}
+	if res.Skipped != res.SkipReasons.Total() {
+		return res, fmt.Errorf("interne fout: uitgaven skipped=%d vs redenen som=%d", res.Skipped, res.SkipReasons.Total())
 	}
 	return res, nil
 }
 
-// ImportCreditRows upserts positive amounts that match configured standard prices into bank_credit_imports.
+// ImportCreditRows upserts positive amounts into bank_credit_imports (omzet): exact standard amounts and other inflows (purpose from time/default).
 func ImportCreditRows(ctx context.Context, st *store.Store, rows []revolutcsv.Row, o CreditOptions) (Result, error) {
+	if o.Purpose != "lunchkraam" && o.Purpose != "avondeten" {
+		return Result{}, fmt.Errorf("ongeldig doel %q", o.Purpose)
+	}
 	if o.LunchkraamAmountEUR <= 0 && o.AvondetenAmountEUR <= 0 {
 		return Result{}, fmt.Errorf("stel minstens één positief standaardbedrag in (lunch of avondeten)")
 	}
@@ -255,43 +305,42 @@ func ImportCreditRows(ctx context.Context, st *store.Store, rows []revolutcsv.Ro
 	res.DryRun = o.DryRun
 
 	for _, row := range rows {
-		if !RowPassesFilters(row, o.Currency, skip, o.CompletedOnly) {
+		c := classifyCreditRow(row, o, skip, loc)
+		if c.Skip {
 			res.Skipped++
+			incSkipReason(&res.SkipReasons, c.SkipReason)
 			continue
 		}
-		if row.AmountEUR <= 0 {
-			res.Skipped++
-			continue
-		}
-		purpose, ok := creditPurposeForAmount(row.AmountEUR, o.LunchkraamAmountEUR, o.AvondetenAmountEUR)
-		if !ok {
-			res.Skipped++
-			continue
-		}
-		amt := row.AmountEUR
-		extID := strings.TrimSpace(row.ExternalID)
-		if extID == "" {
-			if !o.FingerprintMissingID {
-				res.Skipped++
-				continue
-			}
-			extID = revolutcsv.FingerprintExternalID(row.CompletedDate, row.AmountEUR, row.Description, row.Type)
-		}
-		// Namespace apart from shop_expenses.revolut external_id (same table uses different rows; avoids duplicate constraint confusion if IDs overlap).
-		extID = "credit:" + extID
-		receivedOn := SpentOnDateAmsterdam(row.CompletedDate, loc)
-		desc := BuildExpenseDescription(row)
 		if o.DryRun {
 			if o.OnDryRunCreditRow != nil {
-				o.OnDryRunCreditRow(extID, receivedOn.Format("2006-01-02"), amt, purpose, desc)
+				o.OnDryRunCreditRow(c.ExtID, c.ReceivedOn.Format("2006-01-02"), c.Amt, c.Purpose, c.Desc)
 			}
 			res.Imported++
+			if c.Purpose == "lunchkraam" {
+				res.CreditsLunchkraam++
+			} else if c.Purpose == "avondeten" {
+				res.CreditsAvondeten++
+			}
+			if !c.MatchedStandardCardAmount {
+				res.CreditsInferredNonStandard++
+			}
 			continue
 		}
-		if err := st.UpsertImportedBankCredit(ctx, store.BankCreditSourceRevolut, extID, o.CreatedBy, amt, receivedOn, desc, purpose); err != nil {
-			return res, fmt.Errorf("upsert credit %s: %w", extID, err)
+		if err := st.UpsertImportedBankCredit(ctx, store.BankCreditSourceRevolut, c.ExtID, o.CreatedBy, c.Amt, c.ReceivedOn, c.Desc, c.Purpose); err != nil {
+			return res, fmt.Errorf("upsert credit %s: %w", c.ExtID, err)
 		}
 		res.Imported++
+		if c.Purpose == "lunchkraam" {
+			res.CreditsLunchkraam++
+		} else if c.Purpose == "avondeten" {
+			res.CreditsAvondeten++
+		}
+		if !c.MatchedStandardCardAmount {
+			res.CreditsInferredNonStandard++
+		}
+	}
+	if res.Skipped != res.SkipReasons.Total() {
+		return res, fmt.Errorf("interne fout: inkomsten skipped=%d vs redenen som=%d", res.Skipped, res.SkipReasons.Total())
 	}
 	return res, nil
 }

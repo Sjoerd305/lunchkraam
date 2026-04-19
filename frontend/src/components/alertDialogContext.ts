@@ -1,4 +1,4 @@
-import { createContext } from 'react'
+import { createContext, type ReactNode } from 'react'
 
 export type AlertVariant = 'success' | 'error'
 
@@ -6,6 +6,8 @@ export type AlertOptions = {
   title: string
   message: string
   variant?: AlertVariant
+  /** Extra content below the message (scrolls with the message in the dialog). */
+  detail?: ReactNode
 }
 
 export type ConfirmTone = 'brand' | 'danger'
