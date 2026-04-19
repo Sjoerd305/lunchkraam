@@ -27,7 +27,7 @@
 
 ## Code health — backend
 
-*Last reviewed: 2026-04-19 (follow-up scan)*
+*Last reviewed: 2026-04-19 (PR-N store/handler split)*
 
 - [x] Gedeelde **EUR cent-rounding** helper (`internal/money.RoundEUR`; vervangt `math.Round(v*100)/100` bij JSON-uitvoer en rapportage).
 - [x] Gedeelde **JSON body decode**: `httpx.ReadJSON` / `httpx.ReadJSONAllowEmpty` i.p.v. overal `json.NewDecoder(http.MaxBytesReader(…))` + uniforme 400 bij parse-fout.
@@ -63,7 +63,7 @@
 - [x] **Generieke 500 + DB-fouten:** [internal/httpx/logged_errors.go](internal/httpx/logged_errors.go) (`RespondInternalStoreError`) op `"Databasefout."`-paden in handlers.
 - [x] **Bank credit store:** types/errors + `scanBankCreditListRow` naar [internal/store/bank_credit_types.go](internal/store/bank_credit_types.go) (lijst-SQL blijft in `bank_credit_reconciliation.go`).
 - [x] **Revolut shop import (HTTP-laag):** opgesplitst — dunne handlers in [internal/handlers/shop_expenses_revolut_import.go](../internal/handlers/shop_expenses_revolut_import.go); formulier/CSV/response-helpers in `revolut_shop_expenses_*.go` (zelfde package).
-- [ ] **Nog te splitsen / afsmullen:** o.a. [internal/handlers/api_admin_sales.go](internal/handlers/api_admin_sales.go) (DTO-rounding helper), [internal/store/shop_expenses.go](internal/store/shop_expenses.go) — **PR-N**.
+- [x] **Handler/store split (admin sales + shop expenses):** handlers — [api_admin_sales.go](../internal/handlers/api_admin_sales.go) (alleen `APIAdminSalesStats`), [admin_sales_rollups.go](../internal/handlers/admin_sales_rollups.go), [admin_sales_years.go](../internal/handlers/admin_sales_years.go); store — [shop_expenses_model.go](../internal/store/shop_expenses_model.go), [shop_expenses_write.go](../internal/store/shop_expenses_write.go), [shop_expenses_receipts.go](../internal/store/shop_expenses_receipts.go), [shop_expenses_queries.go](../internal/store/shop_expenses_queries.go). `parseSalesStatsYear` deelt jaar + timezone-label met finance-control. — **PR-N** (**gedaan**).
 
 **Frontend**
 
@@ -240,12 +240,12 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Veld | Inhoud |
 |------|--------|
 | **Doel** | Minder merge-conflicten, duidelijkere lagen: DTO/rounding, handler-orchestratie, store per concern — zelfde HTTP-contracten als nu. |
-| **Context** | *Production backlog — code*: [internal/handlers/api_admin_sales.go](../internal/handlers/api_admin_sales.go), [internal/store/shop_expenses.go](../internal/store/shop_expenses.go). |
-| **Wijzigingen (richting)** | 1) **Sales:** bv. `admin_sales_dto.go`, `admin_sales_queries.go` of vergelijkbaar; rounding helper naast `internal/money`. 2) **Shop expenses:** splits in `shop_expenses_list.go`, `shop_expenses_write.go`, … volgens bestaande repo-patroon (vergelijk `bank_credit_*`, `revolut_shop_*`). 3) **Geen** gedragwijziging in eerste PR; eventuele bugfix alleen met test. |
+| **Context** | *Production backlog — code*: admin sales + shop expenses store (zie checklist hierboven). |
+| **Wijzigingen (uitgevoerd)** | 1) **Sales:** `admin_sales_rollups.go` (rollup + tosti-rijhelpers), `admin_sales_years.go` (`parseSalesStatsYear`, `mergeFinanceYears`, `APIAdminSalesYears`, `monthLabelNL`), dun `api_admin_sales.go` met alleen `APIAdminSalesStats`. 2) **Shop expenses:** `shop_expenses_model.go`, `shop_expenses_write.go`, `shop_expenses_receipts.go`, `shop_expenses_queries.go` (zelfde methodes/HTTP-contracten). 3) `APIAdminFinanceControl` gebruikt `parseSalesStatsYear` i.p.v. gedupliceerde jaarparse. |
 | **Acceptatie** | `go test ./... -count=1`; handmatig: admin sales endpoints + shop expense flows ongewijzigd (statuscodes, JSON-keys). |
 | **Risico** | Medium (grote touch); mitigatie: mechanische verplaatsing + smoke `httptest` uitbreiden waar rendabel. |
 | **Grootte** | Medium–groot. |
-| **Status** | **Gepland**. |
+| **Status** | **Gedaan** (april 2026). |
 
 ### PR-O — Documentatie: vrijwilligershandleiding (repo + links)
 
@@ -273,8 +273,8 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 9. **PR-I** (Zod WS + veilige `parseError`) — **afgerond**.  
 10. **PR-J** — paraplu; zie **PR-K–O**.  
 11. **PR-O** (vrijwilligersdoc) — **eerst** doen als laag risico; helpt uitlijnen copy voor **PR-K**.  
-12. **PR-N** (backend split sales / shop_expenses) — parallel mogelijk met ontwerp **PR-K**; vermijd merge-conflict metzelfde bestanden door branch-afstemming.  
-13. **PR-K** (financieel controle-overzicht) — groot; na of met **PR-O**; test tegen CLI-reconcile.  
+12. **PR-N** (backend split sales / shop_expenses) — **afgerond**.  
+13. **PR-K** (financieel controle-overzicht) — MVP afgerond; verfijning optioneel.  
 14. **PR-L** (overige correcties) — productbesluit; kan **na PR-K** als rapportage daarop correctietypes moet tonen.  
 15. **PR-M** (tags import) — optioneel, **na PR-L** of zelfstandig volgens prioriteit.
 
@@ -285,7 +285,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Backlog-regel | PR |
 |---------------|-----|
 | *Production backlog — Backend* “shop_expenses_revolut_import splitsen” | **PR-B** (**gedaan**) |
-| *Production backlog — Backend* “api_admin_sales / shop_expenses splitsen” | **PR-N** (**gepland**) |
+| *Production backlog — Backend* “api_admin_sales / shop_expenses splitsen” | **PR-N** (**gedaan**) |
 | *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G** (**gedaan**), **PR-H** (**gedaan**) |
 | *Revolut vs tostikraam* “saldo vs verwachting” + *Nog uit te werken* verkoopcontrole | **PR-K** (**MVP gedaan**; verfijning mogelijk) |
 | *Losse posten* “overige correcties” | **PR-L** (**gepland**) |

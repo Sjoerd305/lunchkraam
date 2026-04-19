@@ -2,9 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
-	"strings"
-	"time"
 
 	"lunchkraam/internal/httpx"
 	"lunchkraam/internal/money"
@@ -44,21 +41,7 @@ type financeControlResponse struct {
 // APIAdminFinanceControl returns per-month Revolut import totals vs app revenue (same basis as sales-stats).
 // Registered for GET /api/operator/finance-control and GET /api/admin/finance-control.
 func (d *Deps) APIAdminFinanceControl(w http.ResponseWriter, r *http.Request) {
-	loc, locErr := time.LoadLocation("Europe/Amsterdam")
-	year := time.Now().Year()
-	if locErr == nil {
-		year = time.Now().In(loc).Year()
-	}
-	if ys := strings.TrimSpace(r.URL.Query().Get("year")); ys != "" {
-		if v, err := strconv.Atoi(ys); err == nil && v >= 2000 && v <= 2100 {
-			year = v
-		}
-	}
-
-	tz := "Europe/Amsterdam"
-	if locErr != nil {
-		tz = "UTC"
-	}
+	year, tz := parseSalesStatsYear(r)
 
 	buckets, err := d.Store.AdminSalesByMonth(r.Context(), year)
 	if err != nil {
