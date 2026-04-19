@@ -11,13 +11,41 @@ export class ApiError extends Error {
   }
 }
 
+function errorMessageFromJson(value: unknown, statusText: string): { code: string; message: string } | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const o = value as Record<string, unknown>
+  const code = typeof o.error === 'string' ? o.error : 'error'
+  const message = typeof o.message === 'string' ? o.message : statusText
+  return { code, message }
+}
+
+/**
+ * Maps a failed HTTP [Response] to [ApiError]. Reads the body as text first, then
+ * tries JSON for `{ error, message }`; otherwise uses a short text slice or status text.
+ */
 export async function parseError(res: Response): Promise<ApiError> {
+  const statusText = res.statusText || `HTTP ${res.status}`
+  let bodyText = ''
   try {
-    const j = (await res.json()) as { error?: string; message?: string }
-    return new ApiError(res.status, j.error ?? 'error', j.message ?? res.statusText)
+    bodyText = await res.text()
   } catch {
-    return new ApiError(res.status, 'error', res.statusText)
+    return new ApiError(res.status, 'error', statusText)
   }
+  const trimmed = bodyText.trim()
+  if (trimmed === '') {
+    return new ApiError(res.status, 'error', statusText)
+  }
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    const fromJson = errorMessageFromJson(parsed, statusText)
+    if (fromJson) {
+      return new ApiError(res.status, fromJson.code, fromJson.message)
+    }
+  } catch {
+    /* body is not JSON */
+  }
+  const fallback = trimmed.length > 500 ? `${trimmed.slice(0, 500)}…` : trimmed
+  return new ApiError(res.status, 'error', fallback || statusText)
 }
 
 function parseApiResponse<T>(schema: ZodType<T>, payload: unknown): T {

@@ -1,4 +1,10 @@
 import { useEffect, useRef } from 'react'
+import { z } from 'zod'
+
+/** Server → client hint; unknown keys ignored. */
+const tostiRealtimeMessageSchema = z.object({
+  t: z.string().optional(),
+})
 
 function wsUrl(path: string): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -54,14 +60,26 @@ export function useTostiRealtime(
       }
 
       socket.onmessage = (ev) => {
+        let raw: unknown
         try {
-          const data = JSON.parse(ev.data as string) as { t?: string }
-          const t = data.t
-          if (t && filterRef.current.includes(t)) {
-            onHintRef.current(t)
-          }
+          const s = typeof ev.data === 'string' ? ev.data : String(ev.data)
+          raw = JSON.parse(s) as unknown
         } catch {
-          /* ignore */
+          if (import.meta.env.DEV) {
+            console.warn('[useTostiRealtime] skip non-JSON WebSocket payload')
+          }
+          return
+        }
+        const parsed = tostiRealtimeMessageSchema.safeParse(raw)
+        if (!parsed.success) {
+          if (import.meta.env.DEV) {
+            console.warn('[useTostiRealtime] skip invalid message shape', parsed.error.flatten())
+          }
+          return
+        }
+        const t = parsed.data.t
+        if (t && filterRef.current.includes(t)) {
+          onHintRef.current(t)
         }
       }
 

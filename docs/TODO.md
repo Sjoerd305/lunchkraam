@@ -73,7 +73,7 @@
 - [x] **TanStack Query (deels):** `queryKeys.member` + [frontend/src/pages/CardsPage.tsx](frontend/src/pages/CardsPage.tsx) op Query; [frontend/src/pages/BuyPage.tsx](frontend/src/pages/BuyPage.tsx) invalideert `myCards` na mutaties.
 - [x] **Kraam (operator):** Query + WebSocket `invalidateQueries` — [frontend/src/pages/KraamPage.tsx](../frontend/src/pages/KraamPage.tsx), `queryKeys.operator.*` in [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts).  
 - [x] **OrderTosti + Buy (lid):** `useQuery` + `invalidateQueries` — [frontend/src/pages/OrderTostiPage.tsx](../frontend/src/pages/OrderTostiPage.tsx), [frontend/src/pages/BuyPage.tsx](../frontend/src/pages/BuyPage.tsx); `queryKeys.member.myTostiOrders` + `tostiQueue` in [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts) (**PR-H**).
-- [ ] (Optioneel) **Zod:** WebSocket-payload in `useTostiRealtime`; error-JSON in `apiRequest.parseError`.
+- [x] **Zod randgevallen:** WebSocket-envelope in [frontend/src/useTostiRealtime.ts](../frontend/src/useTostiRealtime.ts); veilige error-body in [frontend/src/apiRequest.ts](../frontend/src/apiRequest.ts) (`parseError`) + [frontend/src/apiRequest.test.ts](../frontend/src/apiRequest.test.ts) — **PR-I**.
 
 ---
 
@@ -180,10 +180,11 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Veld | Inhoud |
 |------|--------|
 | **Doel** | Minder runtime-verrassingen op WS- en error-envelopes. |
-| **Wijzigingen** | 1) `useTostiRealtime`: inkomende berichten parsen met kleine Zod-schema’s; bij parse-fout: `slog`-achtige `console.warn` in dev alleen of stille drop + metric later. 2) `apiRequest.parseError`: response body als JSON veilig proberen; fallback string blijft. |
-| **Acceptatie** | Geen regressie in happy path; bij corrupt WS-bericht crasht de app niet. |
+| **Wijzigingen (uitgevoerd)** | 1) [frontend/src/useTostiRealtime.ts](../frontend/src/useTostiRealtime.ts) — `tostiRealtimeMessageSchema` (`t` optioneel string); `JSON.parse` + `safeParse`; bij fout **alleen in dev** `console.warn`, anders stille drop (geen `onHint`). 2) [frontend/src/apiRequest.ts](../frontend/src/apiRequest.ts) — `parseError` leest `res.text()`, probeert `JSON.parse` + `{ error, message }` met typechecks; anders korte body-tekst of `statusText`. 3) [frontend/src/apiRequest.test.ts](../frontend/src/apiRequest.test.ts) — Vitest voor JSON / HTML / lege body. |
+| **Acceptatie** | `npm test` + `npm run build`; happy-path WS ongewijzigd. |
 | **Risico** | Medium (foutpaden). |
 | **Grootte** | Klein–medium. |
+| **Status** | **Gedaan**. |
 
 ### PR-J — Product (referentie; meestal geen pure code-PR)
 
@@ -202,7 +203,8 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 6. **PR-F** (api-modularisatie) — **afgerond**.  
 7. **PR-G** (Kraam + Query + WS-invalidatie) — **afgerond**.  
 8. **PR-H** (OrderTosti + Buy op Query) — **afgerond**.  
-9. **PR-I** — wanneer prioriteit voor WS/error-hardening.
+9. **PR-I** (Zod WS + veilige `parseError`) — **afgerond**.  
+10. **PR-J** — product/documentatie (zie *PR-J*); los van refactor-PR’s.
 
 ---
 
@@ -214,7 +216,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G** (**gedaan**), **PR-H** (**gedaan**) |
 | *Code health — backend* HTTP smoke / uitbreidbare `httptest` | **PR-C** (**gedaan**) |
 | *Code review* CLI `slog` (`revolut-import`) | **PR-D** (**gedaan**) |
-| Geen expliciete regel maar scan-bevinding | **PR-A** (**gedaan**), **PR-E** (**gedaan**), **PR-F** (**gedaan**), **PR-I** |
+| Geen expliciete regel maar scan-bevinding | **PR-A** (**gedaan**), **PR-E** (**gedaan**), **PR-F** (**gedaan**), **PR-I** (**gedaan**) |
 
 ## Libraries vs zelf bouwen (richtlijn)
 
