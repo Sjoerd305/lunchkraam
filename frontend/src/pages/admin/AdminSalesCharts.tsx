@@ -15,7 +15,9 @@ import {
 } from 'recharts'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
 import { queryKeys } from '../../queryKeys'
+import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
 import { formatEUR, roundCents } from '../../utils/formatMoney'
 
 const MONTH_SHORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
@@ -209,33 +211,14 @@ function CumFinanceTooltip({
 
 export function AdminSalesCharts() {
   const { alert } = useAlertDialog()
-  const [year, setYear] = useState<number | null>(null)
   const [granularity, setGranularity] = useState<Granularity>('month')
 
-  const yearsQuery = useQuery({
-    queryKey: queryKeys.admin.salesYears(false),
-    queryFn: () => api.getAdminSalesYears(),
+  const { yearsQuery, year, setYear } = useAdminSalesYearsSelect({
+    isOperatorOnly: false,
+    enabled: true,
+    emptyYearsListBehavior: 'keepPreviousOrNow',
+    onYearsError: (msg) => void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' }),
   })
-
-  useEffect(() => {
-    if (!yearsQuery.data) return
-    const ys = yearsQuery.data
-    const yNow = new Date().getFullYear()
-    setYear((prev) => {
-      if (ys.length > 0) {
-        if (prev !== null && ys.includes(prev)) return prev
-        return ys[0] ?? yNow
-      }
-      return prev ?? yNow
-    })
-  }, [yearsQuery.data])
-
-  useEffect(() => {
-    if (!yearsQuery.isError || !yearsQuery.error) return
-    setYear(new Date().getFullYear())
-    const msg = yearsQuery.error instanceof api.ApiError ? yearsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
-  }, [yearsQuery.isError, yearsQuery.error, alert])
 
   const statsQuery = useQuery({
     queryKey: queryKeys.admin.salesStats(year ?? 0, false),
@@ -258,14 +241,10 @@ export function AdminSalesCharts() {
     return granularity === 'month' ? monthlyRows(stats) : quarterlyRows(stats)
   }, [stats, granularity])
 
-  const yearSelectOptions = useMemo(() => {
-    const yearsList = yearsQuery.data ?? []
-    const yNow = new Date().getFullYear()
-    const base = yearsList.length > 0 ? [...yearsList] : year !== null ? [year] : [yNow]
-    const s = new Set(base)
-    s.add(yNow)
-    return Array.from(s).sort((a, b) => b - a)
-  }, [yearsQuery.data, year])
+  const yearSelectOptions = useMemo(
+    () => adminYearSelectOptions(yearsQuery.data, year),
+    [yearsQuery.data, year],
+  )
 
   const hasFinanceData =
     stats !== null && (stats.year_fulfilled_count > 0 || stats.year_expenses_eur > 0)

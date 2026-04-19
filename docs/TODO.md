@@ -27,16 +27,17 @@
 
 ## Code health — backend
 
-*Last reviewed: 2026-04-19*
+*Last reviewed: 2026-04-19 (follow-up scan)*
 
 - [x] Gedeelde **EUR cent-rounding** helper (`internal/money.RoundEUR`; vervangt `math.Round(v*100)/100` bij JSON-uitvoer en rapportage).
 - [x] Gedeelde **JSON body decode**: `httpx.ReadJSON` / `httpx.ReadJSONAllowEmpty` i.p.v. overal `json.NewDecoder(http.MaxBytesReader(…))` + uniforme 400 bij parse-fout.
 - [x] **Store error → HTTP** centraal in [internal/httpx/store_errors.go](internal/httpx/store_errors.go) (`RespondStoreNotFound`, `WriteBankCreditStoreError`, tosti/kaart/avondeten/local-password helpers); handlers roepen die aan i.p.v. lange `errors.Is`-ketens.
 - [x] **Logging**: `log/slog` met structured fields in handlers + [internal/httpx/json.go](internal/httpx/json.go); `slog.SetDefault` in [cmd/server/main.go](cmd/server/main.go); server-startupmeldingen (dist, listen, shutdown, bonfoto-map) ook via `slog`. (`log` alleen nog voor `log.Fatalf` bij fatale startup.)
+- **HTTP-handler tests:** store→HTTP mapping heeft al [internal/httpx/store_errors_test.go](internal/httpx/store_errors_test.go); brede route-dekking via `httptest` is optioneel voor regressies op auth/rate-limit — laag prioriteit tenzij API-contract expliciet vastgelegd moet worden.
 
 ## Code health — frontend
 
-*Last reviewed: 2026-04-19*
+*Last reviewed: 2026-04-19 (follow-up scan)*
 
 - [x] Gedeelde **`formatEUR`** / **`roundCents`** in [frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts) (`Intl.NumberFormat` NL + EUR).
 - [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings).
@@ -48,9 +49,11 @@
 ### Code review / vervolg (korte scan 2026-04-19)
 
 - **Admin-fetchpatroon:** geen resterende `useEffect`+`void api.*`-loads op admin-pagina’s; mutaties invalidaten gerichte `queryKeys`.
-- [x] **Jaarlijst + geselecteerd jaar (admin):** gedeelde hook [frontend/src/hooks/useAdminSalesYearsSelect.ts](frontend/src/hooks/useAdminSalesYearsSelect.ts) voor `salesYears` + state/sync + foutpad; gebruikt op o.a. Financiën, uitgaven-overzicht, boodschappen.
+- [x] **Jaarlijst + geselecteerd jaar (admin):** gedeelde hook [frontend/src/hooks/useAdminSalesYearsSelect.ts](frontend/src/hooks/useAdminSalesYearsSelect.ts) voor `salesYears` + state/sync + foutpad; gebruikt op Financiën, uitgaven-overzicht, boodschappen en **admin grafieken** (`AdminSalesCharts`, met `emptyYearsListBehavior` waar lege API-lijst het vorige jaar behoudt).
+- [x] **Jaar-dropdown opties:** pure helper [frontend/src/utils/adminYearSelectOptions.ts](frontend/src/utils/adminYearSelectOptions.ts) + [unit test](frontend/src/utils/adminYearSelectOptions.test.ts); vervangt copy-paste `useMemo` op dezelfde admin-pagina’s.
 - **Buiten admin:** `KraamPage`, `CardsPage`, `BuyPage`, `OrderTostiPage` houden nog **lokale state + handmatige refresh**; Query is daar optioneel tot het patroon lastig wordt.
 - **CLI** (`cmd/revolut-import`): nog `log.Printf` — acceptabel voor een losstaand commando; serverpad blijft `slog`.
+- **Admin query-fout → alert/toast:** op meerdere pagina’s dezelfde `useEffect` op `query.isError` / `ApiError` — optioneel één kleine helper (bijv. `useQueryErrorAlert(query, { title })`) of query-defaults (`throwOnError` + boundary) om duplicatie te beperken; geen wijziging in UX nodig.
 
 ## Libraries vs zelf bouwen (richtlijn)
 

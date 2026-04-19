@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import * as api from '../api'
 import { queryKeys } from '../queryKeys'
 
+export type EmptySalesYearsListBehavior = 'resetSelectionToCurrentYear' | 'keepPreviousOrNow'
+
 export type UseAdminSalesYearsSelectOptions = {
   isOperatorOnly: boolean
   /** Typically `Boolean(user)`. */
@@ -12,18 +14,25 @@ export type UseAdminSalesYearsSelectOptions = {
    * the latest callback is always invoked via a ref.
    */
   onYearsError?: (message: string) => void
+  /**
+   * When the API returns an empty year list: keep the previous selection (or now)
+   * — used by admin-only charts — or reset to the current calendar year (default).
+   */
+  emptyYearsListBehavior?: EmptySalesYearsListBehavior
 }
 
 /**
  * Shared admin/operator pattern: fetch sales years, keep a selected year in sync
- * with the list, and reset the calendar year when the list request fails.
+ * with the list, and on list load failure reset to the current calendar year.
+ * Use `emptyYearsListBehavior: 'keepPreviousOrNow'` when an empty API year list
+ * must not discard an existing selection (e.g. admin-only charts).
  */
 export function useAdminSalesYearsSelect(options: UseAdminSalesYearsSelectOptions): {
   yearsQuery: UseQueryResult<number[], Error>
   year: number | null
   setYear: Dispatch<SetStateAction<number | null>>
 } {
-  const { isOperatorOnly, enabled, onYearsError } = options
+  const { isOperatorOnly, enabled, onYearsError, emptyYearsListBehavior } = options
   const onYearsErrorRef = useRef(onYearsError)
   onYearsErrorRef.current = onYearsError
 
@@ -38,11 +47,18 @@ export function useAdminSalesYearsSelect(options: UseAdminSalesYearsSelectOption
   useEffect(() => {
     if (!yearsQuery.data) return
     const ys = yearsQuery.data
+    const yNow = new Date().getFullYear()
+
+    if (ys.length === 0 && emptyYearsListBehavior === 'keepPreviousOrNow') {
+      setYear((prev) => prev ?? yNow)
+      return
+    }
+
     setYear((prev) => {
       if (prev !== null && ys.includes(prev)) return prev
-      return ys[0] ?? new Date().getFullYear()
+      return ys[0] ?? yNow
     })
-  }, [yearsQuery.data])
+  }, [yearsQuery.data, emptyYearsListBehavior])
 
   useEffect(() => {
     if (!yearsQuery.isError || !yearsQuery.error) return

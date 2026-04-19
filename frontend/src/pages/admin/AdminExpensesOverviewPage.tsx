@@ -6,6 +6,7 @@ import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
 import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
 import { queryKeys } from '../../queryKeys'
+import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
 import { formatEUR } from '../../utils/formatMoney'
 
 function breadLabel(b: string): string {
@@ -88,14 +89,10 @@ export function AdminExpensesOverviewPage() {
     }))
   }, [salesStats])
 
-  const yearOptions = useMemo(() => {
-    const yearsList = yearsQuery.data ?? []
-    const yNow = new Date().getFullYear()
-    const base = yearsList.length > 0 ? [...yearsList] : year !== null ? [year] : [yNow]
-    const s = new Set(base)
-    s.add(yNow)
-    return Array.from(s).sort((a, b) => b - a)
-  }, [yearsQuery.data, year])
+  const yearOptions = useMemo(
+    () => adminYearSelectOptions(yearsQuery.data, year),
+    [yearsQuery.data, year],
+  )
 
   return (
     <div className="space-y-8">
