@@ -1,8 +1,8 @@
 module lunchkraam
 
-go 1.25
+go 1.26
 
-toolchain go1.25.8
+toolchain go1.26.2
 
 require (
 	filippo.io/csrf v0.2.1
