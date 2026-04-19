@@ -43,14 +43,14 @@ export const userSchema = z.object({
   ),
 })
 
-const myPendingRequestSchema = z.object({
+export const myPendingRequestSchema = z.object({
   id: intWithDefault(0),
   kind: cardKindSchema,
   created_at: stringWithDefault(''),
   knipjes_remaining: intWithDefault(10),
 })
 
-const cardSchema = z.object({
+export const cardSchema = z.object({
   id: intWithDefault(0),
   kind: cardKindSchema,
   source: cardSourceSchema,
@@ -58,19 +58,17 @@ const cardSchema = z.object({
   created_at: stringWithDefault(''),
 })
 
+export const tikkieWarningSchema = z.object({
+  kind: cardKindSchema,
+  expires_at: stringWithDefault(''),
+  days_remaining: intWithDefault(0),
+  message: stringWithDefault(''),
+})
+
 export const meResponseSchema = z.object({
   user: userSchema.nullable().catch(null),
   pending_card_requests: intWithDefault(0),
-  tikkie_warnings: z
-    .array(
-      z.object({
-        kind: cardKindSchema,
-        expires_at: stringWithDefault(''),
-        days_remaining: intWithDefault(0),
-        message: stringWithDefault(''),
-      }),
-    )
-    .catch([]),
+  tikkie_warnings: z.array(tikkieWarningSchema).catch([]),
   csrf_token: stringWithDefault(''),
   payment_amount_eur: stringWithDefault('15'),
   payment_amount_avondeten_eur: stringWithDefault('12'),
@@ -113,7 +111,7 @@ export const adminUsersResponseSchema = z.object({
   users: z.array(adminUserRowSchema).catch([]),
 })
 
-const avondetenRegistrationCardSchema = z.object({
+export const avondetenRegistrationCardSchema = z.object({
   card_id: intWithDefault(0),
   user_id: intWithDefault(0),
   owner_name: stringWithDefault(''),
@@ -131,7 +129,7 @@ export const registeredCountResponseSchema = z.object({
   registered_count: intWithDefault(0),
 })
 
-const operatorCardRowSchema = z.object({
+export const operatorCardRowSchema = z.object({
   id: intWithDefault(0),
   kind: cardKindSchema,
   source: cardSourceSchema,
@@ -146,7 +144,7 @@ export const operatorCardsResponseSchema = z.object({
   cards: z.array(operatorCardRowSchema).catch([]),
 })
 
-const operatorMemberSchema = z.object({
+export const operatorMemberSchema = z.object({
   id: intWithDefault(0),
   name: stringWithDefault(''),
   email: stringWithDefault(''),
@@ -156,9 +154,9 @@ export const operatorMembersResponseSchema = z.object({
   members: z.array(operatorMemberSchema).catch([]),
 })
 
-const tostiBreadSchema = z.enum(['wit', 'bruin']).catch('wit')
-const tostiFillingSchema = z.enum(['ham', 'kaas', 'ham_kaas']).catch('ham')
-const tostiOrderStatusSchema = z.enum(['pending', 'delivered', 'cancelled']).catch('pending')
+export const tostiBreadSchema = z.enum(['wit', 'bruin']).catch('wit')
+export const tostiFillingSchema = z.enum(['ham', 'kaas', 'ham_kaas']).catch('ham')
+export const tostiOrderStatusSchema = z.enum(['pending', 'delivered', 'cancelled']).catch('pending')
 const optionalCardIdSchema = z.preprocess(
   (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null),
   z.number().nullable(),
@@ -187,7 +185,7 @@ export const tostiOrderSchema = z.object({
   remark: z.preprocess((value) => (typeof value === 'string' ? value : undefined), z.string().optional()),
 })
 
-const tostiQueueEntrySchema = z.object({
+export const tostiQueueEntrySchema = z.object({
   place: intWithDefault(0),
   id: intWithDefault(0),
   card_id: optionalCardIdSchema,
@@ -212,7 +210,7 @@ export const createTostiOrderResponseSchema = z.object({
   order: tostiOrderSchema.nullable().catch(null),
 })
 
-const operatorTostiOrderSchema = tostiOrderSchema.extend({
+export const operatorTostiOrderSchema = tostiOrderSchema.extend({
   customer_name: stringWithDefault(''),
   customer_email: stringWithDefault(''),
 })
@@ -235,7 +233,7 @@ export const yearsResponseSchema = z.object({
   years: z.array(intWithDefault(0)).catch([]),
 })
 
-const adminSalesMonthBucketSchema = z.object({
+export const adminSalesMonthBucketSchema = z.object({
   month: intWithDefault(0),
   fulfilled_count: intWithDefault(0),
   revenue_eur: floatWithDefault(0),
@@ -246,25 +244,25 @@ const adminSalesMonthBucketSchema = z.object({
   label_nl: stringWithDefault(''),
 })
 
-const adminCardsSoldBreakdownSchema = z.object({
+export const adminCardsSoldBreakdownSchema = z.object({
   tosti: intWithDefault(0),
   avondeten: intWithDefault(0),
   total: intWithDefault(0),
 })
 
-const adminRevenueBreakdownSchema = z.object({
+export const adminRevenueBreakdownSchema = z.object({
   tosti: floatWithDefault(0),
   avondeten: floatWithDefault(0),
   total: floatWithDefault(0),
 })
 
-const adminExpensesBreakdownSchema = z.object({
+export const adminExpensesBreakdownSchema = z.object({
   lunchkraam: floatWithDefault(0),
   avondeten: floatWithDefault(0),
   total: floatWithDefault(0),
 })
 
-const adminSalesBreakdownBucketSchema = z.object({
+export const adminSalesBreakdownBucketSchema = z.object({
   month: intWithDefault(0),
   cards_sold: adminCardsSoldBreakdownSchema,
   revenue_eur: adminRevenueBreakdownSchema,
@@ -275,7 +273,7 @@ const adminSalesBreakdownBucketSchema = z.object({
   label_nl: stringWithDefault(''),
 })
 
-const adminSalesYearBreakdownSchema = z.object({
+export const adminSalesYearBreakdownSchema = z.object({
   cards_sold: adminCardsSoldBreakdownSchema,
   revenue_eur: adminRevenueBreakdownSchema,
   revenue_card_sales_eur: adminRevenueBreakdownSchema,
@@ -284,13 +282,13 @@ const adminSalesYearBreakdownSchema = z.object({
   net_eur: floatWithDefault(0),
 })
 
-const adminTostiMonthBucketSchema = z.object({
+export const adminTostiMonthBucketSchema = z.object({
   month: intWithDefault(0),
   quantity: intWithDefault(0),
   label_nl: stringWithDefault(''),
 })
 
-const adminTostiKindBucketSchema = z.object({
+export const adminTostiKindBucketSchema = z.object({
   bread: stringWithDefault(''),
   filling: stringWithDefault(''),
   quantity: intWithDefault(0),
@@ -482,11 +480,11 @@ export const adminDashboardResponseSchema = z.object({
   year_net_eur: floatWithDefault(0),
 })
 
-const bankCreditReconciliationStatusSchema = z
+export const bankCreditReconciliationStatusSchema = z
   .enum(['open', 'matched_sale', 'waived'])
   .catch('open')
 
-const bankCreditRowSchema = z.object({
+export const bankCreditRowSchema = z.object({
   id: intWithDefault(0),
   amount_eur: floatWithDefault(0),
   received_on: stringWithDefault(''),
@@ -509,7 +507,7 @@ export const bankCreditsListResponseSchema = z.object({
 /** Zelfde payload als matched/unmatched lijsten. */
 export const bankCreditsUnmatchedResponseSchema = bankCreditsListResponseSchema
 
-const bankCreditSuggestionCandidateSchema = z.object({
+export const bankCreditSuggestionCandidateSchema = z.object({
   card_request_id: intWithDefault(0),
   fulfilled_at: stringWithDefault(''),
   user_email: stringWithDefault(''),
@@ -534,7 +532,7 @@ export const okResponseSchema = z.object({
   ok: z.boolean().catch(false),
 })
 
-const adminRequestSchema = z.object({
+export const adminRequestSchema = z.object({
   id: intWithDefault(0),
   kind: cardKindSchema,
   payment_method: paymentMethodSchema,

@@ -39,7 +39,8 @@
 - [x] Gedeelde **`formatEUR`** / **`roundCents`** in [frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts) (`Intl.NumberFormat` NL + EUR).
 - [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings).
 - [x] **Admin grafieken** (`AdminSalesCharts`): `roundCents` i.p.v. herhaalde `Math.round(x*100)/100`.
-- [ ] Optioneel: **Zod** — response types deels uit schema’s `z.infer` of factory `apiRequest` om drift met `api.ts` te beperken.
+- [x] **Zod** — response- en payload-types in `api.ts` via `z.infer<typeof …Schema>` gekoppeld aan [frontend/src/api.schemas.ts](frontend/src/api.schemas.ts) (sub-schema’s geëxporteerd waar nodig).
+- [ ] Optioneel: **`apiRequest`-factory** om herhaalde `fetch` + `parseError` + `parseApiResponse` te centraliseren.
 - [ ] Optioneel: **TanStack Query** als `useEffect`+fetch+loading+error+refetch op veel admin-pagina’s gaat kopiëren (nu nog niet strikt nodig).
 
 ## Libraries vs zelf bouwen (richtlijn)

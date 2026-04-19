@@ -1,365 +1,116 @@
-import type { ZodType } from 'zod'
+import { z, type ZodType } from 'zod'
 import {
+  adminCardsSoldBreakdownSchema,
   adminDashboardResponseSchema,
+  adminExpensesBreakdownSchema,
+  adminRequestSchema,
   adminRequestsResponseSchema,
+  adminRevenueBreakdownSchema,
+  adminSalesBreakdownBucketSchema,
+  adminSalesMonthBucketSchema,
   adminSalesStatsResponseSchema,
+  adminSalesYearBreakdownSchema,
   adminSettingsResponseSchema,
+  adminTostiKindBucketSchema,
+  adminTostiMonthBucketSchema,
+  adminUserRowSchema,
   adminUsersResponseSchema,
+  avondetenRegistrationCardSchema,
   avondetenRegistrationsResponseSchema,
   bankCreditMatchCandidatesResponseSchema,
+  bankCreditReconciliationStatusSchema,
+  bankCreditRowSchema,
+  bankCreditSuggestionCandidateSchema,
   bankCreditSuggestionsResponseSchema,
   bankCreditsListResponseSchema,
   buyInfoResponseSchema,
   cancelledCountResponseSchema,
+  cardKindSchema,
+  cardSchema,
   cardsResponseSchema,
   createTostiOrderResponseSchema,
   meResponseSchema,
+  myPendingRequestSchema,
   okResponseSchema,
-  operatorCardsResponseSchema,
-  operatorMembersResponseSchema,
+  operatorCardRowSchema,
   operatorCardSaleResponseSchema,
+  operatorCardsResponseSchema,
+  operatorMemberSchema,
+  operatorMembersResponseSchema,
+  operatorTostiOrderSchema,
   operatorTostiOrdersResponseSchema,
   operatorTostiSoldTodaySchema,
+  paymentMethodSchema,
+  pendingImportReviewSchema,
   pendingImportReviewsResponseSchema,
   registeredCountResponseSchema,
   revolutBalanceResponseSchema,
+  revolutPreviewBranchSchema,
   revolutPreviewResponseSchema,
+  revolutPreviewRowSchema,
   revolutShopExpenseImportResponseSchema,
-  shopExpenseSchema,
+  revolutSkipReasonsSchema,
+  shopExpensePaymentChannelSchema,
+  shopExpensePurposeSchema,
   shopExpenseReceiptSchema,
   shopExpenseReceiptsListResponseSchema,
+  shopExpenseSchema,
   shopExpensesResponseSchema,
+  tikkieWarningSchema,
+  tostiBreadSchema,
+  tostiFillingSchema,
+  tostiOrderSchema,
+  tostiOrderStatusSchema,
   tostiOrdersResponseSchema,
+  tostiQueueEntrySchema,
   tostiQueueResponseSchema,
   userEnvelopeSchema,
+  userSchema,
   yearsResponseSchema,
 } from './api.schemas'
 
-export type CardKind = 'tosti' | 'avondeten'
-export type PaymentMethod = 'tikkie' | 'contant'
-
-export type User = {
-  id: number
-  email: string
-  name: string
-  is_admin: boolean
-  is_operator: boolean
-  is_matroos_jeugd: boolean
-  must_change_password: boolean
-  auth_kind: 'google' | 'local'
-  local_username?: string
-}
-
-export type MeResponse = {
-  user: User | null
-  pending_card_requests: number
-  tikkie_warnings: TikkieWarning[]
-  csrf_token: string
-  payment_amount_eur: string
-  payment_amount_avondeten_eur: string
-}
-
-export type TikkieWarning = {
-  kind: CardKind
-  expires_at: string
-  days_remaining: number
-  message: string
-}
-
-export type Card = {
-  id: number
-  kind: CardKind
-  source: 'online' | 'physical'
-  knipjes_remaining: number
-  created_at: string
-}
-
-export type MyPendingRequest = {
-  id: number
-  kind: CardKind
-  created_at: string
-  knipjes_remaining: number
-}
-
-export type BuyInfo = {
-  payment_amount_eur: string
-  payment_amount_avondeten_eur: string
-  tikkie_url: string
-  tikkie_url_avondeten: string
-  bank_transfer_instructions: string
-  my_pending_requests: MyPendingRequest[]
-}
-
-export type AdminRequest = {
-  id: number
-  kind: CardKind
-  payment_method: PaymentMethod
-  user_name: string
-  user_email: string
-  created_at: string
-  knipjes_remaining: number
-}
-
-export type AdminDashboardStats = {
-  active_cards_total: number
-  knipjes_remaining_total: number
-  pending_requests: number
-  pending_with_card: number
-  pending_knipjes_remaining: number
-  pending_knipjes_consumed_estimate: number
-  fulfilled_requests: number
-  fulfilled_knipjes_remaining: number
-  cancelled_requests: number
-  payment_amount_eur: string
-  finance_year: number
-  year_revenue_eur: number
-  year_revenue_card_sales_eur: number
-  year_revenue_bank_unmatched_eur: number
-  year_bank_credits_unmatched_count: number
-  year_expenses_eur: number
-  year_net_eur: number
-}
-
-export type AdminSalesMonthBucket = {
-  month: number
-  fulfilled_count: number
-  revenue_eur: number
-  revenue_card_sales_eur: number
-  revenue_bank_unmatched_eur: number
-  expenses_eur: number
-  net_eur: number
-  label_nl: string
-}
-
-export type AdminCardsSoldBreakdown = {
-  tosti: number
-  avondeten: number
-  total: number
-}
-
-export type AdminRevenueBreakdown = {
-  tosti: number
-  avondeten: number
-  total: number
-}
-
-export type AdminExpensesBreakdown = {
-  lunchkraam: number
-  avondeten: number
-  total: number
-}
-
-export type AdminSalesBreakdownBucket = {
-  month: number
-  cards_sold: AdminCardsSoldBreakdown
-  revenue_eur: AdminRevenueBreakdown
-  revenue_card_sales_eur: AdminRevenueBreakdown
-  revenue_bank_unmatched_eur: AdminRevenueBreakdown
-  expenses_eur: AdminExpensesBreakdown
-  net_eur: number
-  label_nl: string
-}
-
-export type AdminSalesYearBreakdown = {
-  cards_sold: AdminCardsSoldBreakdown
-  revenue_eur: AdminRevenueBreakdown
-  revenue_card_sales_eur: AdminRevenueBreakdown
-  revenue_bank_unmatched_eur: AdminRevenueBreakdown
-  expenses_eur: AdminExpensesBreakdown
-  net_eur: number
-}
-
-export type AdminTostiMonthBucket = {
-  month: number
-  quantity: number
-  label_nl: string
-}
-
-export type AdminTostiKindBucket = {
-  bread: string
-  filling: string
-  quantity: number
-}
-
-export type AdminSalesStats = {
-  year: number
-  timezone: string
-  payment_amount_eur: string
-  monthly: AdminSalesMonthBucket[]
-  monthly_breakdown: AdminSalesBreakdownBucket[]
-  year_fulfilled_count: number
-  year_revenue_eur: number
-  year_revenue_card_sales_eur: number
-  year_revenue_bank_unmatched_eur: number
-  year_expenses_eur: number
-  year_net_eur: number
-  year_breakdown: AdminSalesYearBreakdown
-  year_tosti_quantity: number
-  tosti_monthly: AdminTostiMonthBucket[]
-  tosti_by_kind: AdminTostiKindBucket[]
-}
-
-export type ShopExpensePurpose = 'lunchkraam' | 'avondeten'
-
-export type BankCreditReconciliationStatus = 'open' | 'matched_sale' | 'waived'
-
-export type BankCreditRow = {
-  id: number
-  amount_eur: number
-  received_on: string
-  description: string
-  purpose: ShopExpensePurpose
-  source: string
-  external_id: string
-  reconciliation_status: BankCreditReconciliationStatus
-  matched_card_request_id: number | null
-}
-
-export type BankCreditsListPayload = {
-  year: number
-  rows: BankCreditRow[]
-}
-
-export type BankCreditSuggestionCandidate = {
-  card_request_id: number
-  fulfilled_at: string
-  user_email: string
-  user_display: string
-  sale_price_eur: number
-  kind: CardKind
-  payment_method: PaymentMethod
-}
-
-export type BankCreditSuggestionsPayload = {
-  bank_credit_id: number
-  candidates: BankCreditSuggestionCandidate[]
-}
-
-export type BankCreditMatchCandidatesPayload = {
-  bank_credit_id: number
-  digital: BankCreditSuggestionCandidate[]
-  physical: BankCreditSuggestionCandidate[]
-}
+export type CardKind = z.infer<typeof cardKindSchema>
+export type PaymentMethod = z.infer<typeof paymentMethodSchema>
+export type User = z.infer<typeof userSchema>
+export type MeResponse = z.infer<typeof meResponseSchema>
+export type TikkieWarning = z.infer<typeof tikkieWarningSchema>
+export type Card = z.infer<typeof cardSchema>
+export type MyPendingRequest = z.infer<typeof myPendingRequestSchema>
+export type BuyInfo = z.infer<typeof buyInfoResponseSchema>
+export type AdminRequest = z.infer<typeof adminRequestSchema>
+export type AdminDashboardStats = z.infer<typeof adminDashboardResponseSchema>
+export type AdminSalesMonthBucket = z.infer<typeof adminSalesMonthBucketSchema>
+export type AdminCardsSoldBreakdown = z.infer<typeof adminCardsSoldBreakdownSchema>
+export type AdminRevenueBreakdown = z.infer<typeof adminRevenueBreakdownSchema>
+export type AdminExpensesBreakdown = z.infer<typeof adminExpensesBreakdownSchema>
+export type AdminSalesBreakdownBucket = z.infer<typeof adminSalesBreakdownBucketSchema>
+export type AdminSalesYearBreakdown = z.infer<typeof adminSalesYearBreakdownSchema>
+export type AdminTostiMonthBucket = z.infer<typeof adminTostiMonthBucketSchema>
+export type AdminTostiKindBucket = z.infer<typeof adminTostiKindBucketSchema>
+export type AdminSalesStats = z.infer<typeof adminSalesStatsResponseSchema>
+export type ShopExpensePurpose = z.infer<typeof shopExpensePurposeSchema>
+export type BankCreditReconciliationStatus = z.infer<typeof bankCreditReconciliationStatusSchema>
+export type BankCreditRow = z.infer<typeof bankCreditRowSchema>
+export type BankCreditsListPayload = z.infer<typeof bankCreditsListResponseSchema>
+export type BankCreditSuggestionCandidate = z.infer<typeof bankCreditSuggestionCandidateSchema>
+export type BankCreditSuggestionsPayload = z.infer<typeof bankCreditSuggestionsResponseSchema>
+export type BankCreditMatchCandidatesPayload = z.infer<typeof bankCreditMatchCandidatesResponseSchema>
 
 /** Manual POST /shop-expenses: expense = uitgave (positief bedrag); cash_in = contant bij de kas (stored as negative amount_eur). */
 export type ShopExpenseMovement = 'expense' | 'cash_in'
 
 /** DB shop_expenses.payment_channel (uitgave: contant | digitaal; bij kas: kas_bij). */
-export type ShopExpensePaymentChannel = 'contant' | 'digitaal' | 'kas_bij'
+export type ShopExpensePaymentChannel = z.infer<typeof shopExpensePaymentChannelSchema>
 
-export type AdminShopExpense = {
-  id: number
-  amount_eur: number
-  spent_on: string
-  description: string
-  purpose: ShopExpensePurpose
-  payment_channel: ShopExpensePaymentChannel
-  created_at: string
-  source: string
-  external_id: string
-}
-
-export type RevolutImportSkipReasons = {
-  filter_not_completed: number
-  filter_currency_mismatch: number
-  filter_type_skipped: number
-  not_debit: number
-  not_credit: number
-  amount_not_standard_card_price: number
-  missing_external_id: number
-  user_excluded: number
-  other: number
-}
-
-export type RevolutPreviewBranch = {
-  outcome: string
-  label_nl: string
-  selectable: boolean
-  row_key?: string
-  purpose?: ShopExpensePurpose
-}
-
-export type RevolutPreviewRow = {
-  line: number
-  completed_at: string
-  amount_eur: number
-  description: string
-  type: string
-  state: string
-  currency: string
-  external_id_raw: string
-  debit: RevolutPreviewBranch
-  credit: RevolutPreviewBranch
-}
-
-export type RevolutPreviewResponse = {
-  rows: RevolutPreviewRow[]
-  debits_imported: number
-  debits_skipped: number
-  debits_pending_review: number
-  debit_skip_reasons: RevolutImportSkipReasons
-  credits_imported: number
-  credits_skipped: number
-  credits_enabled: boolean
-  credit_skip_reasons: RevolutImportSkipReasons
-  credits_imported_lunchkraam: number
-  credits_imported_avondeten: number
-  credits_inferred_non_standard: number
-}
-
-export type RevolutShopExpenseImportResult = {
-  imported: number
-  skipped: number
-  debits_imported: number
-  debits_skipped: number
-  debits_pending_review: number
-  debit_skip_reasons: RevolutImportSkipReasons
-  credits_imported: number
-  credits_skipped: number
-  credits_enabled: boolean
-  credit_skip_reasons: RevolutImportSkipReasons
-  credits_imported_lunchkraam: number
-  credits_imported_avondeten: number
-  credits_inferred_non_standard: number
-  dry_run: boolean
-}
-
-export type PendingImportReview = {
-  id: number
-  revolut: {
-    amount_eur: number
-    spent_on: string
-    description: string
-    purpose: ShopExpensePurpose
-    external_id: string
-  }
-  matched_manual: {
-    id: number
-    amount_eur: number
-    spent_on: string
-    description: string
-    purpose: ShopExpensePurpose
-    payment_channel: ShopExpensePaymentChannel
-    source: string
-  }
-  created_at: string
-}
-
-export type RevolutBalance = {
-  balance_eur: number | null
-  statement_as_of: string | null
-  updated_at: string | null
-}
-
-export type ShopExpenseReceipt = {
-  id: number
-  shop_expense_id: number
-  content_type: string
-  size_bytes: number
-  sha256: string
-  created_at: string
-  image_url: string
-}
+export type AdminShopExpense = z.infer<typeof shopExpenseSchema>
+export type RevolutImportSkipReasons = z.infer<typeof revolutSkipReasonsSchema>
+export type RevolutPreviewBranch = z.infer<typeof revolutPreviewBranchSchema>
+export type RevolutPreviewRow = z.infer<typeof revolutPreviewRowSchema>
+export type RevolutPreviewResponse = z.infer<typeof revolutPreviewResponseSchema>
+export type RevolutShopExpenseImportResult = z.infer<typeof revolutShopExpenseImportResponseSchema>
+export type PendingImportReview = z.infer<typeof pendingImportReviewSchema>
+export type RevolutBalance = z.infer<typeof revolutBalanceResponseSchema>
+export type ShopExpenseReceipt = z.infer<typeof shopExpenseReceiptSchema>
 
 export class ApiError extends Error {
   code: string
@@ -424,18 +175,7 @@ export async function changeOwnPassword(
   if (!res.ok) throw await parseError(res)
 }
 
-export type AdminUserRow = {
-  id: number
-  name: string
-  email: string
-  auth_kind: 'google' | 'local'
-  local_username?: string
-  is_admin: boolean
-  is_operator: boolean
-  is_matroos_jeugd: boolean
-  must_change_password: boolean
-  created_at: string
-}
+export type AdminUserRow = z.infer<typeof adminUserRowSchema>
 
 export async function getAdminUsers(): Promise<AdminUserRow[]> {
   const res = await fetch('/api/admin/users', { credentials: 'include' })
@@ -510,35 +250,13 @@ export async function patchLocalUser(
   return payload.user
 }
 
-export type OperatorCardRow = {
-  id: number
-  kind: CardKind
-  source: 'online' | 'physical'
-  knipjes_remaining: number
-  created_at: string
-  owner_name: string
-  owner_email: string
-  owner_user_id: number
-}
-
-export type OperatorMember = {
-  id: number
-  name: string
-  email: string
-}
-
-export type AvondetenRegistrationCard = {
-  card_id: number
-  user_id: number
-  owner_name: string
-  owner_email: string
-  knipjes_remaining: number
-  registered_for_date: boolean
-}
+export type OperatorCardRow = z.infer<typeof operatorCardRowSchema>
+export type OperatorMember = z.infer<typeof operatorMemberSchema>
+export type AvondetenRegistrationCard = z.infer<typeof avondetenRegistrationCardSchema>
 
 export async function getAvondetenRegistrations(
   mealDate: string,
-): Promise<{ meal_date: string; cards: AvondetenRegistrationCard[] }> {
+): Promise<z.infer<typeof avondetenRegistrationsResponseSchema>> {
   const qs = `?meal_date=${encodeURIComponent(mealDate)}`
   const res = await fetch(`/api/operator/avondeten/registrations${qs}`, { credentials: 'include' })
   if (!res.ok) throw await parseError(res)
@@ -601,45 +319,14 @@ export async function createOperatorCardSale(
   return payload.request_id
 }
 
-export type TostiBread = 'wit' | 'bruin'
-export type TostiFilling = 'ham' | 'kaas' | 'ham_kaas'
-export type TostiOrderStatus = 'pending' | 'delivered' | 'cancelled'
-
-export type TostiOrder = {
-  id: number
-  user_id: number
-  card_id: number | null
-  quantity: number
-  is_physical_card: boolean
-  bread: TostiBread
-  filling: TostiFilling
-  status: TostiOrderStatus
-  created_at: string
-  delivered_at?: string
-  delivered_by_user_id?: number
-  cancelled_at?: string
-  cancelled_by_user_id?: number
-  remark?: string
-}
-
-export type OperatorTostiOrderRow = TostiOrder & {
-  customer_name: string
-  customer_email: string
-}
+export type TostiBread = z.infer<typeof tostiBreadSchema>
+export type TostiFilling = z.infer<typeof tostiFillingSchema>
+export type TostiOrderStatus = z.infer<typeof tostiOrderStatusSchema>
+export type TostiOrder = z.infer<typeof tostiOrderSchema>
+export type OperatorTostiOrderRow = z.infer<typeof operatorTostiOrderSchema>
 
 /** Pending order in global FIFO queue (member view; no e-mail). */
-export type TostiQueueEntry = {
-  place: number
-  id: number
-  card_id: number | null
-  is_physical_card: boolean
-  quantity: number
-  bread: TostiBread
-  filling: TostiFilling
-  created_at: string
-  customer_name: string
-  is_mine: boolean
-}
+export type TostiQueueEntry = z.infer<typeof tostiQueueEntrySchema>
 
 export async function getTostiQueue(): Promise<TostiQueueEntry[]> {
   const res = await fetch('/api/tosti-orders/queue', { credentials: 'include' })
@@ -721,11 +408,7 @@ export async function getOperatorTostiOrders(): Promise<OperatorTostiOrderRow[]>
   return payload.orders
 }
 
-export type OperatorTostiSoldToday = {
-  quantity: number
-  amsterdam_date: string
-  timezone: string
-}
+export type OperatorTostiSoldToday = z.infer<typeof operatorTostiSoldTodaySchema>
 
 export async function getOperatorTostiSoldToday(): Promise<OperatorTostiSoldToday> {
   const res = await fetch('/api/operator/tosti-sold-today', { credentials: 'include' })
@@ -1075,14 +758,7 @@ export async function rejectAdminRequest(csrf: string, id: number): Promise<void
   if (!res.ok) throw await parseError(res)
 }
 
-export type AdminAppSettings = {
-  tikkie_url: string
-  tikkie_url_effective: string
-  tikkie_url_env_config: string
-  tikkie_url_avondeten: string
-  tikkie_url_avondeten_effective: string
-  tikkie_url_avondeten_env_config: string
-}
+export type AdminAppSettings = z.infer<typeof adminSettingsResponseSchema>
 
 export async function getAdminSettings(): Promise<AdminAppSettings> {
   const res = await fetch('/api/admin/settings', { credentials: 'include' })
