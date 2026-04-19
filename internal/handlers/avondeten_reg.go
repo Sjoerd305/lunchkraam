@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -70,9 +69,7 @@ func (d *Deps) APIOperatorAvondetenRegister(w http.ResponseWriter, r *http.Reque
 		MealDate string  `json:"meal_date"`
 		CardIDs  []int64 `json:"card_ids"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	day, err := parseMealDateEuropeAmsterdam(body.MealDate)

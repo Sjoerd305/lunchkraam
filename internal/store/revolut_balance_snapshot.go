@@ -2,10 +2,11 @@ package store
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"lunchkraam/internal/money"
 )
 
 // RevolutBalanceSnapshot is the EUR balance last read from a Revolut CSV "Saldo" column.
@@ -15,13 +16,9 @@ type RevolutBalanceSnapshot struct {
 	UpdatedAt     time.Time
 }
 
-func roundMoneyEUR(v float64) float64 {
-	return math.Round(v*100) / 100
-}
-
 // UpsertRevolutBalanceSnapshot replaces the single cached snapshot (id=1).
 func (s *Store) UpsertRevolutBalanceSnapshot(ctx context.Context, balanceEUR float64, statementAsOf time.Time) error {
-	balanceEUR = roundMoneyEUR(balanceEUR)
+	balanceEUR = money.RoundEUR(balanceEUR)
 	const q = `
 INSERT INTO revolut_balance_snapshot (id, balance_eur, statement_as_of, updated_at)
 VALUES (1, $1, $2, now())
@@ -44,6 +41,6 @@ func (s *Store) GetRevolutBalanceSnapshot(ctx context.Context) (*RevolutBalanceS
 	if err != nil {
 		return nil, err
 	}
-	out.BalanceEUR = roundMoneyEUR(out.BalanceEUR)
+	out.BalanceEUR = money.RoundEUR(out.BalanceEUR)
 	return &out, nil
 }

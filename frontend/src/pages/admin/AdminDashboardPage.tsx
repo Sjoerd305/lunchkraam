@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { formatEUR } from '../../utils/formatMoney'
 const AdminSalesCharts = lazy(async () => {
   const m = await import('./AdminSalesCharts')
   return { default: m.AdminSalesCharts }
@@ -117,19 +118,19 @@ export function AdminDashboardPage() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
             label="Omzet dit jaar (rapport)"
-            value={`€${stats.year_revenue_eur.toFixed(2)}`}
+            value={formatEUR(stats.year_revenue_eur)}
             tone="brand"
             hint="Kaartverkopen + nog niet gekoppelde bank"
           />
           <StatCard
             label="Verkocht (app)"
-            value={`€${stats.year_revenue_card_sales_eur.toFixed(2)}`}
+            value={formatEUR(stats.year_revenue_card_sales_eur)}
             tone="slate"
             hint="Geaccordeerde kaartverkopen"
           />
           <StatCard
             label="Bank nog niet gekoppeld"
-            value={`€${stats.year_revenue_bank_unmatched_eur.toFixed(2)}`}
+            value={formatEUR(stats.year_revenue_bank_unmatched_eur)}
             tone="amber"
             hint={
               stats.year_bank_credits_unmatched_count > 0
@@ -139,12 +140,12 @@ export function AdminDashboardPage() {
           />
           <StatCard
             label="Uitgaven dit jaar"
-            value={`€${stats.year_expenses_eur.toFixed(2)}`}
+            value={formatEUR(stats.year_expenses_eur)}
             tone="slate"
           />
           <StatCard
             label="Saldo (omzet − uitgaven)"
-            value={`€${stats.year_net_eur.toFixed(2)}`}
+            value={formatEUR(stats.year_net_eur)}
             tone={stats.year_net_eur >= 0 ? 'brand' : 'amber'}
           />
         </div>
@@ -181,7 +182,7 @@ export function AdminDashboardPage() {
             value={stats.pending_requests}
             hint={
               eur > 0
-                ? `Ca. €${openstaandEur.toFixed(2)} open (à €${stats.payment_amount_eur} per kaart).`
+                ? `Ca. ${formatEUR(openstaandEur)} open (à ${formatEUR(eur)} per kaart).`
                 : 'Geen kaartprijs ingesteld — geen euro-indicatie.'
             }
             tone="amber"

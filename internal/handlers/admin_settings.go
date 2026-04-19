@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -54,9 +53,7 @@ func (d *Deps) APIAdminSettingsPatch(w http.ResponseWriter, r *http.Request) {
 		TikkieURL          *string `json:"tikkie_url"`
 		TikkieURLAvondeten *string `json:"tikkie_url_avondeten"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<12, &body) {
 		return
 	}
 	if body.TikkieURL == nil && body.TikkieURLAvondeten == nil {

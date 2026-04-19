@@ -3,10 +3,7 @@ import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
-
-function formatEUR(n: number): string {
-  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
-}
+import { formatEUR } from '../../utils/formatMoney'
 
 function breadLabel(b: string): string {
   return b === 'bruin' ? 'Bruin brood' : 'Wit brood'

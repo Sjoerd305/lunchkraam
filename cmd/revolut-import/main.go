@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -24,6 +23,7 @@ import (
 	"time"
 
 	"lunchkraam/internal/db"
+	"lunchkraam/internal/money"
 	"lunchkraam/internal/revolutcsv"
 	"lunchkraam/internal/revolutimport"
 	"lunchkraam/internal/store"
@@ -346,13 +346,9 @@ func runReconcile(args []string) int {
 				continue
 			}
 			delta := rev - app
-			fmt.Printf("%04d-%02d    %14.2f %14.2f %14.2f\n", y, m, round2(rev), round2(app), round2(delta))
+			fmt.Printf("%04d-%02d    %14.2f %14.2f %14.2f\n", y, m, money.RoundEUR(rev), money.RoundEUR(app), money.RoundEUR(delta))
 		}
 		fmt.Println()
 	}
 	return 0
-}
-
-func round2(v float64) float64 {
-	return math.Round(v*100) / 100
 }

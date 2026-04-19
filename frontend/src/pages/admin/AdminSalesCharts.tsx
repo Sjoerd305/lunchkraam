@@ -14,12 +14,9 @@ import {
 } from 'recharts'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { formatEUR, roundCents } from '../../utils/formatMoney'
 
 const MONTH_SHORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
-
-function formatEUR(n: number): string {
-  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
-}
 
 type Granularity = 'month' | 'quarter'
 
@@ -67,17 +64,17 @@ function monthlyRows(stats: api.AdminSalesStats): ChartRow[] {
   let cumNet = 0
   return ordered.map((x) => {
     const breakdown = breakdownByMonth.get(x.month)
-    const omzet = Math.round(x.revenue_eur * 100) / 100
-    const omzetVerkocht = Math.round(x.revenue_card_sales_eur * 100) / 100
-    const omzetBank = Math.round(x.revenue_bank_unmatched_eur * 100) / 100
-    const uitgaven = Math.round(x.expenses_eur * 100) / 100
-    const netto = Math.round(x.net_eur * 100) / 100
+    const omzet = roundCents(x.revenue_eur)
+    const omzetVerkocht = roundCents(x.revenue_card_sales_eur)
+    const omzetBank = roundCents(x.revenue_bank_unmatched_eur)
+    const uitgaven = roundCents(x.expenses_eur)
+    const netto = roundCents(x.net_eur)
     const kaartenTosti = breakdown?.cards_sold.tosti ?? 0
     const kaartenAvondeten = breakdown?.cards_sold.avondeten ?? 0
-    const omzetTosti = Math.round((breakdown?.revenue_eur.tosti ?? 0) * 100) / 100
-    const omzetAvondeten = Math.round((breakdown?.revenue_eur.avondeten ?? 0) * 100) / 100
-    const uitgavenLunchkraam = Math.round((breakdown?.expenses_eur.lunchkraam ?? 0) * 100) / 100
-    const uitgavenAvondeten = Math.round((breakdown?.expenses_eur.avondeten ?? 0) * 100) / 100
+    const omzetTosti = roundCents(breakdown?.revenue_eur.tosti ?? 0)
+    const omzetAvondeten = roundCents(breakdown?.revenue_eur.avondeten ?? 0)
+    const uitgavenLunchkraam = roundCents(breakdown?.expenses_eur.lunchkraam ?? 0)
+    const uitgavenAvondeten = roundCents(breakdown?.expenses_eur.avondeten ?? 0)
     cumRev += omzet
     cumNet += netto
     return {
@@ -94,8 +91,8 @@ function monthlyRows(stats: api.AdminSalesStats): ChartRow[] {
       uitgavenLunchkraam,
       uitgavenAvondeten,
       netto,
-      cumulatief: Math.round(cumRev * 100) / 100,
-      cumulatiefNet: Math.round(cumNet * 100) / 100,
+      cumulatief: roundCents(cumRev),
+      cumulatiefNet: roundCents(cumNet),
     }
   })
 }
@@ -137,11 +134,11 @@ function quarterlyRows(stats: api.AdminSalesStats): ChartRow[] {
       uitgavenAvondeten += m[i]?.uitgavenAvondeten ?? 0
       netto += m[i]?.netto ?? 0
     }
-    omzet = Math.round(omzet * 100) / 100
-    omzetVerkocht = Math.round(omzetVerkocht * 100) / 100
-    omzetBank = Math.round(omzetBank * 100) / 100
-    uitgaven = Math.round(uitgaven * 100) / 100
-    netto = Math.round(netto * 100) / 100
+    omzet = roundCents(omzet)
+    omzetVerkocht = roundCents(omzetVerkocht)
+    omzetBank = roundCents(omzetBank)
+    uitgaven = roundCents(uitgaven)
+    netto = roundCents(netto)
     cumRev += omzet
     cumNet += netto
     return {
@@ -152,14 +149,14 @@ function quarterlyRows(stats: api.AdminSalesStats): ChartRow[] {
       omzet,
       omzetVerkocht,
       omzetBank,
-      omzetTosti: Math.round(omzetTosti * 100) / 100,
-      omzetAvondeten: Math.round(omzetAvondeten * 100) / 100,
+      omzetTosti: roundCents(omzetTosti),
+      omzetAvondeten: roundCents(omzetAvondeten),
       uitgaven,
-      uitgavenLunchkraam: Math.round(uitgavenLunchkraam * 100) / 100,
-      uitgavenAvondeten: Math.round(uitgavenAvondeten * 100) / 100,
+      uitgavenLunchkraam: roundCents(uitgavenLunchkraam),
+      uitgavenAvondeten: roundCents(uitgavenAvondeten),
       netto,
-      cumulatief: Math.round(cumRev * 100) / 100,
-      cumulatiefNet: Math.round(cumNet * 100) / 100,
+      cumulatief: roundCents(cumRev),
+      cumulatiefNet: roundCents(cumNet),
     }
   })
 }
@@ -380,7 +377,7 @@ export function AdminSalesCharts() {
               <p className="mt-1 text-sm text-brand-900/80">
                 {stats.year_fulfilled_count === 0
                   ? 'Nog geen verkopen dit jaar.'
-                  : `Gem. €${(stats.year_revenue_eur / stats.year_fulfilled_count).toFixed(2)} per kaart.`}
+                  : `Gem. ${formatEUR(stats.year_revenue_eur / stats.year_fulfilled_count)} per kaart.`}
               </p>
               <p className="mt-1 text-xs text-brand-900/80">
                 Tosti {formatEUR(stats.year_breakdown.revenue_eur.tosti)} · Avondeten{' '}

@@ -2,6 +2,8 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
 )
@@ -19,4 +21,30 @@ func JSON(w http.ResponseWriter, status int, v any) {
 
 func JSONError(w http.ResponseWriter, status int, code, message string) {
 	JSON(w, status, map[string]string{"error": code, "message": message})
+}
+
+// ReadJSON decodes a JSON object from the request body (size-capped with MaxBytesReader). On error it sends 400
+// { error: invalid_json } and returns false.
+func ReadJSON(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBytes))
+	if err := dec.Decode(dst); err != nil {
+		JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+		return false
+	}
+	return true
+}
+
+// ReadJSONAllowEmpty is like [ReadJSON] but treats an empty body (io.EOF) as a non-error, leaving dst unchanged.
+// Use for endpoints where an empty or omitted JSON object is valid.
+func ReadJSONAllowEmpty(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBytes))
+	err := dec.Decode(dst)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	return false
 }

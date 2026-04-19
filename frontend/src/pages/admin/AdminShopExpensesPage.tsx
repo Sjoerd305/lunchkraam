@@ -3,13 +3,10 @@ import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { formatEUR } from '../../utils/formatMoney'
 
 /** Manual boeking: contante uitgave, digitale uitgave (beide met verplichte bon), of contant bij de kas. */
 type ShopBookingKind = 'contant_expense' | 'digital_expense' | 'cash_in'
-
-function formatEUR(n: number): string {
-  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
-}
 
 function todayISO(): string {
   const d = new Date()

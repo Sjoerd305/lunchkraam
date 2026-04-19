@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -94,9 +93,7 @@ func (d *Deps) APIAdminShopExpenseCreate(w http.ResponseWriter, r *http.Request)
 		Movement         string `json:"movement"`
 		PaymentChannel   string `json:"payment_channel"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	var amount float64
@@ -184,9 +181,7 @@ func (d *Deps) APIShopExpensePatch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Purpose string `json:"purpose"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	purpose, ok := parseShopExpensePurpose(body.Purpose)

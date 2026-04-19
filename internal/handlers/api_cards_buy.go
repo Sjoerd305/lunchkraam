@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -151,9 +149,7 @@ func (d *Deps) APIBuyRequest(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Kind string `json:"kind"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
-	if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSONAllowEmpty(w, r, 1<<12, &body) {
 		return
 	}
 	if _, err := store.NormalizeCardKind(body.Kind); err != nil {
@@ -184,9 +180,7 @@ func (d *Deps) APIOperatorCardSale(w http.ResponseWriter, r *http.Request) {
 		Kind          string `json:"kind"`
 		PaymentMethod string `json:"payment_method"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
-	if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSONAllowEmpty(w, r, 1<<12, &body) {
 		return
 	}
 	in, err := parsePhysicalCardSaleInput(u, body.UserID, body.Kind, body.PaymentMethod)

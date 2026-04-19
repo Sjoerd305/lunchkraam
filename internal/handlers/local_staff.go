@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
@@ -29,9 +28,7 @@ func (d *Deps) APILocalLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	u, err := d.Store.AuthenticateLocalUser(r.Context(), body.Username, body.Password)
@@ -99,9 +96,7 @@ func (d *Deps) APIAdminCreateLocalUser(w http.ResponseWriter, r *http.Request) {
 		IsOperator         bool   `json:"is_operator"`
 		MustChangePassword *bool  `json:"must_change_password"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	u := strings.TrimSpace(strings.ToLower(body.Username))
@@ -152,9 +147,7 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 		IsOperator         bool   `json:"is_operator"`
 		MustChangePassword bool   `json:"must_change_password"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	var pwd *string
@@ -189,9 +182,7 @@ func (d *Deps) APILocalChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	if len(strings.TrimSpace(body.NewPassword)) < 8 {
@@ -226,9 +217,7 @@ func (d *Deps) APIAdminPatchUserMatroosJeugd(w http.ResponseWriter, r *http.Requ
 	var body struct {
 		IsMatroosJeugd bool `json:"is_matroos_jeugd"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	err = d.Store.AdminSetMatroosJeugd(r.Context(), uid, body.IsMatroosJeugd)

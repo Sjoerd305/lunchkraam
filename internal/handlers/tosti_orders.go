@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -127,9 +126,7 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 		Filling      string `json:"filling"`
 		Remark       string `json:"remark"`
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige aanvraag.")
+	if !httpx.ReadJSON(w, r, 1<<12, &body) {
 		return
 	}
 	var cardID *int64

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"lunchkraam/internal/httpx"
+	"lunchkraam/internal/money"
 	"lunchkraam/internal/store"
 )
 
@@ -40,18 +40,18 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 		r.YearCount += b.FulfilledCount
 		r.YearCountTosti += b.FulfilledCountTosti
 		r.YearCountAvondeten += b.FulfilledCountAvondeten
-		rev := math.Round(b.RevenueEUR*100) / 100
-		revTosti := math.Round(b.RevenueEURTosti*100) / 100
-		revAvondeten := math.Round(b.RevenueEURAvondeten*100) / 100
-		revCardT := math.Round(b.RevenueCardTosti*100) / 100
-		revCardA := math.Round(b.RevenueCardAvondeten*100) / 100
-		revBankT := math.Round(b.RevenueBankUnmatchedTosti*100) / 100
-		revBankA := math.Round(b.RevenueBankUnmatchedAvondeten*100) / 100
-		revCard := math.Round((revCardT+revCardA)*100) / 100
-		revBank := math.Round((revBankT+revBankA)*100) / 100
-		expLunchkraam := math.Round(expenseBuckets[i].LunchkraamEUR*100) / 100
-		expAvondeten := math.Round(expenseBuckets[i].AvondetenEUR*100) / 100
-		exp := math.Round((expLunchkraam+expAvondeten)*100) / 100
+		rev := money.RoundEUR(b.RevenueEUR)
+		revTosti := money.RoundEUR(b.RevenueEURTosti)
+		revAvondeten := money.RoundEUR(b.RevenueEURAvondeten)
+		revCardT := money.RoundEUR(b.RevenueCardTosti)
+		revCardA := money.RoundEUR(b.RevenueCardAvondeten)
+		revBankT := money.RoundEUR(b.RevenueBankUnmatchedTosti)
+		revBankA := money.RoundEUR(b.RevenueBankUnmatchedAvondeten)
+		revCard := money.RoundEUR(revCardT + revCardA)
+		revBank := money.RoundEUR(revBankT + revBankA)
+		expLunchkraam := money.RoundEUR(expenseBuckets[i].LunchkraamEUR)
+		expAvondeten := money.RoundEUR(expenseBuckets[i].AvondetenEUR)
+		exp := money.RoundEUR(expLunchkraam + expAvondeten)
 		r.YearRevenue += rev
 		r.YearRevenueTosti += revTosti
 		r.YearRevenueAvondeten += revAvondeten
@@ -62,7 +62,7 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 		r.YearExpenses += exp
 		r.YearExpensesLunchkraam += expLunchkraam
 		r.YearExpensesAvondeten += expAvondeten
-		net := math.Round((rev-exp)*100) / 100
+		net := money.RoundEUR(rev - exp)
 		r.Monthly = append(r.Monthly, adminSalesMonthlyRow{
 			Month: i + 1, FulfilledCount: b.FulfilledCount,
 			RevenueEUR: rev, RevenueCardSalesEUR: revCard, RevenueBankUnmatchedEUR: revBank,
@@ -87,17 +87,17 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 			NetEUR: net, LabelNL: monthLabelNL(i + 1),
 		})
 	}
-	r.YearRevenue = math.Round(r.YearRevenue*100) / 100
-	r.YearRevenueTosti = math.Round(r.YearRevenueTosti*100) / 100
-	r.YearRevenueAvondeten = math.Round(r.YearRevenueAvondeten*100) / 100
-	r.YearRevenueCardTosti = math.Round(r.YearRevenueCardTosti*100) / 100
-	r.YearRevenueCardAvondeten = math.Round(r.YearRevenueCardAvondeten*100) / 100
-	r.YearRevenueBankUnmatchedTosti = math.Round(r.YearRevenueBankUnmatchedTosti*100) / 100
-	r.YearRevenueBankUnmatchedAvo = math.Round(r.YearRevenueBankUnmatchedAvo*100) / 100
-	r.YearExpenses = math.Round(r.YearExpenses*100) / 100
-	r.YearExpensesLunchkraam = math.Round(r.YearExpensesLunchkraam*100) / 100
-	r.YearExpensesAvondeten = math.Round(r.YearExpensesAvondeten*100) / 100
-	r.YearNet = math.Round((r.YearRevenue-r.YearExpenses)*100) / 100
+	r.YearRevenue = money.RoundEUR(r.YearRevenue)
+	r.YearRevenueTosti = money.RoundEUR(r.YearRevenueTosti)
+	r.YearRevenueAvondeten = money.RoundEUR(r.YearRevenueAvondeten)
+	r.YearRevenueCardTosti = money.RoundEUR(r.YearRevenueCardTosti)
+	r.YearRevenueCardAvondeten = money.RoundEUR(r.YearRevenueCardAvondeten)
+	r.YearRevenueBankUnmatchedTosti = money.RoundEUR(r.YearRevenueBankUnmatchedTosti)
+	r.YearRevenueBankUnmatchedAvo = money.RoundEUR(r.YearRevenueBankUnmatchedAvo)
+	r.YearExpenses = money.RoundEUR(r.YearExpenses)
+	r.YearExpensesLunchkraam = money.RoundEUR(r.YearExpensesLunchkraam)
+	r.YearExpensesAvondeten = money.RoundEUR(r.YearExpensesAvondeten)
+	r.YearNet = money.RoundEUR(r.YearRevenue - r.YearExpenses)
 	return r
 }
 
@@ -162,8 +162,8 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	yearCard := math.Round((rollup.YearRevenueCardTosti+rollup.YearRevenueCardAvondeten)*100) / 100
-	yearBankUn := math.Round((rollup.YearRevenueBankUnmatchedTosti+rollup.YearRevenueBankUnmatchedAvo)*100) / 100
+	yearCard := money.RoundEUR(rollup.YearRevenueCardTosti + rollup.YearRevenueCardAvondeten)
+	yearBankUn := money.RoundEUR(rollup.YearRevenueBankUnmatchedTosti + rollup.YearRevenueBankUnmatchedAvo)
 	resp := adminSalesStatsResponse{
 		Year:                        year,
 		Timezone:                    "Europe/Amsterdam",

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"strings"
 	"time"
 
+	"lunchkraam/internal/money"
 	"lunchkraam/internal/revolutcsv"
 	"lunchkraam/internal/store"
 )
@@ -191,10 +191,6 @@ func SpentOnDateAmsterdam(t time.Time, loc *time.Location) time.Time {
 	return time.Date(x.Year(), x.Month(), x.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-func round2(v float64) float64 {
-	return math.Round(v*100) / 100
-}
-
 // NormalizeShopExpensePurpose returns lunchkraam or avondeten when s is a valid purpose label.
 func NormalizeShopExpensePurpose(s string) (string, bool) {
 	s = strings.TrimSpace(strings.ToLower(s))
@@ -206,11 +202,11 @@ func NormalizeShopExpensePurpose(s string) (string, bool) {
 
 // creditPurposeForAmount maps a positive statement amount to lunchkraam (tosti) or avondeten revenue.
 func creditPurposeForAmount(amountEUR, lunchStandard, avondetenStandard float64) (purpose string, ok bool) {
-	a := round2(amountEUR)
-	if lunchStandard > 0 && round2(lunchStandard) == a {
+	a := money.RoundEUR(amountEUR)
+	if lunchStandard > 0 && money.RoundEUR(lunchStandard) == a {
 		return "lunchkraam", true
 	}
-	if avondetenStandard > 0 && round2(avondetenStandard) == a {
+	if avondetenStandard > 0 && money.RoundEUR(avondetenStandard) == a {
 		return "avondeten", true
 	}
 	return "", false

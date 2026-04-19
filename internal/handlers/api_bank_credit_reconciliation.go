@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -193,9 +191,7 @@ func (d *Deps) APIAdminBankCreditMatch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		CardRequestID int64 `json:"card_request_id"`
 	}
-	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<14))
-	if err := dec.Decode(&body); err != nil {
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_json", "Ongeldige JSON.")
+	if !httpx.ReadJSON(w, r, 1<<14, &body) {
 		return
 	}
 	if body.CardRequestID <= 0 {
