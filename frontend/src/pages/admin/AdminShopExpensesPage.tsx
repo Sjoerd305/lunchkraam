@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
@@ -8,156 +7,11 @@ import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
 import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
-import { formatEUR } from '../../utils/formatMoney'
-
-type ShopExpensesListBundle = {
-  rows: api.AdminShopExpense[]
-  receiptsByExpenseId: Record<number, api.ShopExpenseReceipt[]>
-}
-
-/** Manual boeking: contante uitgave, digitale uitgave (beide met verplichte bon), of contant bij de kas. */
-type ShopBookingKind = 'contant_expense' | 'digital_expense' | 'cash_in'
-
-function todayISO(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function shopExpensePurposeLabel(p: api.ShopExpensePurpose): string {
-  return p === 'avondeten' ? 'Avondeten' : 'Lunchkraam'
-}
-
-function shopExpenseKindLabel(row: api.AdminShopExpense): string {
-  if (row.amount_eur < 0) return 'Bij kas'
-  if (row.payment_channel === 'digitaal') return 'Digitaal'
-  return 'Contant'
-}
-
-function shopExpenseKindBadgeClass(row: api.AdminShopExpense): string {
-  if (row.amount_eur < 0) {
-    return 'rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-900'
-  }
-  if (row.payment_channel === 'digitaal') {
-    return 'rounded-md bg-indigo-50 px-2 py-0.5 font-medium text-indigo-900'
-  }
-  return 'rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-800'
-}
-
-function formatDateTimeShortNL(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return new Intl.DateTimeFormat('nl-NL', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(d)
-}
-
-function revolutSkipReasonLines(
-  s: api.RevolutImportSkipReasons,
-  mode: 'debit' | 'credit',
-): { count: number; text: string }[] {
-  const rows: { count: number; text: string }[] = []
-  const push = (n: number, text: string) => {
-    if (n > 0) rows.push({ count: n, text })
-  }
-  push(s.filter_not_completed, 'Niet voltooid of geannuleerd (statusfilter).')
-  push(s.filter_currency_mismatch, 'Past niet bij het gekozen valuta-filter.')
-  push(s.filter_type_skipped, 'Transactietype staat op de overslaan-lijst.')
-  if (mode === 'debit') {
-    push(s.not_debit, 'Geen afschrijving (bedrag is nul of positief).')
-  }
-  if (mode === 'credit') {
-    push(s.not_credit, 'Geen te importeren ontvangst (nul of negatief bedrag).')
-    push(
-      s.amount_not_standard_card_price,
-      'Positieve regels die om een andere reden niet als omzet zijn geboekt (zeldzaam; meld bij herhaling).',
-    )
-  }
-  push(s.missing_external_id, 'Geen transactie-ID in het bestand én vingerafdruk staat uit.')
-  push(s.user_excluded, 'Handmatig uitgesloten in het voorbeeld (wordt niet geïmporteerd).')
-  push(s.other, 'Overig (onverwacht; meld dit als het vaak voorkomt).')
-  return rows
-}
-
-function revolutImportResultDetail(
-  r: api.RevolutShopExpenseImportResult,
-  opts: { lunchEur: string; avoEur: string },
-): ReactNode {
-  const debitLines = revolutSkipReasonLines(r.debit_skip_reasons, 'debit')
-  const creditLines = r.credits_enabled ? revolutSkipReasonLines(r.credit_skip_reasons, 'credit') : []
-
-  return (
-    <div className="space-y-5 text-left">
-      <div>
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Uitgaven → deze pagina</h4>
-        <p className="mt-1 text-xs text-slate-600">
-          Afschrijvingen worden als regels in de tabel <strong>Boekingen</strong> gezet (bron Revolut). Herimport
-          werkt bij; sommige regels gaan naar controle bij een mogelijke dubbele handmatige uitgave.
-        </p>
-        {r.debits_skipped > 0 ? (
-          <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">
-            {debitLines.map((row) => (
-              <li key={row.text}>
-                <span className="tabular-nums font-medium text-slate-900">{row.count}×</span> {row.text}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-xs text-slate-600">Geen uitgaven-regels overgeslagen.</p>
-        )}
-      </div>
-
-      {r.credits_enabled ? (
-        <div>
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Inkomsten → omzet (niet deze tabel)</h4>
-          <p className="mt-1 text-xs text-slate-600">
-            Alle <strong>positieve</strong> ontvangsten in het bestand worden als bank-omzet geboekt (mits filters
-            zoals “alleen voltooid”). Bedragen die exact overeenkomen met je ingestelde lunch- (€{opts.lunchEur}) en/of
-            avondetenkaartprijs (€{opts.avoEur}) krijgen dat doel automatisch; andere bedragen krijgen hetzelfde doel
-            als bij uitgaven: met <strong>Raad doel op tijd</strong> volgens het tijdvenster, anders het gekozen
-            standaard-doel. Aanpassen kan in het voorbeeld onder <em>Waarvoor ink.</em> De omzet telt mee op{' '}
-            <Link to="/admin/expenses-overview" className="font-medium text-brand-700 underline hover:text-brand-900">
-              Overzichten
-            </Link>
-            , niet als regels in de boodschappenlijst hieronder.
-          </p>
-          {r.credits_imported > 0 || r.credits_skipped > 0 ? (
-            <p className="mt-2 text-xs text-slate-700">
-              <span className="font-medium text-slate-900">Deze run:</span> lunchkraam-omzet:{' '}
-              <span className="tabular-nums">{r.credits_imported_lunchkraam}</span>{' '}
-              {r.dry_run ? 'zou(den) tellen' : 'geboekt'}, avondeten-omzet:{' '}
-              <span className="tabular-nums">{r.credits_imported_avondeten}</span>{' '}
-              {r.dry_run ? 'zou(den) tellen' : 'geboekt'} (samen <span className="tabular-nums">{r.credits_imported}</span>
-              ).
-              {r.credits_inferred_non_standard > 0 ? (
-                <>
-                  {' '}
-                  Daarvan <span className="tabular-nums font-medium text-slate-900">{r.credits_inferred_non_standard}</span>{' '}
-                  {r.dry_run ? 'zou(den) ' : ''}het kaartbedrag niet exact matchen (doel afgeleid of handmatig gekozen).
-                </>
-              ) : null}
-            </p>
-          ) : null}
-          {r.credits_skipped > 0 ? (
-            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">
-              {creditLines.map((row) => (
-                <li key={row.text}>
-                  <span className="tabular-nums font-medium text-slate-900">{row.count}×</span> {row.text}
-                </li>
-              ))}
-            </ul>
-          ) : r.credits_imported > 0 ? (
-            <p className="mt-2 text-xs text-slate-600">Geen inkomsten-regels overgeslagen.</p>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
+import { revolutImportResultDetail, todayISO } from './adminShopExpensesHelpers'
+import { AdminShopExpensesPendingReviews } from './AdminShopExpensesPendingReviews'
+import { AdminShopExpensesRevolutPanel } from './AdminShopExpensesRevolutPanel'
+import { AdminShopExpensesTable } from './AdminShopExpensesTable'
+import type { ShopBookingKind, ShopExpensesListBundle } from './adminShopExpensesTypes'
 
 export function AdminShopExpensesPage() {
   const { csrf, user } = useAuth()
@@ -752,563 +606,89 @@ export function AdminShopExpensesPage() {
         </form>
       </section>
 
-      <section className="surface-card">
-        <h3 className="text-sm font-semibold text-slate-800">Revolut-saldo</h3>
-        <p className="mt-2 text-sm text-slate-600">
-          Het saldo komt uit de kolom <strong>Saldo</strong> van je laatst <strong>succesvol geïmporteerde</strong>{' '}
-          Revolut-csv (nieuwste voltooide EUR-regel). Dit is geen live koppeling met Revolut; exporteer opnieuw voor een
-          actueler cijfer.
-        </p>
-        <div className="mt-3 text-sm text-slate-800">
-          {revolutBalanceLoading ? (
-            <span className="text-slate-500">Saldo laden…</span>
-          ) : revolutBalance != null &&
-            revolutBalance.balance_eur != null &&
-            revolutBalance.updated_at != null &&
-            revolutBalance.updated_at !== '' ? (
-            <div className="space-y-1">
-              <p className="text-lg font-semibold tabular-nums">{formatEUR(revolutBalance.balance_eur)}</p>
-              {revolutBalance.statement_as_of ? (
-                <p className="text-slate-600">
-                  Per afschrift (transactiedatum): {formatDateTimeShortNL(revolutBalance.statement_as_of)}
-                </p>
-              ) : null}
-              <p className="text-xs text-slate-500">
-                In Lunchkraam bijgewerkt: {formatDateTimeShortNL(revolutBalance.updated_at)}
-              </p>
-            </div>
-          ) : (
-            <p className="text-slate-600">
-              Nog geen saldo opgeslagen. Importeer een csv-export met saldokolom (zonder proefrun) om het hier te tonen.
-            </p>
-          )}
-        </div>
-      </section>
+      <AdminShopExpensesRevolutPanel
+        revolutBalance={revolutBalance}
+        revolutBalanceLoading={revolutBalanceLoading}
+        revolutFile={revolutFile}
+        onRevolutFileSelected={(file) => {
+          setRevolutFile(file)
+          setRevolutPreview(null)
+          setExcludedDebit({})
+          setExcludedCredit({})
+        }}
+        revolutPurpose={revolutPurpose}
+        onRevolutPurposeChange={setRevolutPurpose}
+        revolutCurrencyEUR={revolutCurrencyEUR}
+        onRevolutCurrencyEURChange={setRevolutCurrencyEUR}
+        revolutGuessPurposeByTime={revolutGuessPurposeByTime}
+        onRevolutGuessPurposeByTimeChange={setRevolutGuessPurposeByTime}
+        revolutSkipTypes={revolutSkipTypes}
+        onRevolutSkipTypesChange={setRevolutSkipTypes}
+        revolutFingerprint={revolutFingerprint}
+        onRevolutFingerprintChange={setRevolutFingerprint}
+        revolutCompletedOnly={revolutCompletedOnly}
+        onRevolutCompletedOnlyChange={setRevolutCompletedOnly}
+        revolutImportCredits={revolutImportCredits}
+        onRevolutImportCreditsChange={setRevolutImportCredits}
+        revolutCreditLunchEUR={revolutCreditLunchEUR}
+        onRevolutCreditLunchEURChange={setRevolutCreditLunchEUR}
+        revolutCreditAvondetenEUR={revolutCreditAvondetenEUR}
+        onRevolutCreditAvondetenEURChange={setRevolutCreditAvondetenEUR}
+        revolutDryRun={revolutDryRun}
+        onRevolutDryRunChange={setRevolutDryRun}
+        revolutPreviewLoading={revolutPreviewLoading}
+        revolutSubmitting={revolutSubmitting}
+        onRevolutPreview={() => void runRevolutPreview()}
+        onRevolutImport={() => void runRevolutImport()}
+        revolutPreview={revolutPreview}
+        excludedDebit={excludedDebit}
+        onExcludedDebitChange={(dk, included) => {
+          setExcludedDebit((prev) => {
+            const next = { ...prev }
+            if (included) delete next[dk]
+            else next[dk] = true
+            return next
+          })
+        }}
+        excludedCredit={excludedCredit}
+        onExcludedCreditChange={(ck, included) => {
+          setExcludedCredit((prev) => {
+            const next = { ...prev }
+            if (included) delete next[ck]
+            else next[ck] = true
+            return next
+          })
+        }}
+        debitPurposeByKey={debitPurposeByKey}
+        onDebitPurposeChange={(dk, v) => setDebitPurposeByKey((prev) => ({ ...prev, [dk]: v }))}
+        creditPurposeByKey={creditPurposeByKey}
+        onCreditPurposeChange={(ck, v) => setCreditPurposeByKey((prev) => ({ ...prev, [ck]: v }))}
+        previewCreditSplit={previewCreditSplit}
+      />
 
-      <section className="surface-card">
-        <h3 className="text-sm font-semibold text-slate-800">Revolut-import (CSV)</h3>
-        <p className="mt-2 text-sm text-slate-600">
-          Upload een accountafschrift-export van Revolut. <strong>Afschrijvingen</strong> worden als uitgave geboekt; bij
-          tijdherkenning zetten we <strong>waarvoor</strong> per regel op basis van het voltooide tijdstip (Europe/Amsterdam:
-          ochtend ca. 08:00–13:00 → lunchkraam, avond ca. 16:00–19:00 → avondeten; anders het gekozen standaarddoel).
-          Optioneel worden <strong>tegoeden</strong> die exact €15 of €10 zijn (instelbaar) als omzet in de grafieken
-          meegeteld: €15 → lunchkraam, €10 → avondeten. Tel die bedragen niet dubbel met al in de app geaccordeerde
-          kaartverkopen. <strong>Inkomsten uit deze import</strong> verschijnen niet in de tabel Boekingen op deze pagina;
-          die staan bij <Link to="/admin/expenses-overview">Overzichten</Link> in de omzet.
-        </p>
-        <form
-          id="revolut-shop-import-form"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void runRevolutImport()
-          }}
-          className="mt-4 grid gap-4 sm:grid-cols-2"
-        >
-          <label className="block text-sm sm:col-span-2">
-            <span className="font-medium text-slate-700">CSV-bestand</span>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="input-control mt-1.5"
-              onChange={(e) => {
-                setRevolutFile(e.target.files?.[0] ?? null)
-                setRevolutPreview(null)
-                setExcludedDebit({})
-                setExcludedCredit({})
-              }}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700">Standaard waarvoor</span>
-            <span className="mt-0.5 block text-xs font-normal text-slate-500">
-              Gebruikt als het tijdstip niet in het ochtend- of avondvenster valt (of als tijdherkenning uit staat).
-            </span>
-            <select
-              value={revolutPurpose}
-              onChange={(e) => setRevolutPurpose(e.target.value as api.ShopExpensePurpose)}
-              className="select-control mt-1.5 min-h-11 w-full"
-            >
-              <option value="lunchkraam">Lunchkraam</option>
-              <option value="avondeten">Avondeten</option>
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700">Valuta-filter</span>
-            <select
-              value={revolutCurrencyEUR ? 'eur' : 'all'}
-              onChange={(e) => setRevolutCurrencyEUR(e.target.value === 'eur')}
-              className="select-control mt-1.5 min-h-11 w-full"
-            >
-              <option value="eur">Alleen EUR</option>
-              <option value="all">Alle valuta</option>
-            </select>
-          </label>
-          <label className="flex items-start gap-2 text-sm text-slate-800 sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={revolutGuessPurposeByTime}
-              onChange={(e) => setRevolutGuessPurposeByTime(e.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
-            />
-            <span>
-              <span className="font-medium text-slate-700">Waarvoor afleiden uit tijdstip</span>
-              <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                Voltooide tijd in Europe/Amsterdam: 08:00–13:00 → lunchkraam, 16:00–19:00 → avondeten; anders het
-                standaarddoel hierboven.
-              </span>
-            </span>
-          </label>
-          <label className="block text-sm sm:col-span-2">
-            <span className="font-medium text-slate-700">Types overslaan (optioneel)</span>
-            <input
-              type="text"
-              value={revolutSkipTypes}
-              onChange={(e) => setRevolutSkipTypes(e.target.value)}
-              placeholder="bijv. TOPUP, EXCHANGE"
-              className="input-control mt-1.5"
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-800">
-            <input
-              type="checkbox"
-              checked={revolutFingerprint}
-              onChange={(e) => setRevolutFingerprint(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300"
-            />
-            Vingerafdruk als er geen ID-kolom is
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-800">
-            <input
-              type="checkbox"
-              checked={revolutCompletedOnly}
-              onChange={(e) => setRevolutCompletedOnly(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300"
-            />
-            Alleen voltooide transacties (VOLTOOID / COMPLETED)
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-800 sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={revolutImportCredits}
-              onChange={(e) => setRevolutImportCredits(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300"
-            />
-            Inkomsten importeren (positieve regels die exact matchen met onderstaande bedragen)
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700">Lunchkraam-kaartbedrag (€)</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={revolutCreditLunchEUR}
-              onChange={(e) => setRevolutCreditLunchEUR(e.target.value)}
-              placeholder="15"
-              disabled={!revolutImportCredits}
-              className="input-control mt-1.5"
-            />
-            <span className="mt-1 block text-xs text-slate-500">0 = dit type niet importeren</span>
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700">Avondeten-kaartbedrag (€)</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={revolutCreditAvondetenEUR}
-              onChange={(e) => setRevolutCreditAvondetenEUR(e.target.value)}
-              placeholder="10"
-              disabled={!revolutImportCredits}
-              className="input-control mt-1.5"
-            />
-            <span className="mt-1 block text-xs text-slate-500">0 = dit type niet importeren</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-800 sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={revolutDryRun}
-              onChange={(e) => setRevolutDryRun(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300"
-            />
-            Alleen proefrun (niets opslaan)
-          </label>
-          <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-            <button
-              type="button"
-              disabled={revolutPreviewLoading || revolutSubmitting || !revolutFile}
-              className="btn-secondary min-h-11 px-5"
-              onClick={() => void runRevolutPreview()}
-            >
-              {revolutPreviewLoading ? 'Voorbeeld…' : 'Voorbeeld tonen'}
-            </button>
-            <button
-              type="button"
-              disabled={revolutPreviewLoading || revolutSubmitting || !revolutFile}
-              className="btn-primary min-h-11 px-5"
-              onClick={() => void runRevolutImport()}
-            >
-              {revolutSubmitting ? 'Bezig…' : revolutDryRun ? 'Proefrun' : 'Importeren'}
-            </button>
-          </div>
-        </form>
-        {revolutPreview ? (
-          <div className="mt-6 border-t border-slate-200 pt-6">
-            <h4 className="text-sm font-semibold text-slate-900">Transactievoorbeeld ({revolutPreview.rows.length} regels)</h4>
-            <p className="mt-1 text-xs text-slate-600">
-              Vink <strong>Meenemen</strong> uit om een geplande uitgave- of inkomstenactie over te slaan bij import. Kies
-              per regel <strong>Waarvoor</strong> (lunchkraam of avondeten) vóór je importeert — dat overschrijft
-              tijdafleiding voor uitgaven en het standaard kaartbedrag-label voor inkomsten. Bedragen wijzig je in het CSV.
-            </p>
-            <div className="mt-3 max-h-[min(70vh,28rem)] overflow-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[72rem] text-left text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-100 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-600">
-                  <tr>
-                    <th className="px-2 py-2">#</th>
-                    <th className="px-2 py-2">Datum</th>
-                    <th className="px-2 py-2">Bedrag</th>
-                    <th className="px-2 py-2">Type</th>
-                    <th className="px-2 py-2">Status</th>
-                    <th className="px-2 py-2">Omschrijving</th>
-                    <th className="px-2 py-2">Waarvoor uit</th>
-                    <th className="px-2 py-2">Uitgave</th>
-                    <th className="px-2 py-2 text-center">Uit.</th>
-                    <th className="px-2 py-2">Waarvoor ink.</th>
-                    <th className="px-2 py-2">Inkomsten</th>
-                    <th className="px-2 py-2 text-center">Ink.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {revolutPreview.rows.map((pr) => {
-                    const dk = pr.debit.row_key ?? ''
-                    const ck = pr.credit.row_key ?? ''
-                    const debitIn = pr.debit.selectable && dk ? !excludedDebit[dk] : false
-                    const creditIn = pr.credit.selectable && ck ? !excludedCredit[ck] : false
-                    return (
-                      <tr key={pr.line} className="align-top text-slate-800">
-                        <td className="px-2 py-1.5 tabular-nums text-slate-500">{pr.line}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">
-                          {formatDateTimeShortNL(pr.completed_at)}
-                        </td>
-                        <td className="px-2 py-1.5 tabular-nums font-medium">{formatEUR(pr.amount_eur)}</td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.type || '—'}</td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.state || '—'}</td>
-                        <td className="max-w-[14rem] px-2 py-1.5 break-words text-slate-700">{pr.description || '—'}</td>
-                        <td className="px-2 py-1.5">
-                          {pr.debit.selectable && dk ? (
-                            <select
-                              className="select-control max-w-[10.5rem] py-1 text-xs"
-                              value={debitPurposeByKey[dk] ?? 'lunchkraam'}
-                              onChange={(e) => {
-                                const v = e.target.value as api.ShopExpensePurpose
-                                setDebitPurposeByKey((prev) => ({ ...prev, [dk]: v }))
-                              }}
-                            >
-                              <option value="lunchkraam">Lunchkraam</option>
-                              <option value="avondeten">Avondeten</option>
-                            </select>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.debit.label_nl}</td>
-                        <td className="px-2 py-1.5 text-center">
-                          {pr.debit.selectable && dk ? (
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300"
-                              checked={debitIn}
-                              title="Meenemen als uitgave"
-                              onChange={(e) => {
-                                setExcludedDebit((prev) => {
-                                  const next = { ...prev }
-                                  if (e.target.checked) delete next[dk]
-                                  else next[dk] = true
-                                  return next
-                                })
-                              }}
-                            />
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {pr.credit.selectable && ck ? (
-                            <select
-                              className="select-control max-w-[10.5rem] py-1 text-xs"
-                              value={creditPurposeByKey[ck] ?? 'lunchkraam'}
-                              onChange={(e) => {
-                                const v = e.target.value as api.ShopExpensePurpose
-                                setCreditPurposeByKey((prev) => ({ ...prev, [ck]: v }))
-                              }}
-                            >
-                              <option value="lunchkraam">Lunchkraam</option>
-                              <option value="avondeten">Avondeten</option>
-                            </select>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.credit.label_nl}</td>
-                        <td className="px-2 py-1.5 text-center">
-                          {pr.credit.selectable && ck ? (
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300"
-                              checked={creditIn}
-                              title="Meenemen als omzet"
-                              onChange={(e) => {
-                                setExcludedCredit((prev) => {
-                                  const next = { ...prev }
-                                  if (e.target.checked) delete next[ck]
-                                  else next[ck] = true
-                                  return next
-                                })
-                              }}
-                            />
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Samenvatting voorbeeld: {revolutPreview.debits_imported} uitgaven-acties, {revolutPreview.debits_skipped}{' '}
-              uitgaven overgeslagen
-              {revolutPreview.debits_pending_review > 0
-                ? `, ${revolutPreview.debits_pending_review} naar controle`
-                : ''}
-              {revolutPreview.credits_enabled
-                ? ` · ${revolutPreview.credits_imported} inkomsten-acties, ${revolutPreview.credits_skipped} inkomsten overgeslagen`
-                : ''}
-              .
-              {revolutPreview.credits_enabled && revolutPreview.credits_inferred_non_standard > 0
-                ? ` Daarvan ${revolutPreview.credits_inferred_non_standard} met een afwijkend bedrag t.o.v. de ingestelde kaartprijzen (doel via tijdvenster of standaard-doel; aanpasbaar onder Waarvoor ink.).`
-                : ''}
-              {previewCreditSplit && previewCreditSplit.total > 0 ? (
-                <>
-                  {' '}
-                  Inkomsten meegenomen (na je keuzes): lunchkraam {previewCreditSplit.lunch}, avondeten{' '}
-                  {previewCreditSplit.avo} (samen {previewCreditSplit.total}).
-                </>
-              ) : null}
-            </p>
-          </div>
-        ) : null}
-      </section>
+      <AdminShopExpensesPendingReviews
+        pendingReviews={pendingReviews}
+        reviewActioning={reviewActioning}
+        onMergeReview={(id) => void onMergeReview(id)}
+        onDismissReview={(id) => void onDismissReview(id)}
+      />
 
-      {pendingReviews.length > 0 && (
-        <section className="surface-card">
-          <h3 className="text-sm font-semibold text-slate-800">
-            Mogelijke duplicaten ({pendingReviews.length})
-          </h3>
-          <p className="mt-2 text-sm text-slate-600">
-            Deze Revolut-transacties komen overeen met handmatig ingevoerde uitgaven (zelfde bedrag en datum). Kies per
-            regel wat je wilt doen.
-          </p>
-          <div className="mt-4 space-y-4">
-            {pendingReviews.map((rv) => (
-              <div key={rv.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revolut-import</span>
-                    <p className="mt-1 font-medium tabular-nums text-slate-900">{formatEUR(rv.revolut.amount_eur)}</p>
-                    <p className="text-sm text-slate-700">{rv.revolut.spent_on}</p>
-                    <p className="text-xs text-slate-600">{rv.revolut.description || '\u2014'}</p>
-                    <p className="text-xs text-slate-500">{shopExpensePurposeLabel(rv.revolut.purpose)}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Handmatige boeking
-                    </span>
-                    <p className="mt-1 font-medium tabular-nums text-slate-900">
-                      {formatEUR(rv.matched_manual.amount_eur)}
-                    </p>
-                    <p className="text-sm text-slate-700">{rv.matched_manual.spent_on}</p>
-                    <p className="text-xs text-slate-600">{rv.matched_manual.description || '\u2014'}</p>
-                    <p className="text-xs text-slate-500">{shopExpensePurposeLabel(rv.matched_manual.purpose)}</p>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={reviewActioning === rv.id}
-                    onClick={() => void onMergeReview(rv.id)}
-                    className="btn-primary min-h-9 px-3 text-xs"
-                  >
-                    {reviewActioning === rv.id ? 'Bezig\u2026' : 'Samenvoegen'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={reviewActioning === rv.id}
-                    onClick={() => void onDismissReview(rv.id)}
-                    className="text-xs font-semibold text-red-700 hover:text-red-900"
-                  >
-                    Overslaan
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  Samenvoegen = handmatige boeking verwijderen, Revolut-import behouden (bonnetjes worden overgezet).
-                  Overslaan = Revolut-import negeren.
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="surface-card">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-sm font-semibold text-slate-800">Boekingen</h3>
-          {yearsLoading ? (
-            <span className="text-sm text-slate-500">Jaren laden…</span>
-          ) : year !== null ? (
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <span className="font-medium">Jaar</span>
-              <select
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className="select-control min-h-10"
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-        </div>
-
-        {listLoading ? (
-          <p className="mt-6 text-sm text-slate-600">Laden…</p>
-        ) : rows.length === 0 ? (
-          <p className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-slate-600">
-            Geen boekingen in {year ?? 'dit jaar'}.
-          </p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[32rem] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="py-2 pr-4">Datum</th>
-                  <th className="py-2 pr-4">Bedrag</th>
-                  <th className="py-2 pr-4">Soort</th>
-                  <th className="py-2 pr-4">Waarvoor</th>
-                  <th className="py-2 pr-4">Bron</th>
-                  <th className="py-2 pr-4">Omschrijving</th>
-                  <th className="py-2 pr-4">Bon</th>
-                  {user?.is_admin ? <th className="py-2 text-right">Actie</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-100">
-                    <td className="py-3 pr-4 tabular-nums text-slate-800">{r.spent_on}</td>
-                    <td className="py-3 pr-4 font-medium tabular-nums text-slate-900">
-                      {formatEUR(r.amount_eur)}
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-slate-600">
-                      <span className={shopExpenseKindBadgeClass(r)}>{shopExpenseKindLabel(r)}</span>
-                    </td>
-                    <td className="py-3 pr-4 text-slate-700">
-                      <select
-                        value={r.purpose}
-                        disabled={patchingPurposeId === r.id}
-                        onChange={(e) =>
-                          void onPurposeChange(r.id, e.target.value as api.ShopExpensePurpose)
-                        }
-                        className="select-control min-h-9 max-w-[12rem] text-xs"
-                        aria-label={`Waarvoor voor uitgave ${r.spent_on}`}
-                      >
-                        <option value="lunchkraam">{shopExpensePurposeLabel('lunchkraam')}</option>
-                        <option value="avondeten">{shopExpensePurposeLabel('avondeten')}</option>
-                      </select>
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-slate-600">
-                      {r.source === 'revolut' ? 'Revolut' : 'Handmatig'}
-                    </td>
-                    <td className="py-3 pr-4 text-slate-700">{r.description || '—'}</td>
-                    <td className="py-3 pr-4 text-slate-700">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="btn-secondary inline-flex min-h-9 cursor-pointer items-center px-3 text-xs">
-                          {uploadingReceiptId === r.id ? 'Uploaden…' : 'Camera'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            disabled={uploadingReceiptId === r.id}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] ?? null
-                              void onUploadReceipt(r.id, file)
-                              e.currentTarget.value = ''
-                            }}
-                          />
-                        </label>
-                        <label className="btn-secondary inline-flex min-h-9 cursor-pointer items-center px-3 text-xs">
-                          {uploadingReceiptId === r.id ? 'Uploaden…' : 'Galerij'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            disabled={uploadingReceiptId === r.id}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] ?? null
-                              void onUploadReceipt(r.id, file)
-                              e.currentTarget.value = ''
-                            }}
-                          />
-                        </label>
-                        {(receiptsByExpenseId[r.id] ?? []).length === 0 ? (
-                          <span className="text-xs text-slate-500">Geen foto</span>
-                        ) : (
-                          <ul className="list-none space-y-1.5 p-0">
-                            {(receiptsByExpenseId[r.id] ?? []).map((rec, idx) => (
-                              <li key={rec.id} className="flex flex-wrap items-center gap-2">
-                                <a
-                                  href={rec.image_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-xs font-semibold text-slate-700 underline"
-                                >
-                                  Bekijk
-                                  {(receiptsByExpenseId[r.id] ?? []).length > 1 ? ` ${idx + 1}` : ''}
-                                </a>
-                                {user?.is_admin ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => void onDeleteReceipt(r.id, rec.id)}
-                                    className="text-xs font-semibold text-red-700 hover:text-red-900"
-                                  >
-                                    Verwijderen
-                                  </button>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </td>
-                    {user?.is_admin ? (
-                      <td className="py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => void onDelete(r.id)}
-                          className="text-sm font-semibold text-red-700 hover:text-red-900"
-                        >
-                          Verwijderen
-                        </button>
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <AdminShopExpensesTable
+        yearsLoading={yearsLoading}
+        year={year}
+        yearOptions={yearOptions}
+        onYearChange={setYear}
+        listLoading={listLoading}
+        rows={rows}
+        receiptsByExpenseId={receiptsByExpenseId}
+        patchingPurposeId={patchingPurposeId}
+        uploadingReceiptId={uploadingReceiptId}
+        isAdmin={user?.is_admin}
+        onPurposeChange={(id, p) => void onPurposeChange(id, p)}
+        onUploadReceipt={(id, f) => void onUploadReceipt(id, f)}
+        onDeleteReceipt={(eid, rid) => void onDeleteReceipt(eid, rid)}
+        onDeleteExpense={(id) => void onDelete(id)}
+      />
     </div>
   )
 }

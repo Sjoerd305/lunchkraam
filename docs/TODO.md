@@ -32,7 +32,7 @@
 - [x] Gedeelde **EUR cent-rounding** helper (`internal/money.RoundEUR`; vervangt `math.Round(v*100)/100` bij JSON-uitvoer en rapportage).
 - [x] Gedeelde **JSON body decode**: `httpx.ReadJSON` / `httpx.ReadJSONAllowEmpty` i.p.v. overal `json.NewDecoder(http.MaxBytesReader(…))` + uniforme 400 bij parse-fout.
 - [x] **Store error → HTTP** centraal in [internal/httpx/store_errors.go](internal/httpx/store_errors.go) (`RespondStoreNotFound`, `WriteBankCreditStoreError`, tosti/kaart/avondeten/local-password helpers); handlers roepen die aan i.p.v. lange `errors.Is`-ketens.
-- [x] **Logging**: `log/slog` met structured fields in handlers + [internal/httpx/json.go](internal/httpx/json.go); `slog.SetDefault` in [cmd/server/main.go](cmd/server/main.go); server-startupmeldingen (dist, listen, shutdown, bonfoto-map) ook via `slog`. (`log` alleen nog voor `log.Fatalf` bij fatale startup.)
+- [x] **Logging**: `log/slog` met structured fields in handlers + [internal/httpx/json.go](internal/httpx/json.go); `slog.SetDefault` in [cmd/server/main.go](cmd/server/main.go); server-startupmeldingen (dist, listen, shutdown, bonfoto-map) ook via `slog`. (`log` alleen nog voor `log.Fatalf` bij fatale startup.) CLI [cmd/revolut-import/main.go](../cmd/revolut-import/main.go) gebruikt dezelfde `slog` naar stderr voor diagnostiek; **reconcile**-tabel blijft leesbare `fmt` naar stdout.
 - [x] **HTTP smoke (`httptest`):** [internal/handlers/smoke_http_test.go](../internal/handlers/smoke_http_test.go) — `/health`, `/robots.txt`, anonieme `GET /api/me` (200 + `user: null`), `GET /api/cards` zonder sessie (401 JSON); **zonder database**. Uitbreiden blijft optioneel (DB-integratie, meer routes).
 
 ## Code health — frontend
@@ -52,7 +52,7 @@
 - [x] **Jaarlijst + geselecteerd jaar (admin):** gedeelde hook [frontend/src/hooks/useAdminSalesYearsSelect.ts](frontend/src/hooks/useAdminSalesYearsSelect.ts) voor `salesYears` + state/sync + foutpad; gebruikt op Financiën, uitgaven-overzicht, boodschappen en **admin grafieken** (`AdminSalesCharts`, met `emptyYearsListBehavior` waar lege API-lijst het vorige jaar behoudt).
 - [x] **Jaar-dropdown opties:** pure helper [frontend/src/utils/adminYearSelectOptions.ts](frontend/src/utils/adminYearSelectOptions.ts) + [unit test](frontend/src/utils/adminYearSelectOptions.test.ts); vervangt copy-paste `useMemo` op dezelfde admin-pagina’s.
 - **Buiten admin:** `KraamPage`, `CardsPage`, `BuyPage`, `OrderTostiPage` houden nog **lokale state + handmatige refresh**; Query is daar optioneel tot het patroon lastig wordt.
-- **CLI** (`cmd/revolut-import`): nog `log.Printf` — acceptabel voor een losstaand commando; serverpad blijft `slog`.
+- [x] **CLI** (`cmd/revolut-import`): diagnostiek via `slog` (stderr); reconcile-tabel via `fmt` (stdout) — zie **PR-D**.
 - [x] **Admin query-fout → alert/toast:** gedeelde hook [frontend/src/hooks/useQueryErrorAlert.ts](frontend/src/hooks/useQueryErrorAlert.ts) i.p.v. copy-paste `useEffect` op admin-pagina’s (incl. Financiën met meerdere queries).
 
 ### Production backlog — code *(scan / plan 2026-04-19; uitvoering 2026-04-19)*
@@ -121,22 +121,24 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Veld | Inhoud |
 |------|--------|
 | **Doel** | Eén log-storyline met de server (`slog` naar stderr, key/value fields). |
-| **Context** | [cmd/revolut-import/main.go](../cmd/revolut-import/main.go): nu `log` + `fmt.Printf` voor reconcile-tabel — functioneel prima, inconsistent met `cmd/server`. |
-| **Wijzigingen** | Vervang `log.Printf` door `slog.Info` / `Warn` / `Error`; tabellarische reconcile-output kan `fmt` blijven (stdout voor menselijke consumptie) óf achter `-human` flag — expliciet kiezen in PR. |
-| **Acceptatie** | CLI-output voor scripts blijft bruikbaar (document breaking change als stdout-formaat wijzigt). |
-| **Risico** | Laag. |
+| **Context** | [cmd/revolut-import/main.go](../cmd/revolut-import/main.go): voorheen `log` + `fmt` voor reconcile-tabel. |
+| **Wijzigingen (uitgevoerd)** | `slog.SetDefault` (text handler, stderr) aan begin van `main`; alle `log.Print*` vervangen door `slog.Info` / `Warn` / `Error` met velden; dry-run regels als gestructureerde `slog.Info`. **Reconcile**-kop en maandtabel ongewijzigd op **stdout** via `fmt.Printf` / `fmt.Println` (pipe-vriendelijk). `usage()` blijft `fmt.Fprintf` naar stderr. |
+| **Acceptatie** | `go build ./cmd/revolut-import`; dry-run import toont nog steeds “would upsert”-regels (nu key=value-tekst i.p.v. één vrije string — scripts die exact de oude regel parsen kunnen breken). |
+| **Risico** | Laag voor DB-paden; **let op** voor log-parsers op stderr. |
 | **Grootte** | Klein. |
+| **Status** | **Gedaan**. |
 
 ### PR-E — Frontend: `AdminShopExpensesPage` opsplitsen in subcomponenten
 
 | Veld | Inhoud |
 |------|--------|
 | **Doel** | Bestand ~1300+ regels inkorten; makkelijker review en onboarding. |
-| **Voorgestelde bestanden** | `AdminShopExpensesRevolutPanel.tsx` (upload, preview, import, credit-instellingen); `AdminShopExpensesPendingReviews.tsx`; `AdminShopExpensesTable.tsx` (tabel + bonnen/acties); optioneel `adminShopExpensesTypes.ts` voor lokale types. Pagina blijft orchestrator: hooks, `queryClient`, callbacks doorgeven via props. |
-| **Wijzigingen** | Alleen verplaatsen + props doorgeven; **geen** businesslogica wijzigen in de eerste PR. Storybook hoeft niet. |
-| **Acceptatie** | `npm run build` + handmatig: jaar wisselen, bon upload, Revolut preview/import, pending reviews merge/dismiss. |
-| **Risico** | Laag bij pure extractie; let op prop-drilling — max één niveau “container” + “presentational”. |
+| **Voorgestelde bestanden** | Zie **uitgevoerd** hieronder. Pagina blijft orchestrator: hooks, `queryClient`, callbacks doorgeven via props. |
+| **Wijzigingen (uitgevoerd)** | 1) [frontend/src/pages/admin/adminShopExpensesTypes.ts](../frontend/src/pages/admin/adminShopExpensesTypes.ts) — `ShopExpensesListBundle`, `ShopBookingKind`. 2) [frontend/src/pages/admin/adminShopExpensesHelpers.tsx](../frontend/src/pages/admin/adminShopExpensesHelpers.tsx) — `todayISO`, bon/Revolut-labels, `formatDateTimeShortNL`, `revolutImportResultDetail` (ongewijzigde markup). 3) [frontend/src/pages/admin/AdminShopExpensesRevolutPanel.tsx](../frontend/src/pages/admin/AdminShopExpensesRevolutPanel.tsx) — Revolut-saldo + CSV-formulier + transactievoorbeeld-tabel. 4) [frontend/src/pages/admin/AdminShopExpensesPendingReviews.tsx](../frontend/src/pages/admin/AdminShopExpensesPendingReviews.tsx) — duplicate-reviewkaarten. 5) [frontend/src/pages/admin/AdminShopExpensesTable.tsx](../frontend/src/pages/admin/AdminShopExpensesTable.tsx) — jaarkeuze + boekingentabel (bon/acties). 6) [frontend/src/pages/admin/AdminShopExpensesPage.tsx](../frontend/src/pages/admin/AdminShopExpensesPage.tsx) — intro + nieuwe-boeking-formulier + compositie; **geen** gedrag/API-wijziging. |
+| **Acceptatie** | `npm run build` groen; handmatig: jaar wisselen, bon upload, Revolut preview/import, pending reviews merge/dismiss. |
+| **Risico** | Laag bij pure extractie; prop-surface expliciet gehouden. |
 | **Grootte** | Groot diff, laag risico. |
+| **Status** | **Gedaan**. |
 
 ### PR-F — Frontend: `api.ts` modulair maken (re-exports)
 
@@ -191,10 +193,11 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 1. **PR-A** (CI-tests) — **afgerond**; beschermt alle volgende wijzigingen op `production` pushes.  
 2. **PR-B** (Revolut handler-split) — **afgerond**.  
 3. **PR-C** (`httptest` smoke) — **afgerond**.  
-4. Vervolg: **PR-D** (CLI `slog`) losstaand, of **PR-E** / **PR-F** (frontend-structuur).  
-5. **PR-F** (api-modularisatie) — vóór of na **PR-G/H** afhankelijk van conflict-pijn.  
-6. **PR-G** / **PR-H** (Query-migraties) — in deel-PR’s als review-capaciteit beperkt is.  
-7. **PR-I** — wanneer prioriteit voor WS/error-hardening.
+4. **PR-D** (CLI `slog`) — **afgerond**.  
+5. **PR-E** (`AdminShopExpensesPage`-split) — **afgerond**. Vervolg: **PR-F** (api-modularisatie).  
+6. **PR-F** (api-modularisatie) — vóór of na **PR-G/H** afhankelijk van conflict-pijn.  
+7. **PR-G** / **PR-H** (Query-migraties) — in deel-PR’s als review-capaciteit beperkt is.  
+8. **PR-I** — wanneer prioriteit voor WS/error-hardening.
 
 ---
 
@@ -205,8 +208,8 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | *Production backlog — Backend* “shop_expenses_revolut_import splitsen” | **PR-B** |
 | *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G**, **PR-H** |
 | *Code health — backend* HTTP smoke / uitbreidbare `httptest` | **PR-C** (**gedaan**) |
-| *Code review* “CLI log.Printf” | **PR-D** |
-| Geen expliciete regel maar scan-bevinding | **PR-A**, **PR-E**, **PR-F**, **PR-I** |
+| *Code review* CLI `slog` (`revolut-import`) | **PR-D** (**gedaan**) |
+| Geen expliciete regel maar scan-bevinding | **PR-A** (**gedaan**), **PR-E** (**gedaan**), **PR-F**, **PR-I** |
 
 ## Libraries vs zelf bouwen (richtlijn)
 

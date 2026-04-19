@@ -15,7 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -55,7 +55,7 @@ func readStatementFile(path string) ([]byte, error) {
 }
 
 func main() {
-	log.SetFlags(0)
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
@@ -69,7 +69,7 @@ func main() {
 		usage()
 		os.Exit(0)
 	default:
-		log.Printf("unknown subcommand %q\n", os.Args[1])
+		slog.Warn("unknown subcommand", "arg", os.Args[1])
 		usage()
 		os.Exit(2)
 	}
@@ -129,21 +129,21 @@ func runImport(args []string) int {
 	}
 	path := strings.TrimSpace(fs.Arg(0))
 	if path == "" {
-		log.Print("import: statement.csv path is required")
+		slog.Warn("import: statement.csv path is required")
 		return 2
 	}
 	if *purpose != "lunchkraam" && *purpose != "avondeten" {
-		log.Printf("import: invalid -purpose %q", *purpose)
+		slog.Warn("import: invalid -purpose", "purpose", *purpose)
 		return 2
 	}
 	raw, err := readStatementFile(path)
 	if err != nil {
-		log.Printf("import: read file: %v", err)
+		slog.Error("import: read file", "err", err)
 		return 1
 	}
 	rows, err := revolutcsv.Parse(bytes.NewReader(raw))
 	if err != nil {
-		log.Printf("import: parse csv: %v", err)
+		slog.Error("import: parse csv", "err", err)
 		return 1
 	}
 
@@ -152,18 +152,18 @@ func runImport(args []string) int {
 	if !*dryRun {
 		dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 		if dbURL == "" {
-			log.Print("import: DATABASE_URL is required (unless -dry-run)")
+			slog.Error("import: DATABASE_URL is required (unless -dry-run)")
 			return 1
 		}
 		pool, err := db.Connect(ctx, dbURL)
 		if err != nil {
-			log.Printf("import: database: %v", err)
+			slog.Error("import: database", "err", err)
 			return 1
 		}
 		defer pool.Close()
 		if *migrate {
 			if err := db.Migrate(ctx, pool, *migrationsDir); err != nil {
-				log.Printf("import: migrate: %v", err)
+				slog.Error("import: migrate", "err", err)
 				return 1
 			}
 		}
@@ -188,16 +188,26 @@ func runImport(args []string) int {
 	}
 	if *dryRun {
 		opts.OnDryRunRow = func(extID, spentOnISO string, amt float64, purpose, desc string) {
-			log.Printf("would upsert revolut expense id=%s date=%s amount=%.2f purpose=%s desc=%q",
-				extID, spentOnISO, amt, purpose, desc)
+			slog.Info("would upsert revolut expense",
+				"external_id", extID,
+				"spent_on", spentOnISO,
+				"amount_eur", amt,
+				"purpose", purpose,
+				"description", desc,
+			)
 		}
 	}
 	res, err := revolutimport.ImportDebitRows(ctx, st, rows, opts)
 	if err != nil {
-		log.Printf("import debits: %v", err)
+		slog.Error("import debits", "err", err)
 		return 1
 	}
-	log.Printf("debits: %d upserts (dry-run=%v), %d skipped %+v", res.Imported, res.DryRun, res.Skipped, res.SkipReasons)
+	slog.Info("import debits done",
+		"upserts", res.Imported,
+		"dry_run", res.DryRun,
+		"skipped", res.Skipped,
+		"skip_reasons", res.SkipReasons,
+	)
 
 	if *importCredits {
 		co := revolutimport.CreditOptions{
@@ -214,23 +224,35 @@ func runImport(args []string) int {
 		}
 		if *dryRun {
 			co.OnDryRunCreditRow = func(extID, receivedISO string, amt float64, purpose, desc string) {
-				log.Printf("would upsert revolut credit id=%s date=%s amount=%.2f purpose=%s desc=%q",
-					extID, receivedISO, amt, purpose, desc)
+				slog.Info("would upsert revolut credit",
+					"external_id", extID,
+					"received_on", receivedISO,
+					"amount_eur", amt,
+					"purpose", purpose,
+					"description", desc,
+				)
 			}
 		}
 		cres, cerr := revolutimport.ImportCreditRows(ctx, st, rows, co)
 		if cerr != nil {
-			log.Printf("import credits: %v", cerr)
+			slog.Error("import credits", "err", cerr)
 			return 1
 		}
-		log.Printf("credits: %d upserts (dry-run=%v), %d skipped lunch=%d avo=%d inferred_non_std=%d %+v",
-			cres.Imported, cres.DryRun, cres.Skipped, cres.CreditsLunchkraam, cres.CreditsAvondeten, cres.CreditsInferredNonStandard, cres.SkipReasons)
+		slog.Info("import credits done",
+			"upserts", cres.Imported,
+			"dry_run", cres.DryRun,
+			"skipped", cres.Skipped,
+			"credits_lunchkraam", cres.CreditsLunchkraam,
+			"credits_avondeten", cres.CreditsAvondeten,
+			"credits_inferred_non_standard", cres.CreditsInferredNonStandard,
+			"skip_reasons", cres.SkipReasons,
+		)
 	}
 
 	if !*dryRun && st != nil {
 		if bal, asOf, ok := revolutcsv.LatestEURStatementBalance(rows); ok {
 			if err := st.UpsertRevolutBalanceSnapshot(ctx, bal, asOf); err != nil {
-				log.Printf("revolut balance snapshot: %v", err)
+				slog.Warn("revolut balance snapshot upsert after import", "err", err)
 			}
 		}
 	}
@@ -250,31 +272,31 @@ func runReconcile(args []string) int {
 	}
 	path := strings.TrimSpace(fs.Arg(0))
 	if path == "" {
-		log.Print("reconcile: statement.csv path is required")
+		slog.Warn("reconcile: statement.csv path is required")
 		return 2
 	}
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL == "" {
-		log.Print("reconcile: DATABASE_URL is required")
+		slog.Error("reconcile: DATABASE_URL is required")
 		return 1
 	}
 
 	raw, err := readStatementFile(path)
 	if err != nil {
-		log.Printf("reconcile: read file: %v", err)
+		slog.Error("reconcile: read file", "err", err)
 		return 1
 	}
 
 	rows, err := revolutcsv.Parse(bytes.NewReader(raw))
 	if err != nil {
-		log.Printf("reconcile: parse csv: %v", err)
+		slog.Error("reconcile: parse csv", "err", err)
 		return 1
 	}
 
 	skip := revolutimport.ParseSkipTypes(*skipTypes)
 	loc, locErr := time.LoadLocation(revolutimport.TZ)
 	if locErr != nil {
-		log.Printf("reconcile: timezone: %v", locErr)
+		slog.Error("reconcile: timezone", "err", locErr)
 		return 1
 	}
 
@@ -299,13 +321,13 @@ func runReconcile(args []string) int {
 	ctx := context.Background()
 	pool, err := db.Connect(ctx, dbURL)
 	if err != nil {
-		log.Printf("reconcile: database: %v", err)
+		slog.Error("reconcile: database", "err", err)
 		return 1
 	}
 	defer pool.Close()
 	if *migrate {
 		if err := db.Migrate(ctx, pool, *migrationsDir); err != nil {
-			log.Printf("reconcile: migrate: %v", err)
+			slog.Error("reconcile: migrate", "err", err)
 			return 1
 		}
 	}
@@ -331,7 +353,7 @@ func runReconcile(args []string) int {
 	for _, y := range yearList {
 		buckets, err := st.AdminSalesByMonth(ctx, y)
 		if err != nil {
-			log.Printf("reconcile: sales %d: %v", y, err)
+			slog.Error("reconcile: sales by month", "year", y, "err", err)
 			return 1
 		}
 		fmt.Printf("Year %d\n", y)
