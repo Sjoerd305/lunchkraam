@@ -32,7 +32,7 @@
 - [x] Gedeelde **EUR cent-rounding** helper (`internal/money.RoundEUR`; vervangt `math.Round(v*100)/100` bij JSON-uitvoer en rapportage).
 - [x] Gedeelde **JSON body decode**: `httpx.ReadJSON` / `httpx.ReadJSONAllowEmpty` i.p.v. overal `json.NewDecoder(http.MaxBytesReader(…))` + uniforme 400 bij parse-fout.
 - [x] **Store error → HTTP** centraal in [internal/httpx/store_errors.go](internal/httpx/store_errors.go) (`RespondStoreNotFound`, `WriteBankCreditStoreError`, tosti/kaart/avondeten/local-password helpers); handlers roepen die aan i.p.v. lange `errors.Is`-ketens.
-- [x] **Logging**: `log/slog` met structured fields in de aangepaste handlers + [internal/httpx/json.go](internal/httpx/json.go); `slog.SetDefault` in [cmd/server/main.go](cmd/server/main.go). (`log` blijft voor `log.Fatalf` bij startup.)
+- [x] **Logging**: `log/slog` met structured fields in handlers + [internal/httpx/json.go](internal/httpx/json.go); `slog.SetDefault` in [cmd/server/main.go](cmd/server/main.go); server-startupmeldingen (dist, listen, shutdown, bonfoto-map) ook via `slog`. (`log` alleen nog voor `log.Fatalf` bij fatale startup.)
 
 ## Code health — frontend
 
@@ -48,9 +48,9 @@
 ### Code review / vervolg (korte scan 2026-04-19)
 
 - **Admin-fetchpatroon:** geen resterende `useEffect`+`void api.*`-loads op admin-pagina’s; mutaties invalidaten gerichte `queryKeys`.
-- **Dubbele jaar/omzet-logica:** zelfde `salesYears` + `salesStats` + jaarselectie staat op meerdere plekken — optioneel één kleine hook (`useAdminSalesYearQueries` o.i.d.) om drift te beperken.
+- [x] **Jaarlijst + geselecteerd jaar (admin):** gedeelde hook [frontend/src/hooks/useAdminSalesYearsSelect.ts](frontend/src/hooks/useAdminSalesYearsSelect.ts) voor `salesYears` + state/sync + foutpad; gebruikt op o.a. Financiën, uitgaven-overzicht, boodschappen.
 - **Buiten admin:** `KraamPage`, `CardsPage`, `BuyPage`, `OrderTostiPage` houden nog **lokale state + handmatige refresh**; Query is daar optioneel tot het patroon lastig wordt.
-- **Backend** (ongewijzigd t.o.v. eerdere lijst): compactere store-error→HTTP mapping en `slog` i.p.v. losse `log.Printf` blijven nuttige vervolgstappen (zie secties hierboven).
+- **CLI** (`cmd/revolut-import`): nog `log.Printf` — acceptabel voor een losstaand commando; serverpad blijft `slog`.
 
 ## Libraries vs zelf bouwen (richtlijn)
 

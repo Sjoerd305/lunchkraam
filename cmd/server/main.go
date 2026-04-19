@@ -32,12 +32,18 @@ func warnIfReceiptsDirNotWritable(dir string) {
 		return
 	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		log.Printf("warning: bonfoto-map %q: mkdir: %v — uploads mislukken tot dit is opgelost.", dir, err)
+		slog.Warn("bonfoto-map: mkdir failed; uploads will fail until fixed", "dir", dir, "err", err)
 		return
 	}
 	f, err := os.CreateTemp(dir, ".receipt-write-test-*")
 	if err != nil {
-		log.Printf("warning: bonfoto-map %q is niet beschrijfbaar: %v — zet RECEIPTS_DIR of maprechten goed (zie docker-compose).", dir, err)
+		slog.Warn(
+			"bonfoto-map: not writable; set RECEIPTS_DIR or directory permissions (see docker-compose)",
+			"dir",
+			dir,
+			"err",
+			err,
+		)
 		return
 	}
 	_ = f.Close()
@@ -232,9 +238,13 @@ func main() {
 				r.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir(assetsDir))))
 			}
 			r.Get("/*", spaFallback(dist))
-			log.Printf("serving SPA from %s", dist)
+			slog.Info("serving SPA", "dist", dist)
 		} else {
-			log.Printf("warning: frontend dist not found at %s (use Vite dev server + proxy, or run npm run build)", dist)
+			slog.Warn(
+				"frontend dist not found; use Vite dev server + proxy, or run npm run build",
+				"dist",
+				dist,
+			)
 		}
 	})
 
@@ -248,7 +258,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("listening on %s", cfg.ListenAddr)
+		slog.Info("listening", "addr", cfg.ListenAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server: %v", err)
 		}
@@ -261,7 +271,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("shutdown: %v", err)
+		slog.Warn("HTTP server shutdown", "err", err)
 	}
 }
 

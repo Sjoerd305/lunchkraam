@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
 import { queryKeys } from '../../queryKeys'
 import { formatEUR } from '../../utils/formatMoney'
 
@@ -40,7 +41,6 @@ export function AdminFinancePage() {
     [user?.is_admin, user?.is_operator],
   )
 
-  const [year, setYear] = useState<number | null>(null)
   const [bankTab, setBankTab] = useState<BankCreditsTab>('open')
   const [unmatchingBankId, setUnmatchingBankId] = useState<number | null>(null)
   const [waivingBankId, setWaivingBankId] = useState<number | null>(null)
@@ -48,27 +48,11 @@ export function AdminFinancePage() {
   const [suggestionsFor, setSuggestionsFor] = useState<number | null>(null)
   const [matchingId, setMatchingId] = useState<number | null>(null)
 
-  const yearsQuery = useQuery({
-    queryKey: queryKeys.admin.salesYears(isOperatorOnly),
-    queryFn: () => (isOperatorOnly ? api.getOperatorSalesYears() : api.getAdminSalesYears()),
+  const { yearsQuery, year, setYear } = useAdminSalesYearsSelect({
+    isOperatorOnly,
     enabled: Boolean(user),
+    onYearsError: (msg) => void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' }),
   })
-
-  useEffect(() => {
-    if (!yearsQuery.data) return
-    const ys = yearsQuery.data
-    setYear((prev) => {
-      if (prev !== null && ys.includes(prev)) return prev
-      return ys[0] ?? new Date().getFullYear()
-    })
-  }, [yearsQuery.data])
-
-  useEffect(() => {
-    if (!yearsQuery.isError || !yearsQuery.error) return
-    setYear(new Date().getFullYear())
-    const msg = yearsQuery.error instanceof api.ApiError ? yearsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
-  }, [yearsQuery.isError, yearsQuery.error, alert])
 
   const salesStatsQuery = useQuery({
     queryKey: queryKeys.admin.salesStats(year ?? 0, isOperatorOnly),

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
 import { queryKeys } from '../../queryKeys'
 import { formatEUR } from '../../utils/formatMoney'
 
@@ -165,7 +166,6 @@ export function AdminShopExpensesPage() {
     [user?.is_admin, user?.is_operator],
   )
 
-  const [year, setYear] = useState<number | null>(null)
   const [amount, setAmount] = useState('')
   const [spentOn, setSpentOn] = useState(todayISO)
   const [purpose, setPurpose] = useState<api.ShopExpensePurpose>('lunchkraam')
@@ -196,27 +196,11 @@ export function AdminShopExpensesPage() {
   const [revolutCreditAvondetenEUR, setRevolutCreditAvondetenEUR] = useState('10')
   const [reviewActioning, setReviewActioning] = useState<number | null>(null)
 
-  const yearsQuery = useQuery({
-    queryKey: queryKeys.admin.salesYears(isOperatorOnly),
-    queryFn: () => (isOperatorOnly ? api.getOperatorSalesYears() : api.getAdminSalesYears()),
+  const { yearsQuery, year, setYear } = useAdminSalesYearsSelect({
+    isOperatorOnly,
     enabled: Boolean(user),
+    onYearsError: (msg) => void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' }),
   })
-
-  useEffect(() => {
-    if (!yearsQuery.data) return
-    const ys = yearsQuery.data
-    setYear((prev) => {
-      if (prev !== null && ys.includes(prev)) return prev
-      return ys[0] ?? new Date().getFullYear()
-    })
-  }, [yearsQuery.data])
-
-  useEffect(() => {
-    if (!yearsQuery.isError || !yearsQuery.error) return
-    setYear(new Date().getFullYear())
-    const msg = yearsQuery.error instanceof api.ApiError ? yearsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Jaren laden mislukt', message: msg, variant: 'error' })
-  }, [yearsQuery.isError, yearsQuery.error, alert])
 
   const listQuery = useQuery({
     queryKey: queryKeys.admin.shopExpensesList(year ?? 0, isOperatorOnly),
