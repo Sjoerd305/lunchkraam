@@ -4,6 +4,16 @@ export const queryKeys = {
   member: {
     myCards: ['member', 'cards'] as const,
     buyInfo: ['member', 'buy-info'] as const,
+    myTostiOrders: ['member', 'my-tosti-orders'] as const,
+    tostiQueue: ['member', 'tosti-queue'] as const,
+  },
+  /** Operator / kraam console (invalidate prefix `['operator']` for full kraam refresh). */
+  operator: {
+    cards: (q: string) => ['operator', 'cards', q.trim()] as const,
+    members: ['operator', 'members'] as const,
+    tostiOrders: ['operator', 'tosti-orders'] as const,
+    soldToday: ['operator', 'tosti-sold-today'] as const,
+    avondetenRegistrations: (mealDate: string) => ['operator', 'avondeten-registrations', mealDate] as const,
   },
   admin: {
     dashboard: ['admin', 'dashboard'] as const,

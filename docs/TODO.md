@@ -51,7 +51,7 @@
 - **Admin-fetchpatroon:** geen resterende `useEffect`+`void api.*`-loads op admin-pagina’s; mutaties invalidaten gerichte `queryKeys`.
 - [x] **Jaarlijst + geselecteerd jaar (admin):** gedeelde hook [frontend/src/hooks/useAdminSalesYearsSelect.ts](frontend/src/hooks/useAdminSalesYearsSelect.ts) voor `salesYears` + state/sync + foutpad; gebruikt op Financiën, uitgaven-overzicht, boodschappen en **admin grafieken** (`AdminSalesCharts`, met `emptyYearsListBehavior` waar lege API-lijst het vorige jaar behoudt).
 - [x] **Jaar-dropdown opties:** pure helper [frontend/src/utils/adminYearSelectOptions.ts](frontend/src/utils/adminYearSelectOptions.ts) + [unit test](frontend/src/utils/adminYearSelectOptions.test.ts); vervangt copy-paste `useMemo` op dezelfde admin-pagina’s.
-- **Buiten admin:** `KraamPage`, `CardsPage`, `BuyPage`, `OrderTostiPage` houden nog **lokale state + handmatige refresh**; Query is daar optioneel tot het patroon lastig wordt.
+- **Buiten admin:** [frontend/src/pages/KraamPage.tsx](../frontend/src/pages/KraamPage.tsx) op **TanStack Query** + WS-invalidatie; [frontend/src/pages/BuyPage.tsx](../frontend/src/pages/BuyPage.tsx) + [frontend/src/pages/OrderTostiPage.tsx](../frontend/src/pages/OrderTostiPage.tsx) op Query (`buyInfo`, `myCards` / `myTostiOrders` / `tostiQueue`) — zie **PR-H**.
 - [x] **CLI** (`cmd/revolut-import`): diagnostiek via `slog` (stderr); reconcile-tabel via `fmt` (stdout) — zie **PR-D**.
 - [x] **Admin query-fout → alert/toast:** gedeelde hook [frontend/src/hooks/useQueryErrorAlert.ts](frontend/src/hooks/useQueryErrorAlert.ts) i.p.v. copy-paste `useEffect` op admin-pagina’s (incl. Financiën met meerdere queries).
 
@@ -71,7 +71,8 @@
 - [x] **Card-kind labels/badges:** [frontend/src/utils/cardKindPresentation.ts](frontend/src/utils/cardKindPresentation.ts); Kraam re-exporteert vanuit [frontend/src/pages/kraam/kraamFormat.ts](frontend/src/pages/kraam/kraamFormat.ts).
 - [x] **Lidgerichte + chart-tick euro’s:** `formatEURFromString` / `formatEUR` op Buy, Dashboard, admin-grafieken ([frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts)).
 - [x] **TanStack Query (deels):** `queryKeys.member` + [frontend/src/pages/CardsPage.tsx](frontend/src/pages/CardsPage.tsx) op Query; [frontend/src/pages/BuyPage.tsx](frontend/src/pages/BuyPage.tsx) invalideert `myCards` na mutaties.
-- [ ] (Optioneel) **Kraam + OrderTosti:** Query + WebSocket `invalidateQueries`.
+- [x] **Kraam (operator):** Query + WebSocket `invalidateQueries` — [frontend/src/pages/KraamPage.tsx](../frontend/src/pages/KraamPage.tsx), `queryKeys.operator.*` in [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts).  
+- [x] **OrderTosti + Buy (lid):** `useQuery` + `invalidateQueries` — [frontend/src/pages/OrderTostiPage.tsx](../frontend/src/pages/OrderTostiPage.tsx), [frontend/src/pages/BuyPage.tsx](../frontend/src/pages/BuyPage.tsx); `queryKeys.member.myTostiOrders` + `tostiQueue` in [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts) (**PR-H**).
 - [ ] (Optioneel) **Zod:** WebSocket-payload in `useTostiRealtime`; error-JSON in `apiRequest.parseError`.
 
 ---
@@ -156,21 +157,23 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Veld | Inhoud |
 |------|--------|
 | **Doel** | Zelfde server-state-patroon als admin: caching, dedupe, `invalidateQueries` na mutaties. |
-| **Context** | *Production backlog*: Kraam nog handmatige loads + veel `useState`; WebSocket in [frontend/src/useTostiRealtime.ts](../frontend/src/useTostiRealtime.ts) (of gelijknamige hook). |
-| **Wijzigingen** | 1) Nieuwe `queryKeys` voor operator endpoints (kaarten, leden, tosti-wachtrij, betaalverzoeken, avondeten, verkocht-vandaag). 2) `useQuery` per domein met `enabled: Boolean(user)` / operatorrol. 3) `useMutation` + `onSuccess` → `invalidateQueries` voor getroffen keys. 4) In WS-handler: gerichte `invalidateQueries` (geen blanket `invalidateQueries()`), documenteren in PR. 5) Optioneel later: Zod op WS-payload (staat al in backlog). |
-| **Acceptatie** | Handmatig kraam-flow: zoeken, verkopen, tosti leveren/annuleren, betalingen, avondeten; geen dubbele spinners; netwerk-tab toont geen storm van identieke requests. |
-| **Risico** | **Hoog** voor realtime-koppeling — feature-flag of achter env is optioneel. |
-| **Grootte** | Groot; overweeg **PR-G1** alleen reads + **PR-G2** mutaties + WS. |
+| **Context** | *Production backlog*: Kraam had handmatige loads + `useState`; WebSocket via [frontend/src/useTostiRealtime.ts](../frontend/src/useTostiRealtime.ts). |
+| **Wijzigingen (uitgevoerd)** | 1) [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts) — `queryKeys.operator` (`cards(q)`, `members`, `tostiOrders`, `soldToday`, `avondetenRegistrations(mealDate)`). Betalingen delen `queryKeys.admin.requests` met admin-aanvragen. 2) [frontend/src/pages/KraamPage.tsx](../frontend/src/pages/KraamPage.tsx) — `useQuery` per domein met `enabled` op operator/admin-rol; debounce 300ms op kaart-zoekterm; `useQueryErrorAlert` voor laadfouten (behalve verkocht-vandaag: stil `null` zoals voorheen). 3) Mutaties: `queryClient.invalidateQueries` op gerichte keys i.p.v. handmatige `load*`. 4) WS `onHint`: `open` → prefix `['operator']` + `admin.requests`; `tosti_queue` → orders, sold-today, `cards`-prefix, huidige avondeten-key; `payment_requests` → `admin.requests` alleen. Geen `useMutation`-wrapper (bewuste minimale diff). |
+| **Acceptatie** | `npm run build`; handmatig kraam-flow (zoeken, knipje, tosti, betalingen, avondeten, fysieke verkoop). |
+| **Risico** | Realtime + cache — mitigatie: smalle invalidation; `admin.requests` deelt cache met `AdminRequestsPage`. |
+| **Grootte** | Groot; **PR-H** volgt voor OrderTosti/Buy. |
+| **Status** | **Gedaan** (Kraam alleen). |
 
 ### PR-H — Frontend: `OrderTostiPage` (en rest Buy) naar Query
 
 | Veld | Inhoud |
 |------|--------|
-| **Doel** | Consistentie met `BuyPage` / `CardsPage`; minder `useEffect`+manual refresh. |
-| **Wijzigingen** | `OrderTostiPage`: queues/recents via `useQuery` + keys in `queryKeys`; mutaties invalidaten sibling-queries. BuyPage: `getBuyInfo` als `useQuery` i.p.v. alleen `loadBuyInfo` callback (BuyPage gebruikt al `queryClient` voor invalidatie — afronden). |
-| **Acceptatie** | Vitest waar zinvol; handmatig tosti bestellen/annuleren. |
-| **Risico** | Medium. |
-| **Grootte** | Medium (per pagina eigen PR mogelijk). |
+| **Doel** | Consistentie met `CardsPage` / admin; minder `useEffect`+manual refresh. |
+| **Wijzigingen (uitgevoerd)** | 1) [frontend/src/queryKeys.ts](../frontend/src/queryKeys.ts) — `member.myTostiOrders`, `member.tostiQueue` (naast bestaande `myCards`, `buyInfo`). 2) [frontend/src/pages/OrderTostiPage.tsx](../frontend/src/pages/OrderTostiPage.tsx) — `useQuery` voor kaarten (`myCards`), `getMyTostiOrders`, wachtrij (stille fout in `queryFn` zoals voorheen); eerste render wacht op `isFetched` voor alle drie; WebSocket + mutaties → `invalidateQueries` op `myCards`, `myTostiOrders`, `tostiQueue` + `refresh()`. 3) [frontend/src/pages/BuyPage.tsx](../frontend/src/pages/BuyPage.tsx) — `getBuyInfo` via `useQuery` + `useQueryErrorAlert`; mutaties invalidaten `buyInfo` naast `myCards`. |
+| **Acceptatie** | `npm run build`; handmatig Buy + tosti bestellen/annuleren. |
+| **Risico** | Medium — gedeelde `myCards`-cache met `CardsPage` / OrderTosti blijft bewust één bron. |
+| **Grootte** | Medium. |
+| **Status** | **Gedaan**. |
 
 ### PR-I — Frontend: Zod + robuustheid randgevallen
 
@@ -196,9 +199,10 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 3. **PR-C** (`httptest` smoke) — **afgerond**.  
 4. **PR-D** (CLI `slog`) — **afgerond**.  
 5. **PR-E** (`AdminShopExpensesPage`-split) — **afgerond**.  
-6. **PR-F** (api-modularisatie) — **afgerond**. Vervolg: **PR-G** / **PR-H** (Query-migraties) naar behoefte.  
-7. **PR-G** / **PR-H** (Query-migraties) — in deel-PR’s als review-capaciteit beperkt is.  
-8. **PR-I** — wanneer prioriteit voor WS/error-hardening.
+6. **PR-F** (api-modularisatie) — **afgerond**.  
+7. **PR-G** (Kraam + Query + WS-invalidatie) — **afgerond**.  
+8. **PR-H** (OrderTosti + Buy op Query) — **afgerond**.  
+9. **PR-I** — wanneer prioriteit voor WS/error-hardening.
 
 ---
 
@@ -207,7 +211,7 @@ Onderstaande PR’s zijn bewust **klein houdbaar per scope** zodat review en rol
 | Backlog-regel | PR |
 |---------------|-----|
 | *Production backlog — Backend* “shop_expenses_revolut_import splitsen” | **PR-B** |
-| *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G**, **PR-H** |
+| *Production backlog — Frontend* “Kraam + OrderTosti Query” | **PR-G** (**gedaan**), **PR-H** (**gedaan**) |
 | *Code health — backend* HTTP smoke / uitbreidbare `httptest` | **PR-C** (**gedaan**) |
 | *Code review* CLI `slog` (`revolut-import`) | **PR-D** (**gedaan**) |
 | Geen expliciete regel maar scan-bevinding | **PR-A** (**gedaan**), **PR-E** (**gedaan**), **PR-F** (**gedaan**), **PR-I** |

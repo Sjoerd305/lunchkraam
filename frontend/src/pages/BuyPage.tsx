@@ -1,8 +1,9 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
 import { useAlertDialog } from '../components/useAlertDialog'
+import { useQueryErrorAlert } from '../hooks/useQueryErrorAlert'
 import { formatEURFromString } from '../utils/formatMoney'
 import { cardKindLabel } from '../utils/cardKindPresentation'
 import { queryKeys } from '../queryKeys'
@@ -11,35 +12,23 @@ export function BuyPage() {
   const { user, csrf, refresh } = useAuth()
   const queryClient = useQueryClient()
   const { alert, confirm } = useAlertDialog()
-  const [info, setInfo] = useState<api.BuyInfo | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadFailed, setLoadFailed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [cancellingId, setCancellingId] = useState<number | null>(null)
   const [cancellingAll, setCancellingAll] = useState(false)
 
-  const loadBuyInfo = useCallback(async () => {
-    setLoading(true)
-    setLoadFailed(false)
-    try {
+  const buyInfoQuery = useQuery({
+    queryKey: queryKeys.member.buyInfo,
+    queryFn: async () => {
       const b = await api.getBuyInfo()
-      setInfo({
-        ...b,
-        my_pending_requests: b.my_pending_requests ?? [],
-      })
-    } catch (e) {
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      setLoadFailed(true)
-      setInfo(null)
-      void alert({ title: 'Laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [alert])
+      return { ...b, my_pending_requests: b.my_pending_requests ?? [] } satisfies api.BuyInfo
+    },
+  })
 
-  useEffect(() => {
-    void loadBuyInfo()
-  }, [loadBuyInfo])
+  useQueryErrorAlert(buyInfoQuery, { title: 'Laden mislukt', alert })
+
+  const info = buyInfoQuery.data ?? null
+  const loading = buyInfoQuery.isPending
+  const loadFailed = buyInfoQuery.isError && !info
 
   const pending = info?.my_pending_requests ?? []
   const hasAnyPending = pending.length > 0
@@ -55,8 +44,8 @@ export function BuyPage() {
     try {
       await api.requestCard(csrf, kind)
       await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.member.buyInfo })
       await refresh()
-      await loadBuyInfo()
       const isAvondeten = kind === 'avondeten'
       await alert({
         title: 'Aanvraag ontvangen',
@@ -68,7 +57,7 @@ export function BuyPage() {
     } catch (e) {
       if (e instanceof api.ApiError && e.code === 'already_pending') {
         await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
-        await loadBuyInfo()
+        await queryClient.invalidateQueries({ queryKey: queryKeys.member.buyInfo })
       }
       const msg = e instanceof api.ApiError ? e.message : 'Aanvraag mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -90,8 +79,8 @@ export function BuyPage() {
     try {
       await api.cancelMyRequest(csrf, id)
       await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.member.buyInfo })
       await refresh()
-      await loadBuyInfo()
       await alert({ title: 'Geannuleerd', message: 'De aanvraag is verwijderd uit de wachtrij.', variant: 'success' })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Annuleren mislukt.'
@@ -114,8 +103,8 @@ export function BuyPage() {
     try {
       const n = await api.cancelAllMyPendingRequests(csrf)
       await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.member.buyInfo })
       await refresh()
-      await loadBuyInfo()
       await alert({
         title: 'Geannuleerd',
         message:
@@ -132,17 +121,17 @@ export function BuyPage() {
     }
   }
 
-  if (loading && !loadFailed) {
+  if (loading && !buyInfoQuery.isError) {
     return <p className="text-slate-600">Laden…</p>
   }
 
-  if (loadFailed && !info) {
+  if (loadFailed) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-md">
         <p className="text-slate-600">Deze pagina kon niet worden geladen.</p>
         <button
           type="button"
-          onClick={() => void loadBuyInfo()}
+          onClick={() => void buyInfoQuery.refetch()}
           className="min-h-12 w-full max-w-xs rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
         >
           Opnieuw proberen

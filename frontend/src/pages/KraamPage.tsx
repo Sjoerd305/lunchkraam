@@ -1,8 +1,11 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
 import { useAlertDialog } from '../components/useAlertDialog'
+import { useQueryErrorAlert } from '../hooks/useQueryErrorAlert'
+import { queryKeys } from '../queryKeys'
 import { useTostiRealtime } from '../useTostiRealtime'
 import { breadLabel, fillingLabel } from '../utils/tostiLabels'
 import { localISODate, isPhysicalTostiOrder } from './kraam/kraamFormat'
@@ -13,180 +16,125 @@ import { KraamPhysicalSaleSection } from './kraam/KraamPhysicalSaleSection'
 import { KraamSoldTodayHeader } from './kraam/KraamSoldTodayHeader'
 import { KraamTostiQueueSection } from './kraam/KraamTostiQueueSection'
 
+const operatorEnabled = (user: api.User | null) =>
+  Boolean(user && (user.is_admin || user.is_operator))
+
 export function KraamPage() {
   const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
+  const queryClient = useQueryClient()
   const [q, setQ] = useState('')
-  const [rows, setRows] = useState<api.OperatorCardRow[]>([])
-  const [members, setMembers] = useState<api.OperatorMember[]>([])
-  const [orders, setOrders] = useState<api.OperatorTostiOrderRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingOrders, setLoadingOrders] = useState(true)
+  const [debouncedQ, setDebouncedQ] = useState(q)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [busyOrder, setBusyOrder] = useState<{ id: number; action: 'deliver' | 'cancel' } | null>(null)
-  const [paymentRows, setPaymentRows] = useState<api.AdminRequest[]>([])
-  const [paymentLoading, setPaymentLoading] = useState(true)
-  const [paymentLoadFailed, setPaymentLoadFailed] = useState(false)
   const [paymentBusyId, setPaymentBusyId] = useState<number | null>(null)
   const [avondetenMealDate, setAvondetenMealDate] = useState(() => localISODate())
-  const [avondetenRows, setAvondetenRows] = useState<api.AvondetenRegistrationCard[]>([])
-  const [avondetenLoading, setAvondetenLoading] = useState(true)
   const [avondetenPicked, setAvondetenPicked] = useState<number[]>([])
   const [avondetenSubmitting, setAvondetenSubmitting] = useState(false)
-  const [soldToday, setSoldToday] = useState<api.OperatorTostiSoldToday | null>(null)
-  const [soldTodayLoading, setSoldTodayLoading] = useState(true)
   const [saleUserID, setSaleUserID] = useState<number>(0)
   const [saleKind, setSaleKind] = useState<api.CardKind>('tosti')
   const [salePaymentMethod, setSalePaymentMethod] = useState<api.PaymentMethod>('tikkie')
   const [saleSubmitting, setSaleSubmitting] = useState(false)
 
-  const loadPayments = useCallback(async () => {
-    setPaymentLoading(true)
-    setPaymentLoadFailed(false)
-    try {
-      const list = await api.getAdminRequests()
-      setPaymentRows(list)
-    } catch (e) {
-      setPaymentRows([])
-      setPaymentLoadFailed(true)
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Betalingswachtrij laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setPaymentLoading(false)
-    }
-  }, [alert])
-
-  const loadOrders = useCallback(async () => {
-    setLoadingOrders(true)
-    try {
-      const list = await api.getOperatorTostiOrders()
-      setOrders(list)
-    } catch (e) {
-      setOrders([])
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Bestelwachtrij laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoadingOrders(false)
-    }
-  }, [alert])
-
-  const loadSoldToday = useCallback(async () => {
-    setSoldTodayLoading(true)
-    try {
-      const r = await api.getOperatorTostiSoldToday()
-      setSoldToday(r)
-    } catch {
-      setSoldToday(null)
-    } finally {
-      setSoldTodayLoading(false)
-    }
-  }, [])
-
-  const loadAvondeten = useCallback(async () => {
-    setAvondetenLoading(true)
-    try {
-      const r = await api.getAvondetenRegistrations(avondetenMealDate)
-      setAvondetenRows(r.cards)
-      setAvondetenPicked([])
-    } catch (e) {
-      setAvondetenRows([])
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Avondetenlijst laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setAvondetenLoading(false)
-    }
-  }, [avondetenMealDate, alert])
+  const kraamEnabled = operatorEnabled(user)
 
   useEffect(() => {
-    void loadAvondeten()
-  }, [loadAvondeten])
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const list = await api.getOperatorCards(q)
-      setRows(list)
-    } catch (e) {
-      setRows([])
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Kaarten laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [q, alert])
-
-  const loadMembers = useCallback(async () => {
-    try {
-      const list = await api.getOperatorMembers()
-      setMembers(list)
-    } catch (e) {
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      setMembers([])
-      void alert({ title: 'Leden laden mislukt', message: msg, variant: 'error' })
-    }
-  }, [alert])
-
-  useEffect(() => {
-    void loadOrders()
-  }, [loadOrders])
-
-  useEffect(() => {
-    void loadSoldToday()
-  }, [loadSoldToday])
-
-  useEffect(() => {
-    void loadPayments()
-  }, [loadPayments])
-
-  useEffect(() => {
-    const t = window.setTimeout(() => void load(), 300)
+    const t = window.setTimeout(() => setDebouncedQ(q), 300)
     return () => window.clearTimeout(t)
-  }, [load])
+  }, [q])
+
+  const cardsQuery = useQuery({
+    queryKey: queryKeys.operator.cards(debouncedQ),
+    queryFn: () => api.getOperatorCards(debouncedQ),
+    enabled: kraamEnabled,
+  })
+  const membersQuery = useQuery({
+    queryKey: queryKeys.operator.members,
+    queryFn: () => api.getOperatorMembers(),
+    enabled: kraamEnabled,
+  })
+  const ordersQuery = useQuery({
+    queryKey: queryKeys.operator.tostiOrders,
+    queryFn: () => api.getOperatorTostiOrders(),
+    enabled: kraamEnabled,
+  })
+  const soldTodayQuery = useQuery({
+    queryKey: queryKeys.operator.soldToday,
+    queryFn: () => api.getOperatorTostiSoldToday(),
+    enabled: kraamEnabled,
+    retry: false,
+  })
+  const paymentsQuery = useQuery({
+    queryKey: queryKeys.admin.requests,
+    queryFn: () => api.getAdminRequests(),
+    enabled: kraamEnabled,
+  })
+  const avondetenQuery = useQuery({
+    queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
+    queryFn: () => api.getAvondetenRegistrations(avondetenMealDate),
+    enabled: kraamEnabled,
+  })
+
+  useQueryErrorAlert(cardsQuery, { title: 'Kaarten laden mislukt', alert })
+  useQueryErrorAlert(ordersQuery, { title: 'Bestelwachtrij laden mislukt', alert })
+  useQueryErrorAlert(paymentsQuery, { title: 'Betalingswachtrij laden mislukt', alert })
+  useQueryErrorAlert(avondetenQuery, { title: 'Avondetenlijst laden mislukt', alert })
+  useQueryErrorAlert(membersQuery, { title: 'Leden laden mislukt', alert })
+
+  const rows = cardsQuery.data ?? []
+  const members = membersQuery.data ?? []
+  const orders = ordersQuery.data ?? []
+  const paymentRows = paymentsQuery.data ?? []
+  const soldToday = soldTodayQuery.isError ? null : (soldTodayQuery.data ?? null)
+  const avondetenRows = avondetenQuery.data?.cards ?? []
+
+  const loading = cardsQuery.isFetching
+  const loadingOrders = ordersQuery.isFetching
+  const paymentLoading = paymentsQuery.isFetching
+  const paymentLoadFailed = paymentsQuery.isError
+  const avondetenLoading = avondetenQuery.isFetching
+  const soldTodayLoading = soldTodayQuery.isFetching
 
   useEffect(() => {
-    void loadMembers()
-  }, [loadMembers])
+    if (avondetenQuery.isSuccess) setAvondetenPicked([])
+  }, [avondetenQuery.dataUpdatedAt, avondetenMealDate, avondetenQuery.isSuccess])
+
+  const invalidateKraamAll = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['operator'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests }),
+    ])
+  }, [queryClient])
 
   const onKraamRealtime = useCallback(
     (reason: string) => {
       if (reason === 'open') {
-        void loadOrders()
-        void loadSoldToday()
-        void load()
-        void loadPayments()
-        void loadAvondeten()
+        void invalidateKraamAll()
         return
       }
       if (reason === 'tosti_queue') {
-        void loadOrders()
-        void loadSoldToday()
-        void load()
-        void loadAvondeten()
+        void queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.operator.soldToday })
+        void queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] })
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
+        })
         return
       }
       if (reason === 'payment_requests') {
-        void loadPayments()
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
       }
     },
-    [loadOrders, loadSoldToday, load, loadPayments, loadAvondeten],
+    [queryClient, invalidateKraamAll, avondetenMealDate],
   )
 
-  useTostiRealtime(
-    '/ws/kraam',
-    Boolean(user && (user.is_admin || user.is_operator)),
-    onKraamRealtime,
-    ['tosti_queue', 'payment_requests'],
-  )
+  useTostiRealtime('/ws/kraam', kraamEnabled, onKraamRealtime, ['tosti_queue', 'payment_requests'])
 
   if (!user) {
     return <Navigate to="/login" replace />
   }
   if (!user.is_admin && !user.is_operator) {
     return <Navigate to="/" replace />
-  }
-
-  async function refreshAll() {
-    await Promise.all([loadOrders(), loadSoldToday(), loadPayments(), load(), loadAvondeten(), loadMembers()])
   }
 
   function toggleAvondetenPick(cardId: number) {
@@ -214,8 +162,10 @@ export function KraamPage() {
     setAvondetenSubmitting(true)
     try {
       const n = await api.postAvondetenRegister(csrf, avondetenMealDate, avondetenPicked)
-      await loadAvondeten()
-      await load()
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
+      })
+      await queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] })
       await refresh()
       await alert({
         title: 'Opgeslagen',
@@ -260,7 +210,7 @@ export function KraamPage() {
         kind: saleKind,
         payment_method: salePaymentMethod,
       })
-      await refreshAll()
+      await invalidateKraamAll()
       await refresh()
       await alert({
         title: 'Verkoop geregistreerd',
@@ -291,7 +241,7 @@ export function KraamPage() {
     setPaymentBusyId(id)
     try {
       await api.fulfillRequest(csrf, id)
-      await loadPayments()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
       await refresh()
       await alert({
         title: 'Geaccordeerd',
@@ -318,7 +268,7 @@ export function KraamPage() {
     setPaymentBusyId(id)
     try {
       await api.rejectAdminRequest(csrf, id)
-      await loadPayments()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
       await refresh()
       await alert({ title: 'Afgewezen', message: 'De aanvraag is geannuleerd.', variant: 'success' })
     } catch (e) {
@@ -342,7 +292,7 @@ export function KraamPage() {
     setBusyId(c.id)
     try {
       await api.useKnipje(csrf, c.id)
-      await load()
+      await queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] })
       await refresh()
       await alert({
         title: 'Geregistreerd',
@@ -358,13 +308,13 @@ export function KraamPage() {
   }
 
   async function onDeliverOrder(o: api.OperatorTostiOrderRow) {
-    const q = o.quantity
-    const qtyPrefix = q > 1 ? `${q}× ` : ''
+    const qty = o.quantity
+    const qtyPrefix = qty > 1 ? `${qty}× ` : ''
     const physical = isPhysicalTostiOrder(o)
-    const knipjeTxt = q === 1 ? '1 knipje wordt' : `${q} knipjes worden`
+    const knipjeTxt = qty === 1 ? '1 knipje wordt' : `${qty} knipjes worden`
     const breadShort = breadLabel(o.bread, 'short')
     const confirmMessage = physical
-      ? `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${q === 1 ? '1 knipje' : `${q} knipjes`} op de kaart.`
+      ? `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${qty === 1 ? '1 knipje' : `${qty} knipjes`} op de kaart.`
       : `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)} — ${knipjeTxt} afgetrokken van kaart #${o.card_id}.`
     const ok = await confirm({
       title: 'Als geleverd markeren?',
@@ -377,17 +327,17 @@ export function KraamPage() {
     setBusyOrder({ id: o.id, action: 'deliver' })
     try {
       await api.deliverOperatorTostiOrder(csrf, o.id)
-      await refreshAll()
+      await invalidateKraamAll()
       await refresh()
       await alert({
         title: 'Geleverd',
         message: physical
-          ? q === 1
+          ? qty === 1
             ? 'Knip 1 knipje op de fysieke kaart.'
-            : `Knip ${q} knipjes op de fysieke kaart.`
-          : q === 1
+            : `Knip ${qty} knipjes op de fysieke kaart.`
+          : qty === 1
             ? 'Het knipje is afgetrokken.'
-            : `De ${q} knipjes zijn afgetrokken.`,
+            : `De ${qty} knipjes zijn afgetrokken.`,
         variant: 'success',
       })
     } catch (e) {
@@ -410,7 +360,7 @@ export function KraamPage() {
     setBusyOrder({ id: o.id, action: 'cancel' })
     try {
       await api.cancelOperatorTostiOrder(csrf, o.id)
-      await loadOrders()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders })
       await alert({ title: 'Geannuleerd', message: 'De bestelling is geannuleerd.', variant: 'success' })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Mislukt.'
@@ -423,6 +373,27 @@ export function KraamPage() {
   const avondetenSelectable = avondetenRows.filter((r) => !r.registered_for_date && r.knipjes_remaining > 0)
   const avondetenPickableIds = new Set(avondetenSelectable.map((r) => r.card_id))
 
+  const refreshQueue = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.operator.soldToday }),
+    ])
+  }, [queryClient])
+
+  const refreshPayments = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
+  }, [queryClient])
+
+  const refreshAvondeten = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
+    })
+  }, [queryClient, avondetenMealDate])
+
+  const refreshCardSearch = useCallback(async () => {
+    await invalidateKraamAll()
+  }, [invalidateKraamAll])
+
   return (
     <div className="space-y-10">
       <KraamSoldTodayHeader soldTodayLoading={soldTodayLoading} soldToday={soldToday} />
@@ -431,7 +402,7 @@ export function KraamPage() {
         loadingOrders={loadingOrders}
         orders={orders}
         busyOrder={busyOrder}
-        onRefreshQueue={() => void Promise.all([loadOrders(), loadSoldToday()])}
+        onRefreshQueue={() => void refreshQueue()}
         onDeliverOrder={onDeliverOrder}
         onCancelOrder={onCancelOrder}
       />
@@ -442,7 +413,7 @@ export function KraamPage() {
         paymentLoadFailed={paymentLoadFailed}
         paymentRows={paymentRows}
         paymentBusyId={paymentBusyId}
-        onRefresh={loadPayments}
+        onRefresh={() => void refreshPayments()}
         onFulfill={onPaymentFulfill}
         onReject={onPaymentReject}
       />
@@ -465,7 +436,7 @@ export function KraamPage() {
         loading={loading}
         rows={rows}
         busyId={busyId}
-        onRefreshAll={refreshAll}
+        onRefreshAll={() => void refreshCardSearch()}
         onUseKnipje={onUseKnipje}
       />
 
@@ -478,7 +449,7 @@ export function KraamPage() {
         avondetenPickableIds={avondetenPickableIds}
         avondetenSubmitting={avondetenSubmitting}
         onTogglePick={toggleAvondetenPick}
-        onRefresh={loadAvondeten}
+        onRefresh={() => void refreshAvondeten()}
         onSubmit={onSubmitAvondeten}
       />
     </div>

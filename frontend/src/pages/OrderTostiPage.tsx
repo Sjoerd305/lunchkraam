@@ -1,7 +1,10 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
 import { useAlertDialog } from '../components/useAlertDialog'
+import { useQueryErrorAlert } from '../hooks/useQueryErrorAlert'
+import { queryKeys } from '../queryKeys'
 import { useTostiRealtime } from '../useTostiRealtime'
 import {
   freeKnipjesForCard,
@@ -15,11 +18,7 @@ import { OrderTostiRecentSection } from './tosti/OrderTostiRecentSection'
 export function OrderTostiPage() {
   const { csrf, refresh, user } = useAuth()
   const { alert, confirm } = useAlertDialog()
-  const [cards, setCards] = useState<api.Card[]>([])
-  const [orders, setOrders] = useState<api.TostiOrder[]>([])
-  const [queue, setQueue] = useState<api.TostiQueueEntry[]>([])
-  const [queueLoadError, setQueueLoadError] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [submitting, setSubmitting] = useState(false)
   const [cardId, setCardId] = useState<number | ''>('')
   const [paymentMode, setPaymentMode] = useState<'digital' | 'physical'>('digital')
@@ -29,36 +28,56 @@ export function OrderTostiPage() {
   const [filling, setFilling] = useState<api.TostiFilling>('ham')
   const [stallRemark, setStallRemark] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [cList, oList] = await Promise.all([api.getCards(), api.getMyTostiOrders()])
-      const tostiCards = cList.filter((c) => c.kind === 'tosti')
-      setCards(tostiCards)
-      setOrders(oList)
+  const cardsQuery = useQuery({
+    queryKey: queryKeys.member.myCards,
+    queryFn: () => api.getCards(),
+  })
+  const ordersQuery = useQuery({
+    queryKey: queryKeys.member.myTostiOrders,
+    queryFn: () => api.getMyTostiOrders(),
+  })
+  const queueQuery = useQuery({
+    queryKey: queryKeys.member.tostiQueue,
+    queryFn: async (): Promise<{ rows: api.TostiQueueEntry[]; loadError: boolean }> => {
       try {
-        setQueue(await api.getTostiQueue())
-        setQueueLoadError(false)
+        const rows = await api.getTostiQueue()
+        return { rows, loadError: false }
       } catch {
-        setQueue([])
-        setQueueLoadError(true)
+        return { rows: [], loadError: true }
       }
-      const usable = tostiCards.filter((c) => freeKnipjesForCard(c, oList) > 0)
-      setCardId((prev) => {
-        if (prev !== '' && usable.some((c) => c.id === prev)) return prev
-        return usable[0]?.id ?? ''
-      })
-    } catch (e) {
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      void alert({ title: 'Laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [alert])
+    },
+  })
+
+  useQueryErrorAlert(cardsQuery, { title: 'Laden mislukt', alert })
+  useQueryErrorAlert(ordersQuery, { title: 'Laden mislukt', alert })
+
+  const cards = useMemo(
+    () => (cardsQuery.data ?? []).filter((c) => c.kind === 'tosti'),
+    [cardsQuery.data],
+  )
+  const orders = ordersQuery.data ?? []
+  const queue = queueQuery.data?.rows ?? []
+  const queueLoadError = queueQuery.data?.loadError ?? false
+
+  /** Same as vorige `Promise.all`: UI pas na kaarten + mijn orders + wachtrij-poging. */
+  const waitingInitial =
+    !cardsQuery.isFetched || !ordersQuery.isFetched || !queueQuery.isFetched
+
+  const invalidateTostiMember = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.member.myTostiOrders }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.member.tostiQueue }),
+    ])
+  }, [queryClient])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    const usable = cards.filter((c) => freeKnipjesForCard(c, orders) > 0)
+    setCardId((prev) => {
+      if (prev !== '' && usable.some((c) => c.id === prev)) return prev
+      return usable[0]?.id ?? ''
+    })
+  }, [cards, orders])
 
   const onMineRealtime = useCallback(
     (reason: string) => {
@@ -67,11 +86,11 @@ export function OrderTostiPage() {
         reason === 'my_tosti_orders' ||
         reason === 'tosti_public_queue'
       ) {
-        void load()
+        void invalidateTostiMember()
         void refresh()
       }
     },
-    [load, refresh],
+    [invalidateTostiMember, refresh],
   )
 
   useTostiRealtime('/ws/mijn-tosti', !!user, onMineRealtime, [
@@ -167,7 +186,7 @@ export function OrderTostiPage() {
         await api.createTostiOrder(csrf, { card_id: cardId as number, bread, filling, quantity, ...remarkOpt })
       }
       setStallRemark('')
-      await load()
+      await invalidateTostiMember()
       await refresh()
       if (paymentMode === 'physical') {
         const knipWord = quantity === 1 ? 'knipje' : 'knipjes'
@@ -203,7 +222,7 @@ export function OrderTostiPage() {
     if (!ok) return
     try {
       await api.cancelMyTostiOrder(csrf, orderId)
-      await load()
+      await invalidateTostiMember()
       await refresh()
       await alert({ title: 'Geannuleerd', message: 'De bestelling is geannuleerd.', variant: 'success' })
     } catch (e) {
@@ -212,7 +231,7 @@ export function OrderTostiPage() {
     }
   }
 
-  if (loading && cards.length === 0 && orders.length === 0) {
+  if (waitingInitial) {
     return <p className="text-slate-600">Laden…</p>
   }
 
