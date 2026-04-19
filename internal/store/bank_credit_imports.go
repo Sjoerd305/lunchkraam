@@ -49,6 +49,7 @@ ON CONFLICT (source, external_id) DO UPDATE SET
     purpose = EXCLUDED.purpose`,
 		amountEUR, dateStr, desc, purpose, created, source, externalID,
 	)
+	// matched_card_request_id is intentionally not updated on conflict (preserve manual reconciliation).
 	return err
 }
 
@@ -62,6 +63,7 @@ SELECT (EXTRACT(MONTH FROM received_on))::int AS m,
        COALESCE(SUM(amount_eur) FILTER (WHERE purpose = 'avondeten'), 0)::float8 AS avondeten_total
 FROM bank_credit_imports
 WHERE (EXTRACT(YEAR FROM received_on))::int = $1
+  AND matched_card_request_id IS NULL
 GROUP BY 1
 ORDER BY 1`,
 		year,

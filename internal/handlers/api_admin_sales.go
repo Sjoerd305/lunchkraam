@@ -13,18 +13,22 @@ import (
 )
 
 type adminSalesYearRollup struct {
-	Monthly                []adminSalesMonthlyRow
-	MonthlyBreakdown       []adminSalesMonthlyBreakdownRow
-	YearCount              int64
-	YearCountTosti         int64
-	YearCountAvondeten     int64
-	YearRevenue            float64
-	YearRevenueTosti       float64
-	YearRevenueAvondeten   float64
-	YearExpenses           float64
-	YearExpensesLunchkraam float64
-	YearExpensesAvondeten  float64
-	YearNet                float64
+	Monthly                       []adminSalesMonthlyRow
+	MonthlyBreakdown              []adminSalesMonthlyBreakdownRow
+	YearCount                     int64
+	YearCountTosti                int64
+	YearCountAvondeten            int64
+	YearRevenue                   float64
+	YearRevenueTosti              float64
+	YearRevenueAvondeten          float64
+	YearRevenueCardTosti          float64
+	YearRevenueCardAvondeten      float64
+	YearRevenueBankUnmatchedTosti float64
+	YearRevenueBankUnmatchedAvo   float64
+	YearExpenses                  float64
+	YearExpensesLunchkraam        float64
+	YearExpensesAvondeten        float64
+	YearNet                       float64
 }
 
 func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuckets [12]store.AdminExpenseMonthAgg) adminSalesYearRollup {
@@ -39,19 +43,30 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 		rev := math.Round(b.RevenueEUR*100) / 100
 		revTosti := math.Round(b.RevenueEURTosti*100) / 100
 		revAvondeten := math.Round(b.RevenueEURAvondeten*100) / 100
+		revCardT := math.Round(b.RevenueCardTosti*100) / 100
+		revCardA := math.Round(b.RevenueCardAvondeten*100) / 100
+		revBankT := math.Round(b.RevenueBankUnmatchedTosti*100) / 100
+		revBankA := math.Round(b.RevenueBankUnmatchedAvondeten*100) / 100
+		revCard := math.Round((revCardT+revCardA)*100) / 100
+		revBank := math.Round((revBankT+revBankA)*100) / 100
 		expLunchkraam := math.Round(expenseBuckets[i].LunchkraamEUR*100) / 100
 		expAvondeten := math.Round(expenseBuckets[i].AvondetenEUR*100) / 100
 		exp := math.Round((expLunchkraam+expAvondeten)*100) / 100
 		r.YearRevenue += rev
 		r.YearRevenueTosti += revTosti
 		r.YearRevenueAvondeten += revAvondeten
+		r.YearRevenueCardTosti += revCardT
+		r.YearRevenueCardAvondeten += revCardA
+		r.YearRevenueBankUnmatchedTosti += revBankT
+		r.YearRevenueBankUnmatchedAvo += revBankA
 		r.YearExpenses += exp
 		r.YearExpensesLunchkraam += expLunchkraam
 		r.YearExpensesAvondeten += expAvondeten
 		net := math.Round((rev-exp)*100) / 100
 		r.Monthly = append(r.Monthly, adminSalesMonthlyRow{
 			Month: i + 1, FulfilledCount: b.FulfilledCount,
-			RevenueEUR: rev, ExpensesEUR: exp, NetEUR: net,
+			RevenueEUR: rev, RevenueCardSalesEUR: revCard, RevenueBankUnmatchedEUR: revBank,
+			ExpensesEUR: exp, NetEUR: net,
 			LabelNL: monthLabelNL(i + 1),
 		})
 		r.MonthlyBreakdown = append(r.MonthlyBreakdown, adminSalesMonthlyBreakdownRow{
@@ -60,6 +75,12 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 				Tosti: b.FulfilledCountTosti, Avondeten: b.FulfilledCountAvondeten, Total: b.FulfilledCount,
 			},
 			RevenueEUR: adminSalesTripletFloat{Tosti: revTosti, Avondeten: revAvondeten, Total: rev},
+			RevenueCardSalesEUR: adminSalesTripletFloat{
+				Tosti: revCardT, Avondeten: revCardA, Total: revCard,
+			},
+			RevenueBankUnmatchedEUR: adminSalesTripletFloat{
+				Tosti: revBankT, Avondeten: revBankA, Total: revBank,
+			},
 			ExpensesEUR: adminSalesExpensesSplit{
 				Lunchkraam: expLunchkraam, Avondeten: expAvondeten, Total: exp,
 			},
@@ -69,6 +90,10 @@ func buildAdminSalesYearRollup(buckets [12]store.AdminSalesMonthAgg, expenseBuck
 	r.YearRevenue = math.Round(r.YearRevenue*100) / 100
 	r.YearRevenueTosti = math.Round(r.YearRevenueTosti*100) / 100
 	r.YearRevenueAvondeten = math.Round(r.YearRevenueAvondeten*100) / 100
+	r.YearRevenueCardTosti = math.Round(r.YearRevenueCardTosti*100) / 100
+	r.YearRevenueCardAvondeten = math.Round(r.YearRevenueCardAvondeten*100) / 100
+	r.YearRevenueBankUnmatchedTosti = math.Round(r.YearRevenueBankUnmatchedTosti*100) / 100
+	r.YearRevenueBankUnmatchedAvo = math.Round(r.YearRevenueBankUnmatchedAvo*100) / 100
 	r.YearExpenses = math.Round(r.YearExpenses*100) / 100
 	r.YearExpensesLunchkraam = math.Round(r.YearExpensesLunchkraam*100) / 100
 	r.YearExpensesAvondeten = math.Round(r.YearExpensesAvondeten*100) / 100
@@ -137,22 +162,32 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	yearCard := math.Round((rollup.YearRevenueCardTosti+rollup.YearRevenueCardAvondeten)*100) / 100
+	yearBankUn := math.Round((rollup.YearRevenueBankUnmatchedTosti+rollup.YearRevenueBankUnmatchedAvo)*100) / 100
 	resp := adminSalesStatsResponse{
-		Year:               year,
-		Timezone:           "Europe/Amsterdam",
-		PaymentAmountEUR:   d.Config.PaymentAmountEUR,
-		Monthly:            rollup.Monthly,
-		MonthlyBreakdown:   rollup.MonthlyBreakdown,
-		YearFulfilledCount: rollup.YearCount,
-		YearRevenueEUR:     rollup.YearRevenue,
-		YearExpensesEUR:    rollup.YearExpenses,
-		YearNetEUR:         rollup.YearNet,
+		Year:                        year,
+		Timezone:                    "Europe/Amsterdam",
+		PaymentAmountEUR:            d.Config.PaymentAmountEUR,
+		Monthly:                     rollup.Monthly,
+		MonthlyBreakdown:            rollup.MonthlyBreakdown,
+		YearFulfilledCount:          rollup.YearCount,
+		YearRevenueEUR:              rollup.YearRevenue,
+		YearRevenueCardSalesEUR:     yearCard,
+		YearRevenueBankUnmatchedEUR: yearBankUn,
+		YearExpensesEUR:             rollup.YearExpenses,
+		YearNetEUR:                  rollup.YearNet,
 		YearBreakdown: adminSalesYearBreakdown{
 			CardsSold: adminSalesTripletInt{
 				Tosti: rollup.YearCountTosti, Avondeten: rollup.YearCountAvondeten, Total: rollup.YearCount,
 			},
 			RevenueEUR: adminSalesTripletFloat{
 				Tosti: rollup.YearRevenueTosti, Avondeten: rollup.YearRevenueAvondeten, Total: rollup.YearRevenue,
+			},
+			RevenueCardSalesEUR: adminSalesTripletFloat{
+				Tosti: rollup.YearRevenueCardTosti, Avondeten: rollup.YearRevenueCardAvondeten, Total: yearCard,
+			},
+			RevenueBankUnmatchedEUR: adminSalesTripletFloat{
+				Tosti: rollup.YearRevenueBankUnmatchedTosti, Avondeten: rollup.YearRevenueBankUnmatchedAvo, Total: yearBankUn,
 			},
 			ExpensesEUR: adminSalesExpensesSplit{
 				Lunchkraam: rollup.YearExpensesLunchkraam,

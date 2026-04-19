@@ -21,28 +21,34 @@ type adminSalesExpensesSplit struct {
 }
 
 type adminSalesMonthlyRow struct {
-	Month          int     `json:"month"`
-	FulfilledCount int64   `json:"fulfilled_count"`
-	RevenueEUR     float64 `json:"revenue_eur"`
-	ExpensesEUR    float64 `json:"expenses_eur"`
-	NetEUR         float64 `json:"net_eur"`
-	LabelNL        string  `json:"label_nl"`
+	Month                   int     `json:"month"`
+	FulfilledCount          int64   `json:"fulfilled_count"`
+	RevenueEUR              float64 `json:"revenue_eur"`
+	RevenueCardSalesEUR     float64 `json:"revenue_card_sales_eur"`
+	RevenueBankUnmatchedEUR float64 `json:"revenue_bank_unmatched_eur"`
+	ExpensesEUR             float64 `json:"expenses_eur"`
+	NetEUR                  float64 `json:"net_eur"`
+	LabelNL                 string  `json:"label_nl"`
 }
 
 type adminSalesMonthlyBreakdownRow struct {
-	Month       int                     `json:"month"`
-	CardsSold   adminSalesTripletInt    `json:"cards_sold"`
-	RevenueEUR  adminSalesTripletFloat  `json:"revenue_eur"`
-	ExpensesEUR adminSalesExpensesSplit `json:"expenses_eur"`
-	NetEUR      float64                 `json:"net_eur"`
-	LabelNL     string                  `json:"label_nl"`
+	Month                   int                     `json:"month"`
+	CardsSold               adminSalesTripletInt    `json:"cards_sold"`
+	RevenueEUR              adminSalesTripletFloat  `json:"revenue_eur"`
+	RevenueCardSalesEUR     adminSalesTripletFloat  `json:"revenue_card_sales_eur"`
+	RevenueBankUnmatchedEUR adminSalesTripletFloat  `json:"revenue_bank_unmatched_eur"`
+	ExpensesEUR             adminSalesExpensesSplit `json:"expenses_eur"`
+	NetEUR                  float64                 `json:"net_eur"`
+	LabelNL                 string                  `json:"label_nl"`
 }
 
 type adminSalesYearBreakdown struct {
-	CardsSold   adminSalesTripletInt    `json:"cards_sold"`
-	RevenueEUR  adminSalesTripletFloat  `json:"revenue_eur"`
-	ExpensesEUR adminSalesExpensesSplit `json:"expenses_eur"`
-	NetEUR      float64                 `json:"net_eur"`
+	CardsSold               adminSalesTripletInt    `json:"cards_sold"`
+	RevenueEUR              adminSalesTripletFloat  `json:"revenue_eur"`
+	RevenueCardSalesEUR     adminSalesTripletFloat  `json:"revenue_card_sales_eur"`
+	RevenueBankUnmatchedEUR adminSalesTripletFloat  `json:"revenue_bank_unmatched_eur"`
+	ExpensesEUR             adminSalesExpensesSplit `json:"expenses_eur"`
+	NetEUR                  float64                 `json:"net_eur"`
 }
 
 type adminSalesTostiMonthlyRow struct {
@@ -58,17 +64,19 @@ type adminSalesTostiKindRow struct {
 }
 
 type adminSalesStatsResponse struct {
-	Year               int                             `json:"year"`
-	Timezone           string                          `json:"timezone"`
-	PaymentAmountEUR   string                          `json:"payment_amount_eur"`
-	Monthly            []adminSalesMonthlyRow          `json:"monthly"`
-	MonthlyBreakdown   []adminSalesMonthlyBreakdownRow `json:"monthly_breakdown"`
-	YearFulfilledCount int64                           `json:"year_fulfilled_count"`
-	YearRevenueEUR     float64                         `json:"year_revenue_eur"`
-	YearExpensesEUR    float64                         `json:"year_expenses_eur"`
-	YearNetEUR         float64                         `json:"year_net_eur"`
-	YearBreakdown      adminSalesYearBreakdown         `json:"year_breakdown"`
-	YearTostiQuantity  int64                           `json:"year_tosti_quantity"`
-	TostiMonthly       []adminSalesTostiMonthlyRow     `json:"tosti_monthly"`
-	TostiByKind        []adminSalesTostiKindRow        `json:"tosti_by_kind"`
+	Year                        int                             `json:"year"`
+	Timezone                    string                          `json:"timezone"`
+	PaymentAmountEUR            string                          `json:"payment_amount_eur"`
+	Monthly                     []adminSalesMonthlyRow          `json:"monthly"`
+	MonthlyBreakdown            []adminSalesMonthlyBreakdownRow `json:"monthly_breakdown"`
+	YearFulfilledCount          int64                           `json:"year_fulfilled_count"`
+	YearRevenueEUR              float64                         `json:"year_revenue_eur"`
+	YearRevenueCardSalesEUR     float64                         `json:"year_revenue_card_sales_eur"`
+	YearRevenueBankUnmatchedEUR float64                         `json:"year_revenue_bank_unmatched_eur"`
+	YearExpensesEUR             float64                         `json:"year_expenses_eur"`
+	YearNetEUR                  float64                         `json:"year_net_eur"`
+	YearBreakdown               adminSalesYearBreakdown         `json:"year_breakdown"`
+	YearTostiQuantity           int64                           `json:"year_tosti_quantity"`
+	TostiMonthly                []adminSalesTostiMonthlyRow     `json:"tosti_monthly"`
+	TostiByKind                 []adminSalesTostiKindRow        `json:"tosti_by_kind"`
 }

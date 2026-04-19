@@ -238,6 +238,8 @@ const adminSalesMonthBucketSchema = z.object({
   month: intWithDefault(0),
   fulfilled_count: intWithDefault(0),
   revenue_eur: floatWithDefault(0),
+  revenue_card_sales_eur: floatWithDefault(0),
+  revenue_bank_unmatched_eur: floatWithDefault(0),
   expenses_eur: floatWithDefault(0),
   net_eur: floatWithDefault(0),
   label_nl: stringWithDefault(''),
@@ -265,6 +267,8 @@ const adminSalesBreakdownBucketSchema = z.object({
   month: intWithDefault(0),
   cards_sold: adminCardsSoldBreakdownSchema,
   revenue_eur: adminRevenueBreakdownSchema,
+  revenue_card_sales_eur: adminRevenueBreakdownSchema,
+  revenue_bank_unmatched_eur: adminRevenueBreakdownSchema,
   expenses_eur: adminExpensesBreakdownSchema,
   net_eur: floatWithDefault(0),
   label_nl: stringWithDefault(''),
@@ -273,6 +277,8 @@ const adminSalesBreakdownBucketSchema = z.object({
 const adminSalesYearBreakdownSchema = z.object({
   cards_sold: adminCardsSoldBreakdownSchema,
   revenue_eur: adminRevenueBreakdownSchema,
+  revenue_card_sales_eur: adminRevenueBreakdownSchema,
+  revenue_bank_unmatched_eur: adminRevenueBreakdownSchema,
   expenses_eur: adminExpensesBreakdownSchema,
   net_eur: floatWithDefault(0),
 })
@@ -297,11 +303,15 @@ export const adminSalesStatsResponseSchema = z.object({
   monthly_breakdown: z.array(adminSalesBreakdownBucketSchema).catch([]),
   year_fulfilled_count: intWithDefault(0),
   year_revenue_eur: floatWithDefault(0),
+  year_revenue_card_sales_eur: floatWithDefault(0),
+  year_revenue_bank_unmatched_eur: floatWithDefault(0),
   year_expenses_eur: floatWithDefault(0),
   year_net_eur: floatWithDefault(0),
   year_breakdown: adminSalesYearBreakdownSchema.catch({
     cards_sold: { tosti: 0, avondeten: 0, total: 0 },
     revenue_eur: { tosti: 0, avondeten: 0, total: 0 },
+    revenue_card_sales_eur: { tosti: 0, avondeten: 0, total: 0 },
+    revenue_bank_unmatched_eur: { tosti: 0, avondeten: 0, total: 0 },
     expenses_eur: { lunchkraam: 0, avondeten: 0, total: 0 },
     net_eur: 0,
   }),
@@ -462,8 +472,52 @@ export const adminDashboardResponseSchema = z.object({
   payment_amount_eur: stringWithDefault(''),
   finance_year: intWithDefault(new Date().getFullYear()),
   year_revenue_eur: floatWithDefault(0),
+  year_revenue_card_sales_eur: floatWithDefault(0),
+  year_revenue_bank_unmatched_eur: floatWithDefault(0),
+  year_bank_credits_unmatched_count: intWithDefault(0),
   year_expenses_eur: floatWithDefault(0),
   year_net_eur: floatWithDefault(0),
+})
+
+const bankCreditRowSchema = z.object({
+  id: intWithDefault(0),
+  amount_eur: floatWithDefault(0),
+  received_on: stringWithDefault(''),
+  description: stringWithDefault(''),
+  purpose: shopExpensePurposeSchema,
+  source: stringWithDefault(''),
+  external_id: stringWithDefault(''),
+  matched_card_request_id: z.preprocess(
+    (v) => (v === undefined ? null : v),
+    z.union([z.number(), z.null()]),
+  ),
+})
+
+export const bankCreditsListResponseSchema = z.object({
+  year: intWithDefault(0),
+  rows: z.array(bankCreditRowSchema).catch([]),
+})
+
+/** Zelfde payload als matched/unmatched lijsten. */
+export const bankCreditsUnmatchedResponseSchema = bankCreditsListResponseSchema
+
+const bankCreditSuggestionCandidateSchema = z.object({
+  card_request_id: intWithDefault(0),
+  fulfilled_at: stringWithDefault(''),
+  user_email: stringWithDefault(''),
+  user_display: stringWithDefault(''),
+  sale_price_eur: floatWithDefault(0),
+  kind: cardKindSchema,
+  payment_method: paymentMethodSchema,
+})
+
+export const bankCreditSuggestionsResponseSchema = z.object({
+  bank_credit_id: intWithDefault(0),
+  candidates: z.array(bankCreditSuggestionCandidateSchema).catch([]),
+})
+
+export const okResponseSchema = z.object({
+  ok: z.boolean().catch(false),
 })
 
 const adminRequestSchema = z.object({

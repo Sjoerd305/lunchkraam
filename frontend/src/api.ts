@@ -6,11 +6,14 @@ import {
   adminSettingsResponseSchema,
   adminUsersResponseSchema,
   avondetenRegistrationsResponseSchema,
+  bankCreditSuggestionsResponseSchema,
+  bankCreditsListResponseSchema,
   buyInfoResponseSchema,
   cancelledCountResponseSchema,
   cardsResponseSchema,
   createTostiOrderResponseSchema,
   meResponseSchema,
+  okResponseSchema,
   operatorCardsResponseSchema,
   operatorMembersResponseSchema,
   operatorCardSaleResponseSchema,
@@ -109,6 +112,9 @@ export type AdminDashboardStats = {
   payment_amount_eur: string
   finance_year: number
   year_revenue_eur: number
+  year_revenue_card_sales_eur: number
+  year_revenue_bank_unmatched_eur: number
+  year_bank_credits_unmatched_count: number
   year_expenses_eur: number
   year_net_eur: number
 }
@@ -117,6 +123,8 @@ export type AdminSalesMonthBucket = {
   month: number
   fulfilled_count: number
   revenue_eur: number
+  revenue_card_sales_eur: number
+  revenue_bank_unmatched_eur: number
   expenses_eur: number
   net_eur: number
   label_nl: string
@@ -144,6 +152,8 @@ export type AdminSalesBreakdownBucket = {
   month: number
   cards_sold: AdminCardsSoldBreakdown
   revenue_eur: AdminRevenueBreakdown
+  revenue_card_sales_eur: AdminRevenueBreakdown
+  revenue_bank_unmatched_eur: AdminRevenueBreakdown
   expenses_eur: AdminExpensesBreakdown
   net_eur: number
   label_nl: string
@@ -152,6 +162,8 @@ export type AdminSalesBreakdownBucket = {
 export type AdminSalesYearBreakdown = {
   cards_sold: AdminCardsSoldBreakdown
   revenue_eur: AdminRevenueBreakdown
+  revenue_card_sales_eur: AdminRevenueBreakdown
+  revenue_bank_unmatched_eur: AdminRevenueBreakdown
   expenses_eur: AdminExpensesBreakdown
   net_eur: number
 }
@@ -176,6 +188,8 @@ export type AdminSalesStats = {
   monthly_breakdown: AdminSalesBreakdownBucket[]
   year_fulfilled_count: number
   year_revenue_eur: number
+  year_revenue_card_sales_eur: number
+  year_revenue_bank_unmatched_eur: number
   year_expenses_eur: number
   year_net_eur: number
   year_breakdown: AdminSalesYearBreakdown
@@ -185,6 +199,37 @@ export type AdminSalesStats = {
 }
 
 export type ShopExpensePurpose = 'lunchkraam' | 'avondeten'
+
+export type BankCreditRow = {
+  id: number
+  amount_eur: number
+  received_on: string
+  description: string
+  purpose: ShopExpensePurpose
+  source: string
+  external_id: string
+  matched_card_request_id: number | null
+}
+
+export type BankCreditsListPayload = {
+  year: number
+  rows: BankCreditRow[]
+}
+
+export type BankCreditSuggestionCandidate = {
+  card_request_id: number
+  fulfilled_at: string
+  user_email: string
+  user_display: string
+  sale_price_eur: number
+  kind: CardKind
+  payment_method: PaymentMethod
+}
+
+export type BankCreditSuggestionsPayload = {
+  bank_credit_id: number
+  candidates: BankCreditSuggestionCandidate[]
+}
 
 export type AdminShopExpense = {
   id: number
@@ -1031,4 +1076,104 @@ export async function patchAdminSettings(
   })
   if (!res.ok) throw await parseError(res)
   return parseApiResponse(adminSettingsResponseSchema, await res.json())
+}
+
+export async function getAdminBankCreditsUnmatched(year: number): Promise<BankCreditsListPayload> {
+  const res = await fetch(`/api/admin/bank-credits/unmatched?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+}
+
+export async function getOperatorBankCreditsUnmatched(year: number): Promise<BankCreditsListPayload> {
+  const res = await fetch(`/api/operator/bank-credits/unmatched?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+}
+
+export async function getAdminBankCreditsMatched(year: number): Promise<BankCreditsListPayload> {
+  const res = await fetch(`/api/admin/bank-credits/matched?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+}
+
+export async function getOperatorBankCreditsMatched(year: number): Promise<BankCreditsListPayload> {
+  const res = await fetch(`/api/operator/bank-credits/matched?year=${year}`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditsListResponseSchema, await res.json())
+}
+
+export async function getAdminBankCreditSuggestions(bankCreditId: number): Promise<BankCreditSuggestionsPayload> {
+  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/suggestions`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditSuggestionsResponseSchema, await res.json())
+}
+
+export async function getOperatorBankCreditSuggestions(bankCreditId: number): Promise<BankCreditSuggestionsPayload> {
+  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/suggestions`, { credentials: 'include' })
+  if (!res.ok) throw await parseError(res)
+  return parseApiResponse(bankCreditSuggestionsResponseSchema, await res.json())
+}
+
+export async function postAdminBankCreditMatch(
+  csrf: string,
+  bankCreditId: number,
+  cardRequestId: number,
+): Promise<void> {
+  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/match`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ card_request_id: cardRequestId }),
+  })
+  if (!res.ok) throw await parseError(res)
+  parseApiResponse(okResponseSchema, await res.json())
+}
+
+export async function postOperatorBankCreditMatch(
+  csrf: string,
+  bankCreditId: number,
+  cardRequestId: number,
+): Promise<void> {
+  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/match`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ card_request_id: cardRequestId }),
+  })
+  if (!res.ok) throw await parseError(res)
+  parseApiResponse(okResponseSchema, await res.json())
+}
+
+export async function postAdminBankCreditUnmatch(csrf: string, bankCreditId: number): Promise<void> {
+  const res = await fetch(`/api/admin/bank-credits/${bankCreditId}/unmatch`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: '{}',
+  })
+  if (!res.ok) throw await parseError(res)
+  parseApiResponse(okResponseSchema, await res.json())
+}
+
+export async function postOperatorBankCreditUnmatch(csrf: string, bankCreditId: number): Promise<void> {
+  const res = await fetch(`/api/operator/bank-credits/${bankCreditId}/unmatch`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: '{}',
+  })
+  if (!res.ok) throw await parseError(res)
+  parseApiResponse(okResponseSchema, await res.json())
 }

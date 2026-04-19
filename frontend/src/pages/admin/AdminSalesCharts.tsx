@@ -29,6 +29,8 @@ type ChartRow = {
   kaartenTosti: number
   kaartenAvondeten: number
   omzet: number
+  omzetVerkocht: number
+  omzetBank: number
   omzetTosti: number
   omzetAvondeten: number
   uitgaven: number
@@ -53,6 +55,8 @@ function monthlyRows(stats: api.AdminSalesStats): ChartRow[] {
               month: m,
               fulfilled_count: 0,
               revenue_eur: 0,
+              revenue_card_sales_eur: 0,
+              revenue_bank_unmatched_eur: 0,
               expenses_eur: 0,
               net_eur: 0,
               label_nl: MONTH_SHORT[i] ?? String(m),
@@ -64,6 +68,8 @@ function monthlyRows(stats: api.AdminSalesStats): ChartRow[] {
   return ordered.map((x) => {
     const breakdown = breakdownByMonth.get(x.month)
     const omzet = Math.round(x.revenue_eur * 100) / 100
+    const omzetVerkocht = Math.round(x.revenue_card_sales_eur * 100) / 100
+    const omzetBank = Math.round(x.revenue_bank_unmatched_eur * 100) / 100
     const uitgaven = Math.round(x.expenses_eur * 100) / 100
     const netto = Math.round(x.net_eur * 100) / 100
     const kaartenTosti = breakdown?.cards_sold.tosti ?? 0
@@ -80,6 +86,8 @@ function monthlyRows(stats: api.AdminSalesStats): ChartRow[] {
       kaartenTosti,
       kaartenAvondeten,
       omzet,
+      omzetVerkocht,
+      omzetBank,
       omzetTosti,
       omzetAvondeten,
       uitgaven,
@@ -107,6 +115,8 @@ function quarterlyRows(stats: api.AdminSalesStats): ChartRow[] {
     let kaartenTosti = 0
     let kaartenAvondeten = 0
     let omzet = 0
+    let omzetVerkocht = 0
+    let omzetBank = 0
     let omzetTosti = 0
     let omzetAvondeten = 0
     let uitgaven = 0
@@ -118,6 +128,8 @@ function quarterlyRows(stats: api.AdminSalesStats): ChartRow[] {
       kaartenTosti += m[i]?.kaartenTosti ?? 0
       kaartenAvondeten += m[i]?.kaartenAvondeten ?? 0
       omzet += m[i]?.omzet ?? 0
+      omzetVerkocht += m[i]?.omzetVerkocht ?? 0
+      omzetBank += m[i]?.omzetBank ?? 0
       omzetTosti += m[i]?.omzetTosti ?? 0
       omzetAvondeten += m[i]?.omzetAvondeten ?? 0
       uitgaven += m[i]?.uitgaven ?? 0
@@ -126,6 +138,8 @@ function quarterlyRows(stats: api.AdminSalesStats): ChartRow[] {
       netto += m[i]?.netto ?? 0
     }
     omzet = Math.round(omzet * 100) / 100
+    omzetVerkocht = Math.round(omzetVerkocht * 100) / 100
+    omzetBank = Math.round(omzetBank * 100) / 100
     uitgaven = Math.round(uitgaven * 100) / 100
     netto = Math.round(netto * 100) / 100
     cumRev += omzet
@@ -136,6 +150,8 @@ function quarterlyRows(stats: api.AdminSalesStats): ChartRow[] {
       kaartenTosti,
       kaartenAvondeten,
       omzet,
+      omzetVerkocht,
+      omzetBank,
       omzetTosti: Math.round(omzetTosti * 100) / 100,
       omzetAvondeten: Math.round(omzetAvondeten * 100) / 100,
       uitgaven,
@@ -163,6 +179,8 @@ function PeriodFinanceTooltip({
       <p className="text-slate-600">Omzet tosti: {formatEUR(p.omzetTosti)}</p>
       <p className="text-slate-600">Omzet avondeten: {formatEUR(p.omzetAvondeten)}</p>
       <p className="text-slate-600">Omzet totaal: {formatEUR(p.omzet)}</p>
+      <p className="text-slate-600">— waarvan verkocht (app): {formatEUR(p.omzetVerkocht)}</p>
+      <p className="text-slate-600">— bank nog niet gekoppeld: {formatEUR(p.omzetBank)}</p>
       <p className="text-slate-600">Uitgaven lunchkraam: {formatEUR(p.uitgavenLunchkraam)}</p>
       <p className="text-slate-600">Uitgaven avondeten: {formatEUR(p.uitgavenAvondeten)}</p>
       <p className="text-slate-600">Uitgaven totaal: {formatEUR(p.uitgaven)}</p>
@@ -272,9 +290,18 @@ export function AdminSalesCharts() {
           <h2 className="text-lg font-semibold text-slate-900">Omzet en boodschappen</h2>
           {stats ? (
             <p className="mt-1 text-sm text-slate-600">
-              Tijdzone {stats.timezone}. Catalogusprijs nieuwe kaarten: €{stats.payment_amount_eur}.
+              Tijdzone {stats.timezone}. Catalogusprijs nieuwe kaarten: €{stats.payment_amount_eur}.{' '}
+              <Link to="/admin/finance" className="font-semibold text-brand-800 underline hover:text-brand-950">
+                Revolut afstemmen
+              </Link>
             </p>
           ) : null}
+          <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            De getoonde omzet is <strong className="font-semibold text-slate-800">verkochte kaarten</strong> plus{' '}
+            <strong className="font-semibold text-slate-800">Revolut-bijschrijvingen die nog niet</strong> aan een
+            verkoop zijn gekoppeld. Na koppeling verdwijnt het bankbedrag uit &ldquo;bank open&rdquo; en telt het niet
+            dubbel.
+          </p>
         </div>
         {year !== null && yearSelectOptions.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -358,6 +385,10 @@ export function AdminSalesCharts() {
               <p className="mt-1 text-xs text-brand-900/80">
                 Tosti {formatEUR(stats.year_breakdown.revenue_eur.tosti)} · Avondeten{' '}
                 {formatEUR(stats.year_breakdown.revenue_eur.avondeten)}
+              </p>
+              <p className="mt-2 text-xs text-brand-900/80">
+                Verkocht (app) {formatEUR(stats.year_revenue_card_sales_eur)} · Bank open{' '}
+                {formatEUR(stats.year_revenue_bank_unmatched_eur)}
               </p>
             </div>
             <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-5 shadow-sm">

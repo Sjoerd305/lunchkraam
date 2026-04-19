@@ -101,15 +101,41 @@ export function AdminDashboardPage() {
           Inkomsten vs. boodschappen ({stats.finance_year})
         </h2>
         <p className="mb-3 text-sm text-slate-600">
+          <Link to="/admin/finance" className="font-semibold text-brand-800 underline hover:text-brand-950">
+            Omzet afstemmen (Revolut)
+          </Link>
+          {' · '}
           <Link to="/admin/expenses" className="font-semibold text-brand-800 underline hover:text-brand-950">
             Boodschappen beheren
           </Link>
         </p>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <p className="mb-4 text-sm text-slate-600">
+          Rapport-omzet telt <strong className="font-semibold text-slate-800">verkochte kaarten</strong> plus{' '}
+          <strong className="font-semibold text-slate-800">Revolut-regels die nog niet</strong> aan een verkoop zijn
+          gekoppeld — geen dubbele Tikkie+Revolut zolang je bankregels afstemt.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
-            label="Omzet dit jaar"
+            label="Omzet dit jaar (rapport)"
             value={`€${stats.year_revenue_eur.toFixed(2)}`}
             tone="brand"
+            hint="Kaartverkopen + nog niet gekoppelde bank"
+          />
+          <StatCard
+            label="Verkocht (app)"
+            value={`€${stats.year_revenue_card_sales_eur.toFixed(2)}`}
+            tone="slate"
+            hint="Geaccordeerde kaartverkopen"
+          />
+          <StatCard
+            label="Bank nog niet gekoppeld"
+            value={`€${stats.year_revenue_bank_unmatched_eur.toFixed(2)}`}
+            tone="amber"
+            hint={
+              stats.year_bank_credits_unmatched_count > 0
+                ? `${stats.year_bank_credits_unmatched_count} openstaande Revolut-regel(s) dit jaar`
+                : 'Geen openstaande Revolut-regels'
+            }
           />
           <StatCard
             label="Uitgaven dit jaar"

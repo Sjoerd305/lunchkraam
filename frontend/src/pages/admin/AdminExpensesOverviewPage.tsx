@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
@@ -151,11 +152,17 @@ export function AdminExpensesOverviewPage() {
       {year !== null && (statsLoading || salesStats) ? (
         <section className="space-y-4">
           <h3 className="text-sm font-semibold text-slate-800">Financieel overzicht ({year})</h3>
+          <p className="text-sm text-slate-600">
+            <Link to="/admin/finance" className="font-semibold text-brand-800 underline hover:text-brand-950">
+              Revolut-regels koppelen aan verkopen
+            </Link>{' '}
+            voorkomt dubbele omzet (Tikkie in de app én dezelfde storting op de rekening).
+          </p>
           {statsLoading && !salesStats ? (
             <p className="text-sm text-slate-600">Cijfers laden…</p>
           ) : salesStats ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <FinanceStatCard
                   label="Kaarten dit jaar"
                   value={String(salesStats.year_breakdown.cards_sold.total)}
@@ -163,13 +170,27 @@ export function AdminExpensesOverviewPage() {
                   hint={`${salesStats.year_breakdown.cards_sold.tosti} tosti · ${salesStats.year_breakdown.cards_sold.avondeten} avondeten`}
                 />
                 <FinanceStatCard
-                  label="Omzet dit jaar"
+                  label="Omzet dit jaar (rapport)"
                   value={formatEUR(salesStats.year_revenue_eur)}
                   tone="brand"
                   hint={`Tosti ${formatEUR(salesStats.year_breakdown.revenue_eur.tosti)} · Avondeten ${formatEUR(
                     salesStats.year_breakdown.revenue_eur.avondeten,
                   )}`}
                 />
+                <FinanceStatCard
+                  label="Verkocht (app)"
+                  value={formatEUR(salesStats.year_revenue_card_sales_eur)}
+                  tone="slate"
+                  hint="Som geaccordeerde kaartverkopen"
+                />
+                <FinanceStatCard
+                  label="Bank nog niet gekoppeld"
+                  value={formatEUR(salesStats.year_revenue_bank_unmatched_eur)}
+                  tone="amber"
+                  hint="Revolut-bijschrijvingen zonder koppeling"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FinanceStatCard
                   label="Uitgaven dit jaar"
                   value={formatEUR(salesStats.year_expenses_eur)}
@@ -183,23 +204,25 @@ export function AdminExpensesOverviewPage() {
                   value={formatEUR(salesStats.year_net_eur)}
                   tone={salesStats.year_net_eur >= 0 ? 'brand' : 'amber'}
                 />
-                <FinanceStatCard
-                  label="Omzet per kaart"
-                  value={
-                    salesStats.year_breakdown.cards_sold.total > 0
-                      ? formatEUR(salesStats.year_breakdown.revenue_eur.total / salesStats.year_breakdown.cards_sold.total)
-                      : formatEUR(0)
-                  }
-                  tone="default"
-                />
               </div>
+              <FinanceStatCard
+                label="Omzet per kaart (rapporttotaal ÷ kaarten)"
+                value={
+                  salesStats.year_breakdown.cards_sold.total > 0
+                    ? formatEUR(salesStats.year_revenue_eur / salesStats.year_breakdown.cards_sold.total)
+                    : formatEUR(0)
+                }
+                tone="default"
+              />
               <div className="surface-card overflow-x-auto">
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Per maand</h4>
-                <table className="mt-3 w-full min-w-[24rem] text-left text-sm">
+                <table className="mt-3 w-full min-w-[36rem] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <th className="py-2 pr-4">Maand</th>
                       <th className="py-2 pr-4">Omzet</th>
+                      <th className="py-2 pr-4">Verkocht (app)</th>
+                      <th className="py-2 pr-4">Bank (open)</th>
                       <th className="py-2 pr-4">Uitgaven</th>
                       <th className="py-2">Netto</th>
                     </tr>
@@ -209,6 +232,10 @@ export function AdminExpensesOverviewPage() {
                       <tr key={m.month} className="border-b border-slate-100">
                         <td className="py-2.5 pr-4 text-slate-800">{m.label_nl}</td>
                         <td className="py-2.5 pr-4 tabular-nums text-slate-900">{formatEUR(m.revenue_eur)}</td>
+                        <td className="py-2.5 pr-4 tabular-nums text-slate-700">{formatEUR(m.revenue_card_sales_eur)}</td>
+                        <td className="py-2.5 pr-4 tabular-nums text-amber-900/90">
+                          {formatEUR(m.revenue_bank_unmatched_eur)}
+                        </td>
                         <td className="py-2.5 pr-4 tabular-nums text-slate-700">{formatEUR(m.expenses_eur)}</td>
                         <td className="py-2.5 tabular-nums text-slate-900">{formatEUR(m.net_eur)}</td>
                       </tr>

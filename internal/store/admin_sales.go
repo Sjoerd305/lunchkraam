@@ -31,13 +31,27 @@ SELECT
     +
     (SELECT COALESCE(SUM(bci.amount_eur), 0)::float8 FROM bank_credit_imports bci
        WHERE (EXTRACT(YEAR FROM bci.received_on))::int =
-             (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int)
+             (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int
+         AND bci.matched_card_request_id IS NULL)
   ) AS year_rev,
+  (SELECT COALESCE(SUM(sale_price_eur), 0)::float8 FROM card_requests cr
+     WHERE cr.status = 'fulfilled' AND cr.fulfilled_at IS NOT NULL
+       AND (EXTRACT(YEAR FROM cr.fulfilled_at AT TIME ZONE $1))::int =
+           (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int) AS year_rev_card,
+  (SELECT COALESCE(SUM(bci.amount_eur), 0)::float8 FROM bank_credit_imports bci
+     WHERE (EXTRACT(YEAR FROM bci.received_on))::int =
+           (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int
+       AND bci.matched_card_request_id IS NULL) AS year_rev_bank_unmatched,
+  (SELECT COUNT(*)::bigint FROM bank_credit_imports bci
+     WHERE (EXTRACT(YEAR FROM bci.received_on))::int =
+           (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int
+       AND bci.matched_card_request_id IS NULL) AS year_bank_unmatched_n,
   (SELECT COALESCE(SUM(se.amount_eur), 0)::float8 FROM shop_expenses se
      WHERE (EXTRACT(YEAR FROM se.spent_on))::int =
            (EXTRACT(YEAR FROM (now() AT TIME ZONE $1)))::int) AS year_exp`
 	var st AdminDashboardStats
-	var yearRev, yearExp float64
+	var yearRev, yearRevCard, yearRevBankUnmatched, yearExp float64
+	var yearBankUnmatchedN int64
 	err := s.pool.QueryRow(ctx, q, adminSalesTZ).Scan(
 		&st.ActiveCardsTotal,
 		&st.KnipjesRemainingTotal,
@@ -50,12 +64,18 @@ SELECT
 		&st.CancelledRequests,
 		&st.FinanceYear,
 		&yearRev,
+		&yearRevCard,
+		&yearRevBankUnmatched,
+		&yearBankUnmatchedN,
 		&yearExp,
 	)
 	if err != nil {
 		return nil, err
 	}
 	st.YearRevenueEUR = yearRev
+	st.YearRevenueCardSalesEUR = yearRevCard
+	st.YearRevenueBankUnmatchedEUR = yearRevBankUnmatched
+	st.YearBankCreditsUnmatchedCount = yearBankUnmatchedN
 	st.YearExpensesEUR = yearExp
 	st.YearNetEUR = yearRev - yearExp
 	return &st, nil
@@ -74,7 +94,13 @@ func (s *Store) AdminSalesByMonth(ctx context.Context, year int) ([12]AdminSales
 		return buckets, err
 	}
 	for i := 0; i < 12; i++ {
+		buckets[i].RevenueCardTosti = buckets[i].RevenueEURTosti
+		buckets[i].RevenueCardAvondeten = buckets[i].RevenueEURAvondeten
+	}
+	for i := 0; i < 12; i++ {
 		c := credits[i]
+		buckets[i].RevenueBankUnmatchedTosti = c.LunchkraamEUR
+		buckets[i].RevenueBankUnmatchedAvondeten = c.AvondetenEUR
 		buckets[i].RevenueEUR += c.LunchkraamEUR + c.AvondetenEUR
 		buckets[i].RevenueEURTosti += c.LunchkraamEUR
 		buckets[i].RevenueEURAvondeten += c.AvondetenEUR

@@ -13,7 +13,8 @@ export function AdminLayout() {
   const operatorPathAllowed =
     loc.pathname.startsWith('/admin/requests') ||
     loc.pathname === '/admin/expenses' ||
-    loc.pathname === '/admin/expenses-overview'
+    loc.pathname === '/admin/expenses-overview' ||
+    loc.pathname === '/admin/finance'
   if (operatorOnly && !operatorPathAllowed) {
     return <Navigate to="/admin/requests" replace />
   }
@@ -38,6 +39,7 @@ export function AdminLayout() {
           <AdminTab to="/admin/requests">Betalingswachtrij</AdminTab>
           {user.is_admin ? <AdminTab to="/admin/accounts">Accounts</AdminTab> : null}
           <AdminTab to="/admin/expenses-overview">Overzichten</AdminTab>
+          <AdminTab to="/admin/finance">Financiën</AdminTab>
           <AdminTab to="/admin/expenses">Boodschappen</AdminTab>
           {user.is_admin ? <AdminTab to="/admin/settings">Instellingen</AdminTab> : null}
         </nav>

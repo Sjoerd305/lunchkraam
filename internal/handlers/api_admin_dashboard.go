@@ -28,6 +28,9 @@ func (d *Deps) APIAdminDashboard(w http.ResponseWriter, r *http.Request) {
 		"payment_amount_eur":                d.Config.PaymentAmountEUR,
 		"finance_year":                      st.FinanceYear,
 		"year_revenue_eur":                  math.Round(st.YearRevenueEUR*100) / 100,
+		"year_revenue_card_sales_eur":       math.Round(st.YearRevenueCardSalesEUR*100) / 100,
+		"year_revenue_bank_unmatched_eur":   math.Round(st.YearRevenueBankUnmatchedEUR*100) / 100,
+		"year_bank_credits_unmatched_count": st.YearBankCreditsUnmatchedCount,
 		"year_expenses_eur":                 math.Round(st.YearExpensesEUR*100) / 100,
 		"year_net_eur":                      math.Round(st.YearNetEUR*100) / 100,
 	})

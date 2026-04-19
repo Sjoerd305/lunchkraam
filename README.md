@@ -68,10 +68,12 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 ## Rollen
 
 - **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, **betalingswachtrij**, **boodschappen & uitgaven**). In instellingen kun je o.a. een aparte Tikkie voor de avondetenkaart zetten (aanvullend op `.env`).
-- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Kan **fysieke kaartverkoop registreren** (tikkie/contant) en de **fysieke knipjesschatting** bijstellen. Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
+- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Kan **fysieke kaartverkoop registreren** (tikkie/contant) en de **fysieke knipjesschatting** bijstellen. Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren), **Overzichten**, **Financiën** (Revolut afstemmen tegen verkopen) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
 - **Matroos jeugd** (vlag op gebruiker): alleen wie deze vlag heeft ziet de **avondetenkaart** op Kaart kopen. Admins zetten dat bij **lokale** gebruikers in de UI; voor Google-accounts geldt hetzelfde patroon als bij operator (zo nodig handmatig in de database).
 
 Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYMENT_AMOUNT_EUR` / admin-tarieven de historische omzet niet verstoren.
+
+**Omzetrapportage en Revolut:** jaarcijfers tellen geaccordeerde **kaartverkopen** plus **Revolut-bijschrijvingen die nog niet** aan een verkoop zijn gekoppeld. Zo voorkom je dubbele telling (Tikkie in de app en dezelfde storting op de bank). Koppelen en zo nodig **ontkoppelen** doe je onder **Beheer → Financiën** (`/admin/finance`); na koppeling telt de bankregel niet meer mee als losse omzetpost.
 
 ## Fysieke kaarten
 

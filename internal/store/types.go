@@ -70,6 +70,7 @@ type CardRequestRow struct {
 }
 
 // AdminSalesMonthAgg is fulfilled card count and revenue for one calendar month (Europe/Amsterdam).
+// RevenueEUR is kaartverkoop (app) plus alleen niet-afgestemde bankregels (Revolut zonder match op card_request).
 type AdminSalesMonthAgg struct {
 	FulfilledCount          int64
 	RevenueEUR              float64
@@ -77,6 +78,10 @@ type AdminSalesMonthAgg struct {
 	FulfilledCountAvondeten int64
 	RevenueEURTosti         float64
 	RevenueEURAvondeten     float64
+	RevenueCardTosti        float64
+	RevenueCardAvondeten    float64
+	RevenueBankUnmatchedTosti     float64
+	RevenueBankUnmatchedAvondeten float64
 }
 
 type PhysicalCardSaleInput struct {
@@ -104,8 +109,11 @@ type AdminDashboardStats struct {
 	FulfilledRequests         int64
 	FulfilledKnipjesRemaining int64
 	CancelledRequests         int64
-	FinanceYear               int
-	YearRevenueEUR            float64
-	YearExpensesEUR           float64
-	YearNetEUR                float64
+	FinanceYear                    int
+	YearRevenueEUR                 float64
+	YearRevenueCardSalesEUR        float64
+	YearRevenueBankUnmatchedEUR    float64
+	YearBankCreditsUnmatchedCount  int64
+	YearExpensesEUR                float64
+	YearNetEUR                     float64
 }
