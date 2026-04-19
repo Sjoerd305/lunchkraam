@@ -31,8 +31,8 @@
 
 - [x] Gedeelde **EUR cent-rounding** helper (`internal/money.RoundEUR`; vervangt `math.Round(v*100)/100` bij JSON-uitvoer en rapportage).
 - [x] Gedeelde **JSON body decode**: `httpx.ReadJSON` / `httpx.ReadJSONAllowEmpty` i.p.v. overal `json.NewDecoder(http.MaxBytesReader(…))` + uniforme 400 bij parse-fout.
-- [ ] **Store error → HTTP** compacter: centrale of domein-`mapStoreError` i.p.v. lange `errors.Is`-ketens per handler; later optioneel getypeerde errors + `errors.As` (zie repo coding standards).
-- [ ] **Logging**: waar nu `log.Printf` in handlers staat, richting `log/slog` + struct fields bij grotere wijzigingen (lage prioriteit).
+- [x] **Store error → HTTP** centraal in [internal/httpx/store_errors.go](internal/httpx/store_errors.go) (`RespondStoreNotFound`, `WriteBankCreditStoreError`, tosti/kaart/avondeten/local-password helpers); handlers roepen die aan i.p.v. lange `errors.Is`-ketens.
+- [x] **Logging**: `log/slog` met structured fields in de aangepaste handlers + [internal/httpx/json.go](internal/httpx/json.go); `slog.SetDefault` in [cmd/server/main.go](cmd/server/main.go). (`log` blijft voor `log.Fatalf` bij startup.)
 
 ## Code health — frontend
 

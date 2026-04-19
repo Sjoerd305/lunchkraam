@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -118,14 +117,10 @@ func (d *Deps) APIAdminBankCreditSuggestions(w http.ResponseWriter, r *http.Requ
 	}
 	cands, err := d.Store.SuggestCardRequestsForBankCredit(r.Context(), id)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrBankCreditNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bankregel niet gevonden.")
-		case errors.Is(err, store.ErrBankCreditNotOpen):
-			httpx.JSONError(w, http.StatusConflict, "not_open", "Deze bankregel is niet meer open (al gekoppeld of afgehandeld).")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		if httpx.WriteBankCreditStoreError(w, err, false) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
 	out := make([]map[string]any, 0, len(cands))
@@ -158,14 +153,10 @@ func (d *Deps) APIAdminBankCreditMatchCandidates(w http.ResponseWriter, r *http.
 	}
 	online, physical, err := d.Store.ListManualMatchCardRequestsForBankCredit(r.Context(), id)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrBankCreditNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bankregel niet gevonden.")
-		case errors.Is(err, store.ErrBankCreditNotOpen):
-			httpx.JSONError(w, http.StatusConflict, "not_open", "Deze bankregel is niet meer open (al gekoppeld of afgehandeld).")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		if httpx.WriteBankCreditStoreError(w, err, false) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
 		return
 	}
 	digital := make([]map[string]any, 0, len(online))
@@ -199,24 +190,10 @@ func (d *Deps) APIAdminBankCreditMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := d.Store.LinkBankCreditToCardRequest(r.Context(), bankID, body.CardRequestID); err != nil {
-		switch {
-		case errors.Is(err, store.ErrBankCreditNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bankregel niet gevonden.")
-		case errors.Is(err, store.ErrBankCreditNotOpen):
-			httpx.JSONError(w, http.StatusConflict, "not_open", "Deze bankregel is niet meer open (al gekoppeld of afgehandeld).")
-		case errors.Is(err, store.ErrBankCreditAlreadyMatched):
-			httpx.JSONError(w, http.StatusConflict, "already_matched", "Deze bankregel is al afgestemd.")
-		case errors.Is(err, store.ErrCardRequestNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "card_not_found", "Kaartaanvraag niet gevonden.")
-		case errors.Is(err, store.ErrCardRequestNotFulfilled):
-			httpx.JSONError(w, http.StatusBadRequest, "not_fulfilled", "Alleen vervulde kaartverkopen kunnen gekoppeld worden.")
-		case errors.Is(err, store.ErrCardRequestAlreadyMatched):
-			httpx.JSONError(w, http.StatusConflict, "card_already_matched", "Deze kaartverkoop is al gekoppeld.")
-		case errors.Is(err, store.ErrRevenueMatchMismatch):
-			httpx.JSONError(w, http.StatusBadRequest, "mismatch", "Bedrag of doel komt niet overeen met de bankregel.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Koppelen mislukt.")
+		if httpx.WriteBankCreditStoreError(w, err, false) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Koppelen mislukt.")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -232,14 +209,10 @@ func (d *Deps) APIAdminBankCreditWaive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := d.Store.WaiveBankCreditFromOpenRevenue(r.Context(), bankID); err != nil {
-		switch {
-		case errors.Is(err, store.ErrBankCreditNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bankregel niet gevonden.")
-		case errors.Is(err, store.ErrBankCreditNotOpen):
-			httpx.JSONError(w, http.StatusConflict, "not_open", "Alleen open regels kunnen zo worden afgehandeld.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Afhandelen mislukt.")
+		if httpx.WriteBankCreditStoreError(w, err, true) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Afhandelen mislukt.")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -255,12 +228,10 @@ func (d *Deps) APIAdminBankCreditUnmatch(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := d.Store.UnlinkBankCreditMatch(r.Context(), bankID); err != nil {
-		switch {
-		case errors.Is(err, store.ErrBankCreditNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bankregel niet gevonden.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Ontkoppelen mislukt.")
+		if httpx.WriteBankCreditStoreError(w, err, false) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Ontkoppelen mislukt.")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true})

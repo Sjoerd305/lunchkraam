@@ -159,8 +159,7 @@ func (d *Deps) APIAdminPatchLocalUser(w http.ResponseWriter, r *http.Request) {
 		pwd = &t
 	}
 	err = d.Store.AdminUpdateLocalUser(r.Context(), uid, pwd, body.IsAdmin, body.IsOperator, body.MustChangePassword)
-	if errors.Is(err, store.ErrNotFound) {
-		httpx.JSONError(w, http.StatusNotFound, "not_found", "Lokaal account niet gevonden.")
+	if httpx.RespondStoreNotFound(w, err, "Lokaal account niet gevonden.") {
 		return
 	}
 	if err != nil {
@@ -190,17 +189,10 @@ func (d *Deps) APILocalChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	err := d.Store.ChangeOwnLocalPassword(r.Context(), u.ID, body.CurrentPassword, body.NewPassword)
-	switch {
-	case errors.Is(err, store.ErrInvalidCurrentPassword):
-		httpx.JSONError(w, http.StatusBadRequest, "invalid_current_password", "Huidig wachtwoord is onjuist.")
-		return
-	case errors.Is(err, store.ErrNotLocalAccount):
-		httpx.JSONError(w, http.StatusBadRequest, "not_local_account", "Dit account gebruikt geen lokaal wachtwoord.")
-		return
-	case errors.Is(err, store.ErrNotFound):
-		httpx.JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
-		return
-	case err != nil:
+	if err != nil {
+		if httpx.WriteLocalChangePasswordStoreError(w, err) {
+			return
+		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Wachtwoord wijzigen mislukt.")
 		return
 	}
@@ -221,8 +213,7 @@ func (d *Deps) APIAdminPatchUserMatroosJeugd(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	err = d.Store.AdminSetMatroosJeugd(r.Context(), uid, body.IsMatroosJeugd)
-	if errors.Is(err, store.ErrNotFound) {
-		httpx.JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
+	if httpx.RespondStoreNotFound(w, err, "Gebruiker niet gevonden.") {
 		return
 	}
 	if err != nil {

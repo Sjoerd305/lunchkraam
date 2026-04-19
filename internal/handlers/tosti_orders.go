@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -147,30 +146,10 @@ func (d *Deps) APITostiOrderCreate(w http.ResponseWriter, r *http.Request) {
 	remark := strings.TrimSpace(body.Remark)
 	o, err := d.Store.CreateTostiOrder(r.Context(), u.ID, cardID, body.Bread, body.Filling, qty, remark)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			if body.PhysicalCard {
-				httpx.JSONError(w, http.StatusBadRequest, "no_physical_card", "Geen fysieke tostikaart gevonden. Laat de kraam er eerst één registreren.")
-			} else {
-				httpx.JSONError(w, http.StatusBadRequest, "no_card", "Kaart niet gevonden of niet van jou.")
-			}
-		case errors.Is(err, store.ErrNoKnipjes):
-			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Niet genoeg vrije knipjes op deze kaart.")
-		case errors.Is(err, store.ErrCardPhysicalReadonly):
-			httpx.JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Fysieke kaart is niet digitaal bruikbaar. Kies fysieke kaart als betaalwijze.")
-		case errors.Is(err, store.ErrTostiInvalidQuantity):
-			httpx.JSONError(w, http.StatusBadRequest, "invalid_quantity", "Aantal moet tussen 1 en 10 zijn.")
-		case errors.Is(err, store.ErrTostiInvalidBread):
-			httpx.JSONError(w, http.StatusBadRequest, "invalid_bread", "Brood moet wit of bruin zijn.")
-		case errors.Is(err, store.ErrTostiInvalidFilling):
-			httpx.JSONError(w, http.StatusBadRequest, "invalid_filling", "Vulling moet ham, kaas of ham_kaas zijn.")
-		case errors.Is(err, store.ErrTostiInvalidRemark):
-			httpx.JSONError(w, http.StatusBadRequest, "invalid_remark", "Opmerking mag maximaal 500 tekens zijn.")
-		case errors.Is(err, store.ErrCardNotForTosti):
-			httpx.JSONError(w, http.StatusBadRequest, "wrong_card_kind", "Deze kaart is geen tostikaart.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestellen mislukt.")
+		if httpx.WriteTostiCreateStoreError(w, err, body.PhysicalCard) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestellen mislukt.")
 		return
 	}
 	d.notifyTostiMutation(o.UserID)
@@ -187,16 +166,10 @@ func (d *Deps) APITostiOrderCancel(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.Store.CancelTostiOrder(r.Context(), oid, u.ID, false)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
-		case errors.Is(err, store.ErrTostiOrderNotPending):
-			httpx.JSONError(w, http.StatusConflict, "not_pending", "Deze bestelling is al afgehandeld.")
-		case errors.Is(err, store.ErrTostiOrderWrongUser):
-			httpx.JSONError(w, http.StatusForbidden, "forbidden", "Geen toegang tot deze bestelling.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
+		if httpx.WriteTostiMemberCancelStoreError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
 		return
 	}
 	d.notifyTostiMutation(u.ID)
@@ -230,8 +203,7 @@ func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Reque
 	}
 	ownerID, err := d.Store.TostiOrderOwnerID(r.Context(), oid)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Bestelling niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestelling laden mislukt.")
@@ -239,18 +211,10 @@ func (d *Deps) APIOperatorTostiOrderDeliver(w http.ResponseWriter, r *http.Reque
 	}
 	err = d.Store.DeliverTostiOrder(r.Context(), oid, u.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
-		case errors.Is(err, store.ErrTostiOrderNotPending):
-			httpx.JSONError(w, http.StatusConflict, "not_pending", "Deze bestelling is niet meer open.")
-		case errors.Is(err, store.ErrNoKnipjes):
-			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Niet genoeg knipjes op de kaart voor dit aantal.")
-		case errors.Is(err, store.ErrTostiInvalidQuantity):
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Ongeldige bestelregel.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Leveren mislukt.")
+		if httpx.WriteTostiOperatorDeliverStoreError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Leveren mislukt.")
 		return
 	}
 	d.notifyTostiMutation(ownerID)
@@ -267,8 +231,7 @@ func (d *Deps) APIOperatorTostiOrderCancel(w http.ResponseWriter, r *http.Reques
 	}
 	ownerID, err := d.Store.TostiOrderOwnerID(r.Context(), oid)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Bestelling niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bestelling laden mislukt.")
@@ -276,14 +239,10 @@ func (d *Deps) APIOperatorTostiOrderCancel(w http.ResponseWriter, r *http.Reques
 	}
 	err = d.Store.CancelTostiOrder(r.Context(), oid, u.ID, true)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bestelling niet gevonden.")
-		case errors.Is(err, store.ErrTostiOrderNotPending):
-			httpx.JSONError(w, http.StatusConflict, "not_pending", "Deze bestelling is al afgehandeld.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
+		if httpx.WriteTostiOperatorCancelStoreError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
 		return
 	}
 	d.notifyTostiMutation(ownerID)

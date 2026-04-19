@@ -93,16 +93,10 @@ func (d *Deps) APICardUse(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.Store.UseKnipje(r.Context(), cardID, u)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNoKnipjes):
-			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Deze kaart heeft geen knipjes meer.")
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Kaart niet gevonden.")
-		case errors.Is(err, store.ErrCardPhysicalReadonly):
-			httpx.JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Fysieke kaarten zijn read-only in de app.")
-		default:
-			httpx.JSONError(w, http.StatusBadRequest, "use_failed", "Kon geen knipje gebruiken.")
+		if httpx.WriteCardUseStoreError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusBadRequest, "use_failed", "Kon geen knipje gebruiken.")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -158,12 +152,7 @@ func (d *Deps) APIBuyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := d.Store.CreateCardRequest(r.Context(), u.ID, body.Kind)
 	if err != nil {
-		if errors.Is(err, store.ErrAlreadyPending) {
-			httpx.JSONError(w, http.StatusConflict, "already_pending", "Er is al een open aanvraag voor dit kaarttype.")
-			return
-		}
-		if errors.Is(err, store.ErrForbidden) {
-			httpx.JSONError(w, http.StatusForbidden, "not_matroos_jeugd", "Avondetenkaart alleen voor matroos-jeugd.")
+		if httpx.WriteBuyRequestCreateError(w, err) {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Aanvraag opslaan mislukt.")
@@ -205,16 +194,10 @@ func (d *Deps) APIOperatorCardSale(w http.ResponseWriter, r *http.Request) {
 		SalePriceEUR:  salePrice,
 	})
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
-		case errors.Is(err, store.ErrForbidden):
-			httpx.JSONError(w, http.StatusForbidden, "forbidden", "Avondetenkaart alleen voor matroos-jeugd.")
-		case errors.Is(err, store.ErrAlreadyPending):
-			httpx.JSONError(w, http.StatusConflict, "already_pending", "Er is al een open aanvraag voor dit kaarttype.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Verkoop registreren mislukt.")
+		if httpx.WritePhysicalCardSaleStoreError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Verkoop registreren mislukt.")
 		return
 	}
 	d.notifyPaymentRequestsMutation()
@@ -231,12 +214,7 @@ func (d *Deps) APICancelMyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.Store.CancelCardRequestForUser(r.Context(), reqID, u.ID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden of al verwerkt.")
-			return
-		}
-		if errors.Is(err, store.ErrCannotCancelTrustUsed) {
-			httpx.JSONError(w, http.StatusConflict, "knipjes_used", "Annuleren niet mogelijk na knipjegebruik.")
+		if httpx.WriteCancelCardRequestForUserError(w, err) {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")
@@ -250,8 +228,7 @@ func (d *Deps) APICancelAllMyPending(w http.ResponseWriter, r *http.Request) {
 	u := auth.MustUserFromContext(r.Context())
 	n, err := d.Store.CancelAllPendingCardRequestsForUser(r.Context(), u.ID)
 	if err != nil {
-		if errors.Is(err, store.ErrCannotCancelTrustUsed) {
-			httpx.JSONError(w, http.StatusConflict, "knipjes_used", "Annuleren niet mogelijk na knipjegebruik.")
+		if httpx.WriteCancelAllPendingCardRequestsError(w, err) {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Annuleren mislukt.")

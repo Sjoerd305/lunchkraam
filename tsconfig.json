@@ -1,0 +1,8 @@
+{
+  "extends": "./frontend/tsconfig.app.json",
+  "include": ["frontend/src/**/*.ts", "frontend/src/**/*.tsx"],
+  "compilerOptions": {
+    "tsBuildInfoFile": "./frontend/node_modules/.tmp/tsconfig.repo-root.tsbuildinfo",
+    "types": []
+  }
+}

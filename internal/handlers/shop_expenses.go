@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -191,8 +190,7 @@ func (d *Deps) APIShopExpensePatch(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := d.Store.UpdateShopExpensePurpose(r.Context(), id, purpose)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Uitgave niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Uitgave niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Bijwerken mislukt.")
@@ -210,8 +208,7 @@ func (d *Deps) APIAdminShopExpenseDelete(w http.ResponseWriter, r *http.Request)
 	}
 	err = d.Store.DeleteShopExpense(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Uitgave niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Uitgave niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Verwijderen mislukt.")

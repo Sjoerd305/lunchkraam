@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -18,7 +18,8 @@ func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
 		user = toUserPublic(u)
 		n, err := d.Store.PendingCardRequestsByUser(r.Context(), u.ID)
 		if err != nil {
-			log.Printf("handlers: PendingCardRequestsByUser user_id=%d: %v", u.ID, err)
+			slog.WarnContext(r.Context(), "pending card requests by user",
+				slog.Int64("user_id", u.ID), slog.Any("err", err))
 		} else {
 			pending = n
 		}

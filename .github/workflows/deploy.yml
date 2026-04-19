@@ -25,17 +25,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '25'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Frontend lint
-        working-directory: frontend
+      # Zelfde image als Dockerfile frontend-stage — voorkomt dat `npm ci` op ubuntu
+      # groen is terwijl `docker build` faalt door lockfile/npm-resolververschillen.
+      - name: Frontend install and lint (node:25-alpine, matches Docker)
         run: |
-          npm ci
-          npm run lint
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}/frontend:/f:rw" \
+            -w /f \
+            node:25-alpine \
+            sh -c 'npm ci && npm run lint'
 
       - uses: actions/setup-go@v6
         with:

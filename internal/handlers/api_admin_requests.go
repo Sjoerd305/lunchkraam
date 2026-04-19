@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -43,8 +42,7 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 	}
 	kind, err := d.Store.CardRequestKind(r.Context(), reqID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Aanvraag niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
@@ -60,14 +58,10 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.Store.FulfillCardRequest(r.Context(), reqID, u.ID, salePrice)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden.")
-		case errors.Is(err, store.ErrForbidden):
-			httpx.JSONError(w, http.StatusConflict, "already_fulfilled", "Deze aanvraag was al verwerkt.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kon niet toekennen.")
+		if httpx.WriteAdminFulfillCardRequestError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kon niet toekennen.")
 		return
 	}
 	d.notifyPaymentRequestsMutation()
@@ -83,14 +77,10 @@ func (d *Deps) APIAdminReject(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.Store.AdminRejectCardRequest(r.Context(), reqID)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Aanvraag niet gevonden.")
-		case errors.Is(err, store.ErrCannotRejectKnipjesUsed):
-			httpx.JSONError(w, http.StatusConflict, "cannot_reject", "Weigeren niet mogelijk na knipjegebruik.")
-		default:
-			httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kon aanvraag niet weigeren.")
+		if httpx.WriteAdminRejectCardRequestError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kon aanvraag niet weigeren.")
 		return
 	}
 	d.notifyPaymentRequestsMutation()

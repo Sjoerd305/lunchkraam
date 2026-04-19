@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,7 +8,6 @@ import (
 
 	"lunchkraam/internal/auth"
 	"lunchkraam/internal/httpx"
-	"lunchkraam/internal/store"
 )
 
 func parseMealDateEuropeAmsterdam(s string) (time.Time, error) {
@@ -83,18 +81,10 @@ func (d *Deps) APIOperatorAvondetenRegister(w http.ResponseWriter, r *http.Reque
 	}
 	n, err := d.Store.RegisterAvondetenMealsForDate(r.Context(), day, body.CardIDs, u.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.JSONError(w, http.StatusBadRequest, "not_found", "Onbekende kaart in de selectie.")
-		case errors.Is(err, store.ErrAvondetenWrongCardKind):
-			httpx.JSONError(w, http.StatusBadRequest, "wrong_card", "Alleen avondetenkaarten kunnen zo worden geregistreerd.")
-		case errors.Is(err, store.ErrNoKnipjes):
-			httpx.JSONError(w, http.StatusBadRequest, "no_knipjes", "Een van de kaarten heeft geen knipjes meer.")
-		case errors.Is(err, store.ErrAvondetenAlreadyRegistered):
-			httpx.JSONError(w, http.StatusConflict, "already_registered", "Een van de kaarten was al geregistreerd voor deze datum. Vernieuw de lijst en probeer opnieuw.")
-		default:
-			httpx.JSONError(w, http.StatusBadRequest, "register_failed", err.Error())
+		if httpx.WriteAvondetenRegisterStoreError(w, err) {
+			return
 		}
+		httpx.JSONError(w, http.StatusBadRequest, "register_failed", err.Error())
 		return
 	}
 	d.notifyAvondetenRegistration()

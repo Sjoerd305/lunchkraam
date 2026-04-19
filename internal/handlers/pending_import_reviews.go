@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -16,7 +16,7 @@ import (
 func (d *Deps) APIPendingImportReviews(w http.ResponseWriter, r *http.Request) {
 	reviews, err := d.Store.ListPendingImportReviews(r.Context())
 	if err != nil {
-		log.Printf("list pending import reviews: %v", err)
+		slog.ErrorContext(r.Context(), "list pending import reviews", slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Laden mislukt.")
 		return
 	}
@@ -38,11 +38,10 @@ func (d *Deps) APIPendingReviewMerge(w http.ResponseWriter, r *http.Request) {
 
 	review, err := d.Store.DeletePendingImportReview(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Review niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Review niet gevonden.") {
 			return
 		}
-		log.Printf("delete pending review %d: %v", id, err)
+		slog.ErrorContext(r.Context(), "delete pending import review", slog.Int64("review_id", id), slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Verwerken mislukt.")
 		return
 	}
@@ -54,19 +53,22 @@ func (d *Deps) APIPendingReviewMerge(w http.ResponseWriter, r *http.Request) {
 		review.AmountEUR, review.SpentOn, review.Description, review.Purpose,
 	)
 	if err != nil {
-		log.Printf("upsert merged expense %s: %v", review.ExternalID, err)
+		slog.ErrorContext(r.Context(), "upsert merged shop expense from pending review",
+			slog.String("external_id", review.ExternalID), slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan mislukt.")
 		return
 	}
 
 	// Move receipts from the manual expense to the new Revolut expense.
 	if err := d.Store.ReassignShopExpenseReceipts(r.Context(), review.MatchedExpenseID, newExpense.ID); err != nil {
-		log.Printf("reassign receipts %d -> %d: %v", review.MatchedExpenseID, newExpense.ID, err)
+		slog.WarnContext(r.Context(), "reassign shop expense receipts after merge",
+			slog.Int64("from_expense_id", review.MatchedExpenseID), slog.Int64("to_expense_id", newExpense.ID), slog.Any("err", err))
 	}
 
 	// Delete the manual expense.
 	if err := d.Store.DeleteShopExpense(r.Context(), review.MatchedExpenseID); err != nil && !errors.Is(err, store.ErrNotFound) {
-		log.Printf("delete manual expense %d: %v", review.MatchedExpenseID, err)
+		slog.WarnContext(r.Context(), "delete manual expense after merge",
+			slog.Int64("expense_id", review.MatchedExpenseID), slog.Any("err", err))
 	}
 
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -82,11 +84,10 @@ func (d *Deps) APIPendingReviewDismiss(w http.ResponseWriter, r *http.Request) {
 
 	_, err := d.Store.DeletePendingImportReview(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Review niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Review niet gevonden.") {
 			return
 		}
-		log.Printf("dismiss pending review %d: %v", id, err)
+		slog.ErrorContext(r.Context(), "dismiss pending import review", slog.Int64("review_id", id), slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Verwerken mislukt.")
 		return
 	}

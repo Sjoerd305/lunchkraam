@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -44,6 +45,8 @@ func warnIfReceiptsDirNotWritable(dir string) {
 }
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)

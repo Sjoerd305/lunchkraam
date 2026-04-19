@@ -259,12 +259,13 @@ export function AdminShopExpensesPage() {
   })
 
   const yearsLoading = yearsQuery.isLoading
-  const rows = listQuery.data?.rows ?? []
-  const receiptsByExpenseId = listQuery.data?.receiptsByExpenseId ?? {}
+  const rows: api.AdminShopExpense[] = listQuery.data?.rows ?? []
+  const receiptsByExpenseId: Record<number, api.ShopExpenseReceipt[]> =
+    listQuery.data?.receiptsByExpenseId ?? {}
   const listLoading = listQuery.isFetching
   const revolutBalance = revolutBalanceQuery.data ?? null
   const revolutBalanceLoading = revolutBalanceQuery.isFetching
-  const pendingReviews = pendingReviewsQuery.data ?? []
+  const pendingReviews: api.PendingImportReview[] = pendingReviewsQuery.data ?? []
 
   const invalidateShopList = (y: number) =>
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.shopExpensesList(y, isOperatorOnly) })

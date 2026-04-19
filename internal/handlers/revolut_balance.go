@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"lunchkraam/internal/httpx"
@@ -11,7 +11,7 @@ import (
 func (d *Deps) APIRevolutBalance(w http.ResponseWriter, r *http.Request) {
 	snap, err := d.Store.GetRevolutBalanceSnapshot(r.Context())
 	if err != nil {
-		log.Printf("revolut balance get: %v", err)
+		slog.ErrorContext(r.Context(), "revolut balance snapshot get", slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Saldo kon niet worden geladen.")
 		return
 	}

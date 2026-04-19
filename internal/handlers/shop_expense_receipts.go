@@ -5,13 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
 	_ "image/png"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -98,8 +97,7 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if _, err := d.Store.ShopExpenseByID(r.Context(), expenseID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Uitgave niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Uitgave niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
@@ -140,20 +138,22 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := os.MkdirAll(d.Config.ReceiptsDir, 0o750); err != nil {
-		log.Printf("shop expense receipt upload: mkdir %q: %v", d.Config.ReceiptsDir, err)
+		slog.ErrorContext(r.Context(), "shop expense receipt upload: mkdir",
+			slog.String("receipts_dir", d.Config.ReceiptsDir), slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kan opslagmap niet maken.")
 		return
 	}
 	name, err := randomHex(16)
 	if err != nil {
-		log.Printf("shop expense receipt upload: randomHex: %v", err)
+		slog.ErrorContext(r.Context(), "shop expense receipt upload: random id", slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Kan bestandsnaam niet maken.")
 		return
 	}
 	filename := fmt.Sprintf("expense_%d_%s.jpg", expenseID, name)
 	path := filepath.Join(d.Config.ReceiptsDir, filename)
 	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		log.Printf("shop expense receipt upload: write %q: %v", path, err)
+		slog.ErrorContext(r.Context(), "shop expense receipt upload: write file",
+			slog.String("path", path), slog.Int64("expense_id", expenseID), slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan bonfoto mislukt (controleer schrijfrechten op RECEIPTS_DIR).")
 		return
 	}
@@ -169,7 +169,8 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 	)
 	if err != nil {
 		_ = os.Remove(path)
-		log.Printf("shop expense receipt upload: insert metadata expense_id=%d: %v", expenseID, err)
+		slog.ErrorContext(r.Context(), "shop expense receipt upload: insert metadata",
+			slog.Int64("expense_id", expenseID), slog.Any("err", err))
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Opslaan metadata mislukt.")
 		return
 	}
@@ -184,8 +185,7 @@ func (d *Deps) APIShopExpenseReceiptMeta(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if _, err := d.Store.ShopExpenseByID(r.Context(), expenseID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Uitgave niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Uitgave niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
@@ -216,8 +216,7 @@ func (d *Deps) APIShopExpenseReceiptImage(w http.ResponseWriter, r *http.Request
 	}
 	rec, err := d.Store.ShopExpenseReceiptByID(r.Context(), receiptID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bonfoto niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Bonfoto niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
@@ -249,8 +248,7 @@ func (d *Deps) APIShopExpenseReceiptDelete(w http.ResponseWriter, r *http.Reques
 	}
 	rec, err := d.Store.ShopExpenseReceiptByID(r.Context(), receiptID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.JSONError(w, http.StatusNotFound, "not_found", "Bonfoto niet gevonden.")
+		if httpx.RespondStoreNotFound(w, err, "Bonfoto niet gevonden.") {
 			return
 		}
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")

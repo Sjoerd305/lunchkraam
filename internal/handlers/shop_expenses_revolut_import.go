@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -134,7 +134,7 @@ func (d *Deps) APIShopExpensesRevolutPreview(w http.ResponseWriter, r *http.Requ
 
 	rows, err := revolutcsv.Parse(bytes.NewReader(raw))
 	if err != nil {
-		log.Printf("revolut preview parse: %v", err)
+		slog.WarnContext(r.Context(), "revolut preview: csv parse", slog.Any("err", err))
 		httpx.JSONError(w, http.StatusBadRequest, "import_failed", "CSV kon niet worden gelezen. Controleer het bestand.")
 		return
 	}
@@ -200,7 +200,7 @@ func (d *Deps) APIShopExpensesRevolutPreview(w http.ResponseWriter, r *http.Requ
 		r.Context(), d.Store, rows, debitOpts, co, importCredits,
 	)
 	if err != nil {
-		log.Printf("revolut preview: %v", err)
+		slog.ErrorContext(r.Context(), "revolut preview: build", slog.Any("err", err))
 		httpx.JSONError(w, http.StatusBadRequest, "preview_failed", "Voorbeeld kon niet worden opgebouwd.")
 		return
 	}
@@ -247,7 +247,7 @@ func (d *Deps) APIShopExpensesRevolutImport(w http.ResponseWriter, r *http.Reque
 
 	rows, err := revolutcsv.Parse(bytes.NewReader(raw))
 	if err != nil {
-		log.Printf("revolut shop expense import parse: %v", err)
+		slog.WarnContext(r.Context(), "revolut shop expense import: csv parse", slog.Any("err", err))
 		httpx.JSONError(w, http.StatusBadRequest, "import_failed", "CSV kon niet worden gelezen. Controleer het bestand.")
 		return
 	}
@@ -310,7 +310,7 @@ func (d *Deps) APIShopExpensesRevolutImport(w http.ResponseWriter, r *http.Reque
 
 	debitRes, err := revolutimport.ImportDebitRows(r.Context(), d.Store, rows, debitOpts)
 	if err != nil {
-		log.Printf("revolut debit import: %v", err)
+		slog.ErrorContext(r.Context(), "revolut shop expense import: debit rows", slog.Any("err", err))
 		httpx.JSONError(w, http.StatusBadRequest, "import_failed", "Uitgaven-importeren mislukt. Controleer het CSV-bestand of probeer opnieuw.")
 		return
 	}
@@ -342,7 +342,7 @@ func (d *Deps) APIShopExpensesRevolutImport(w http.ResponseWriter, r *http.Reque
 		var cerr error
 		creditRes, cerr = revolutimport.ImportCreditRows(r.Context(), d.Store, rows, co)
 		if cerr != nil {
-			log.Printf("revolut credit import: %v", cerr)
+			slog.ErrorContext(r.Context(), "revolut shop expense import: credit rows", slog.Any("err", cerr))
 			httpx.JSONError(w, http.StatusBadRequest, "import_failed", "Inkomsten-importeren mislukt. Controleer de bedragen (standaard €15 / €10) of het CSV-bestand.")
 			return
 		}
@@ -351,7 +351,7 @@ func (d *Deps) APIShopExpensesRevolutImport(w http.ResponseWriter, r *http.Reque
 	if !dryRun {
 		if bal, asOf, ok := revolutcsv.LatestEURStatementBalance(rows); ok {
 			if err := d.Store.UpsertRevolutBalanceSnapshot(r.Context(), bal, asOf); err != nil {
-				log.Printf("revolut balance snapshot: %v", err)
+				slog.WarnContext(r.Context(), "revolut balance snapshot upsert after import", slog.Any("err", err))
 			}
 		}
 	}
