@@ -40,7 +40,7 @@
 *Last reviewed: 2026-04-19 (follow-up scan)*
 
 - [x] Gedeelde **`formatEUR`** / **`roundCents`** in [frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts) (`Intl.NumberFormat` NL + EUR).
-- [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings).
+- [x] **Admin dashboard**-euro’s via `formatEUR` (geen losse `toFixed(2)`-strings); **buiten admin** staan nog losse `€`-strings op o.a. Buy/Dashboard — zie *Production backlog — code*.
 - [x] **Admin grafieken** (`AdminSalesCharts`): `roundCents` i.p.v. herhaalde `Math.round(x*100)/100`.
 - [x] **Zod** — response- en payload-types in `api.ts` via `z.infer<typeof …Schema>` gekoppeld aan [frontend/src/api.schemas.ts](frontend/src/api.schemas.ts) (sub-schema’s geëxporteerd waar nodig).
 - [x] Optioneel: **`apiRequest`-factory** (`apiJson` / `apiVoid` / `apiFormJson` in [frontend/src/apiRequest.ts](frontend/src/apiRequest.ts)) — `api.ts` gebruikt dit centraal.
@@ -53,7 +53,25 @@
 - [x] **Jaar-dropdown opties:** pure helper [frontend/src/utils/adminYearSelectOptions.ts](frontend/src/utils/adminYearSelectOptions.ts) + [unit test](frontend/src/utils/adminYearSelectOptions.test.ts); vervangt copy-paste `useMemo` op dezelfde admin-pagina’s.
 - **Buiten admin:** `KraamPage`, `CardsPage`, `BuyPage`, `OrderTostiPage` houden nog **lokale state + handmatige refresh**; Query is daar optioneel tot het patroon lastig wordt.
 - **CLI** (`cmd/revolut-import`): nog `log.Printf` — acceptabel voor een losstaand commando; serverpad blijft `slog`.
-- **Admin query-fout → alert/toast:** op meerdere pagina’s dezelfde `useEffect` op `query.isError` / `ApiError` — optioneel één kleine helper (bijv. `useQueryErrorAlert(query, { title })`) of query-defaults (`throwOnError` + boundary) om duplicatie te beperken; geen wijziging in UX nodig.
+- [x] **Admin query-fout → alert/toast:** gedeelde hook [frontend/src/hooks/useQueryErrorAlert.ts](frontend/src/hooks/useQueryErrorAlert.ts) i.p.v. copy-paste `useEffect` op admin-pagina’s (incl. Financiën met meerdere queries).
+
+### Production backlog — code *(scan / plan 2026-04-19; uitvoering 2026-04-19)*
+
+**Backend**
+
+- [x] **Pending import merge:** transactionele merge via [internal/store/pending_import_reviews.go](internal/store/pending_import_reviews.go) (`MergePendingImportReview`); integratie-check [internal/store/pending_import_reviews_merge_test.go](internal/store/pending_import_reviews_merge_test.go) met `TEST_DATABASE_URL`.
+- [x] **Generieke 500 + DB-fouten:** [internal/httpx/logged_errors.go](internal/httpx/logged_errors.go) (`RespondInternalStoreError`) op `"Databasefout."`-paden in handlers.
+- [x] **Bank credit store:** types/errors + `scanBankCreditListRow` naar [internal/store/bank_credit_types.go](internal/store/bank_credit_types.go) (lijst-SQL blijft in `bank_credit_reconciliation.go`).
+- [ ] **Nog te splitsen / afsmullen:** o.a. [internal/handlers/shop_expenses_revolut_import.go](internal/handlers/shop_expenses_revolut_import.go), [internal/handlers/api_admin_sales.go](internal/handlers/api_admin_sales.go) (DTO-rounding helper), [internal/store/shop_expenses.go](internal/store/shop_expenses.go).
+
+**Frontend**
+
+- [x] **`useQueryErrorAlert`:** zie hook hierboven + admin-pagina’s.
+- [x] **Card-kind labels/badges:** [frontend/src/utils/cardKindPresentation.ts](frontend/src/utils/cardKindPresentation.ts); Kraam re-exporteert vanuit [frontend/src/pages/kraam/kraamFormat.ts](frontend/src/pages/kraam/kraamFormat.ts).
+- [x] **Lidgerichte + chart-tick euro’s:** `formatEURFromString` / `formatEUR` op Buy, Dashboard, admin-grafieken ([frontend/src/utils/formatMoney.ts](frontend/src/utils/formatMoney.ts)).
+- [x] **TanStack Query (deels):** `queryKeys.member` + [frontend/src/pages/CardsPage.tsx](frontend/src/pages/CardsPage.tsx) op Query; [frontend/src/pages/BuyPage.tsx](frontend/src/pages/BuyPage.tsx) invalideert `myCards` na mutaties.
+- [ ] (Optioneel) **Kraam + OrderTosti:** Query + WebSocket `invalidateQueries`.
+- [ ] (Optioneel) **Zod:** WebSocket-payload in `useTostiRealtime`; error-JSON in `apiRequest.parseError`.
 
 ## Libraries vs zelf bouwen (richtlijn)
 

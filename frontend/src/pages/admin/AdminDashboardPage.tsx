@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { formatEUR } from '../../utils/formatMoney'
 const AdminSalesCharts = lazy(async () => {
@@ -51,11 +52,7 @@ export function AdminDashboardPage() {
     queryFn: () => api.getAdminDashboard(),
   })
 
-  useEffect(() => {
-    if (!q.isError || !q.error) return
-    const msg = q.error instanceof api.ApiError ? q.error.message : 'Laden mislukt.'
-    void alert({ title: 'Overzicht laden mislukt', message: msg, variant: 'error' })
-  }, [q.isError, q.error, alert])
+  useQueryErrorAlert(q, { title: 'Overzicht laden mislukt', alert })
 
   if (q.isPending && !q.data) {
     return <p className="text-slate-600">Cijfers laden…</p>

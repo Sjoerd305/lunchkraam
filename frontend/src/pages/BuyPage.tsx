@@ -1,14 +1,15 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
 import { useAlertDialog } from '../components/useAlertDialog'
-
-function cardKindLabel(kind: api.CardKind): string {
-  return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
-}
+import { formatEURFromString } from '../utils/formatMoney'
+import { cardKindLabel } from '../utils/cardKindPresentation'
+import { queryKeys } from '../queryKeys'
 
 export function BuyPage() {
   const { user, csrf, refresh } = useAuth()
+  const queryClient = useQueryClient()
   const { alert, confirm } = useAlertDialog()
   const [info, setInfo] = useState<api.BuyInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -53,6 +54,7 @@ export function BuyPage() {
     setSubmitting(true)
     try {
       await api.requestCard(csrf, kind)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
       await refresh()
       await loadBuyInfo()
       const isAvondeten = kind === 'avondeten'
@@ -65,6 +67,7 @@ export function BuyPage() {
       })
     } catch (e) {
       if (e instanceof api.ApiError && e.code === 'already_pending') {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
         await loadBuyInfo()
       }
       const msg = e instanceof api.ApiError ? e.message : 'Aanvraag mislukt.'
@@ -86,6 +89,7 @@ export function BuyPage() {
     setCancellingId(id)
     try {
       await api.cancelMyRequest(csrf, id)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
       await refresh()
       await loadBuyInfo()
       await alert({ title: 'Geannuleerd', message: 'De aanvraag is verwijderd uit de wachtrij.', variant: 'success' })
@@ -109,6 +113,7 @@ export function BuyPage() {
     setCancellingAll(true)
     try {
       const n = await api.cancelAllMyPendingRequests(csrf)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
       await refresh()
       await loadBuyInfo()
       await alert({
@@ -157,7 +162,8 @@ export function BuyPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
           <h2 className="text-lg font-semibold text-slate-900">Tostikaart (lunchkraam)</h2>
           <p className="mt-2 text-slate-700">
-            Nieuwe kaart: <strong className="text-brand-800">€{info.payment_amount_eur}</strong>. Meteen{' '}
+            Nieuwe kaart:{' '}
+            <strong className="text-brand-800">{formatEURFromString(info.payment_amount_eur)}</strong>. Meteen{' '}
             <strong>10 knipjes</strong> op <strong>Mijn kaarten</strong>. Beheerder accordeert de betaling later.
           </p>
         </div>
@@ -165,7 +171,8 @@ export function BuyPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
             <h2 className="text-lg font-semibold text-slate-900">Avondetenkaart (matroos jeugd)</h2>
             <p className="mt-2 text-slate-700">
-              <strong className="text-brand-800">€{info.payment_amount_avondeten_eur}</strong> — 10 knipjes op Mijn
+              <strong className="text-brand-800">{formatEURFromString(info.payment_amount_avondeten_eur)}</strong> —
+              10 knipjes op Mijn
               kaarten. Afboeken via de kraam.
             </p>
           </div>
@@ -233,7 +240,9 @@ export function BuyPage() {
         <h2 className="text-lg font-semibold text-slate-900">Betalen (Tikkie)</h2>
         <div className="mt-6 space-y-6">
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">Tostikaart (€{info.payment_amount_eur})</h3>
+            <h3 className="text-sm font-semibold text-slate-800">
+              Tostikaart ({formatEURFromString(info.payment_amount_eur)})
+            </h3>
             {info.tikkie_url ? (
               <a
                 href={info.tikkie_url}
@@ -252,7 +261,7 @@ export function BuyPage() {
           {showAvondeten ? (
             <div className="border-t border-slate-100 pt-6">
               <h3 className="text-sm font-semibold text-slate-800">
-                Avondetenkaart (€{info.payment_amount_avondeten_eur})
+                Avondetenkaart ({formatEURFromString(info.payment_amount_avondeten_eur)})
               </h3>
               {info.tikkie_url_avondeten ? (
                 <a

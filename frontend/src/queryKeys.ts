@@ -1,6 +1,10 @@
 /** Stable keys for TanStack Query (admin + shared lists). */
 
 export const queryKeys = {
+  member: {
+    myCards: ['member', 'cards'] as const,
+    buyInfo: ['member', 'buy-info'] as const,
+  },
   admin: {
     dashboard: ['admin', 'dashboard'] as const,
     requests: ['admin', 'requests'] as const,

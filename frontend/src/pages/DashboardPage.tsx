@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../useAuth'
+import { formatEURFromString } from '../utils/formatMoney'
 
 /* Dashboard links follow the same routes and role rules as App.tsx and AdminLayout.tsx */
 
@@ -66,7 +67,7 @@ export function DashboardPage() {
         <DashCard
           to="/buy"
           title="Kaart kopen"
-          description={`Koop een nieuwe lunchkraam kaart online (€${paymentAmountEUR}).`}
+          description={`Koop een nieuwe lunchkraam kaart online (${formatEURFromString(paymentAmountEUR)}).`}
           cta="Kaart kopen →"
         >
           <p className="mt-3 text-sm text-slate-500">

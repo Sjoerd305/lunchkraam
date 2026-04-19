@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { PaymentRequestsPanel } from '../../components/PaymentRequestsPanel'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { useTostiRealtime } from '../../useTostiRealtime'
 
@@ -18,11 +19,7 @@ export function AdminRequestsPage() {
     queryFn: () => api.getAdminRequests(),
   })
 
-  useEffect(() => {
-    if (!listQuery.isError || !listQuery.error) return
-    const msg = listQuery.error instanceof api.ApiError ? listQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Laden mislukt', message: msg, variant: 'error' })
-  }, [listQuery.isError, listQuery.error, alert])
+  useQueryErrorAlert(listQuery, { title: 'Laden mislukt', alert })
 
   const onPaymentRealtime = useCallback(
     (reason: string) => {

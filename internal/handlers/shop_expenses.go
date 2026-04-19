@@ -72,7 +72,7 @@ func (d *Deps) APIAdminShopExpensesList(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := d.Store.ListShopExpensesByYear(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListShopExpensesByYear", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))

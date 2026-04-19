@@ -5,6 +5,7 @@ import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
 import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
 import { formatEUR } from '../../utils/formatMoney'
@@ -62,11 +63,7 @@ export function AdminFinancePage() {
     enabled: year !== null && Boolean(user),
   })
 
-  useEffect(() => {
-    if (!salesStatsQuery.isError || !salesStatsQuery.error) return
-    const msg = salesStatsQuery.error instanceof api.ApiError ? salesStatsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
-  }, [salesStatsQuery.isError, salesStatsQuery.error, alert])
+  useQueryErrorAlert(salesStatsQuery, { title: 'Cijfers laden mislukt', alert })
 
   const bankListsQuery = useQuery({
     queryKey: queryKeys.admin.bankCreditLists(year ?? 0, isOperatorOnly),
@@ -81,11 +78,7 @@ export function AdminFinancePage() {
     enabled: year !== null && Boolean(user),
   })
 
-  useEffect(() => {
-    if (!bankListsQuery.isError || !bankListsQuery.error) return
-    const msg = bankListsQuery.error instanceof api.ApiError ? bankListsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Bankregels laden mislukt', message: msg, variant: 'error' })
-  }, [bankListsQuery.isError, bankListsQuery.error, alert])
+  useQueryErrorAlert(bankListsQuery, { title: 'Bankregels laden mislukt', alert })
 
   const suggestionPanelQuery = useQuery({
     queryKey: queryKeys.admin.bankSuggestionPanel(suggestionsFor ?? 0, isOperatorOnly),
@@ -112,12 +105,7 @@ export function AdminFinancePage() {
     enabled: suggestionsFor !== null && Boolean(user),
   })
 
-  useEffect(() => {
-    if (!suggestionPanelQuery.isError || !suggestionPanelQuery.error) return
-    const msg =
-      suggestionPanelQuery.error instanceof api.ApiError ? suggestionPanelQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Suggesties laden mislukt', message: msg, variant: 'error' })
-  }, [suggestionPanelQuery.isError, suggestionPanelQuery.error, alert])
+  useQueryErrorAlert(suggestionPanelQuery, { title: 'Suggesties laden mislukt', alert })
 
   useEffect(() => {
     setManualMatchSelectId('')

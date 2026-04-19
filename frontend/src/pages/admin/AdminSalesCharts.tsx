@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Bar,
@@ -16,9 +16,10 @@ import {
 import * as api from '../../api'
 import { useAlertDialog } from '../../components/useAlertDialog'
 import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
-import { formatEUR, roundCents } from '../../utils/formatMoney'
+import { formatEUR, formatEURFromString, roundCents } from '../../utils/formatMoney'
 
 const MONTH_SHORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
 
@@ -226,11 +227,7 @@ export function AdminSalesCharts() {
     enabled: year !== null,
   })
 
-  useEffect(() => {
-    if (!statsQuery.isError || !statsQuery.error) return
-    const msg = statsQuery.error instanceof api.ApiError ? statsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
-  }, [statsQuery.isError, statsQuery.error, alert])
+  useQueryErrorAlert(statsQuery, { title: 'Cijfers laden mislukt', alert })
 
   const stats = statsQuery.data ?? null
   const yearsLoading = yearsQuery.isLoading
@@ -256,7 +253,8 @@ export function AdminSalesCharts() {
           <h2 className="text-lg font-semibold text-slate-900">Omzet en boodschappen</h2>
           {stats ? (
             <p className="mt-1 text-sm text-slate-600">
-              Tijdzone {stats.timezone}. Catalogusprijs nieuwe kaarten: €{stats.payment_amount_eur}.{' '}
+              Tijdzone {stats.timezone}. Catalogusprijs nieuwe kaarten:{' '}
+              {formatEURFromString(stats.payment_amount_eur)}.{' '}
               <Link to="/admin/finance" className="font-semibold text-brand-800 underline hover:text-brand-950">
                 Revolut afstemmen
               </Link>
@@ -413,7 +411,7 @@ export function AdminSalesCharts() {
                       <YAxis
                         tick={{ fontSize: 11 }}
                         className="fill-slate-600"
-                        tickFormatter={(v) => `€${v}`}
+                        tickFormatter={(v) => formatEUR(roundCents(Number(v)))}
                         width={44}
                       />
                       <Tooltip
@@ -440,7 +438,7 @@ export function AdminSalesCharts() {
                       <YAxis
                         tick={{ fontSize: 11 }}
                         className="fill-slate-600"
-                        tickFormatter={(v) => `€${v}`}
+                        tickFormatter={(v) => formatEUR(roundCents(Number(v)))}
                         width={44}
                       />
                       <Tooltip content={<CumFinanceTooltip />} />

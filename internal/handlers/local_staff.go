@@ -64,7 +64,7 @@ type adminUserListJSON struct {
 func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := d.Store.ListAdminUsers(r.Context())
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListAdminUsers", err)
 		return
 	}
 	out := make([]adminUserListJSON, 0, len(rows))
@@ -228,7 +228,7 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	rows, err := d.Store.SearchCardsWithOwners(r.Context(), q, 40)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "SearchCardsWithOwners", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -250,7 +250,7 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) APIOperatorMembers(w http.ResponseWriter, r *http.Request) {
 	rows, err := d.Store.ListOperatorMembers(r.Context())
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListOperatorMembers", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))

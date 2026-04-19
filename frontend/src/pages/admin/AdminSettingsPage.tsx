@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 
 export function AdminSettingsPage() {
@@ -32,11 +33,7 @@ export function AdminSettingsPage() {
     setEnvFallbackAvondeten(s.tikkie_url_avondeten_env_config)
   }, [settingsQuery.data])
 
-  useEffect(() => {
-    if (!settingsQuery.isError || !settingsQuery.error) return
-    const msg = settingsQuery.error instanceof api.ApiError ? settingsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Instellingen laden mislukt', message: msg, variant: 'error' })
-  }, [settingsQuery.isError, settingsQuery.error, alert])
+  useQueryErrorAlert(settingsQuery, { title: 'Instellingen laden mislukt', alert })
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()

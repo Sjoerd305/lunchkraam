@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 
 export function AdminLocalUsersPage() {
@@ -28,11 +29,7 @@ export function AdminLocalUsersPage() {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [matroosJeugdBusyId, setMatroosJeugdBusyId] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (!listQuery.isError || !listQuery.error) return
-    const msg = listQuery.error instanceof api.ApiError ? listQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Gebruikers laden mislukt', message: msg, variant: 'error' })
-  }, [listQuery.isError, listQuery.error, alert])
+  useQueryErrorAlert(listQuery, { title: 'Gebruikers laden mislukt', alert })
 
   const rows = listQuery.data ?? []
 

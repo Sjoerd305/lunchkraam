@@ -135,12 +135,12 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 
 	buckets, err := d.Store.AdminSalesByMonth(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminSalesByMonth", err)
 		return
 	}
 	expenseBuckets, err := d.Store.AdminExpensesByMonth(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminExpensesByMonth", err)
 		return
 	}
 
@@ -148,17 +148,17 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 
 	tostiMonthly, err := d.Store.AdminTostiDeliveredQuantitiesByMonth(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminTostiDeliveredQuantitiesByMonth", err)
 		return
 	}
 	tostiByKind, err := d.Store.AdminTostiDeliveredByKind(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminTostiDeliveredByKind", err)
 		return
 	}
 	yearTostiQty, err := d.Store.AdminTostiDeliveredYearQuantity(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminTostiDeliveredYearQuantity", err)
 		return
 	}
 
@@ -221,17 +221,17 @@ func mergeFinanceYears(lists ...[]int) []int {
 func (d *Deps) APIAdminSalesYears(w http.ResponseWriter, r *http.Request) {
 	fulfilled, err := d.Store.AdminFulfilledYears(r.Context())
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminFulfilledYears", err)
 		return
 	}
 	expenseYears, err := d.Store.AdminExpenseYears(r.Context())
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminExpenseYears", err)
 		return
 	}
 	bankYears, err := d.Store.AdminBankCreditImportYears(r.Context())
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminBankCreditImportYears", err)
 		return
 	}
 	years := mergeFinanceYears(fulfilled, expenseYears, bankYears)

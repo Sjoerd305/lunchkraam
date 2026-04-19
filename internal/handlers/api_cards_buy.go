@@ -63,7 +63,7 @@ func (d *Deps) APICards(w http.ResponseWriter, r *http.Request) {
 	u := auth.MustUserFromContext(r.Context())
 	cards, err := d.Store.CardsByUser(r.Context(), u.ID)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "CardsByUser", err)
 		return
 	}
 	out := make([]cardJSON, 0, len(cards))
@@ -106,17 +106,17 @@ func (d *Deps) APIBuy(w http.ResponseWriter, r *http.Request) {
 	u := auth.MustUserFromContext(r.Context())
 	list, err := d.Store.ListPendingCardRequestsForUser(r.Context(), u.ID)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListPendingCardRequestsForUser", err)
 		return
 	}
 	dbTikkie, err := d.Store.GetAppSetting(r.Context(), store.SettingKeyTikkieURL)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "GetAppSetting tikkie_url", err)
 		return
 	}
 	dbTikkieAvondeten, err := d.Store.GetAppSetting(r.Context(), store.SettingKeyTikkieURLAvondeten)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "GetAppSetting tikkie_url_avondeten", err)
 		return
 	}
 	out := make([]myPendingRequestJSON, 0, len(list))

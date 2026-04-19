@@ -1,4 +1,6 @@
-import type { CardKind, OperatorTostiOrderRow } from '../../api'
+import type { OperatorTostiOrderRow } from '../../api'
+
+export { cardKindBadgeClass, cardKindLabel } from '../../utils/cardKindPresentation'
 
 export function localISODate(d: Date = new Date()): string {
   const y = d.getFullYear()
@@ -23,12 +25,3 @@ export function formatAmsterdamDateLong(yyyyMMdd: string): string {
   })
 }
 
-export function cardKindLabel(kind: CardKind): string {
-  return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
-}
-
-export function cardKindBadgeClass(kind: CardKind): string {
-  return kind === 'avondeten'
-    ? 'ml-1 rounded bg-amber-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-950'
-    : 'ml-1 rounded bg-indigo-200 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-indigo-950'
-}

@@ -1,47 +1,31 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
 import { useAlertDialog } from '../components/useAlertDialog'
-
-function cardKindLabel(kind: api.CardKind): string {
-  return kind === 'avondeten' ? 'Avondetenkaart' : 'Tostikaart'
-}
-
-function cardKindBadgeClass(kind: api.CardKind): string {
-  return kind === 'avondeten'
-    ? 'rounded-md bg-amber-200 px-2 py-0.5 normal-case text-amber-950'
-    : 'rounded-md bg-indigo-200 px-2 py-0.5 normal-case text-indigo-950'
-}
+import { useQueryErrorAlert } from '../hooks/useQueryErrorAlert'
+import { queryKeys } from '../queryKeys'
+import { cardKindBadgeClass, cardKindLabel } from '../utils/cardKindPresentation'
 
 export function CardsPage() {
   const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
-  const [cards, setCards] = useState<api.Card[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadFailed, setLoadFailed] = useState(false)
+  const queryClient = useQueryClient()
   const [busyId, setBusyId] = useState<number | null>(null)
   const canUseManualKnipje = Boolean(user?.is_admin || user?.is_operator)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setLoadFailed(false)
-    try {
-      const list = await api.getCards()
-      setCards(list)
-    } catch (e) {
-      const msg = e instanceof api.ApiError ? e.message : 'Laden mislukt.'
-      setLoadFailed(true)
-      setCards([])
-      void alert({ title: 'Kaarten laden mislukt', message: msg, variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [alert])
+  const cardsQuery = useQuery({
+    queryKey: queryKeys.member.myCards,
+    queryFn: () => api.getCards(),
+    enabled: Boolean(user),
+  })
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useQueryErrorAlert(cardsQuery, { title: 'Kaarten laden mislukt', alert })
+
+  const cards = cardsQuery.data ?? []
+  const loading = cardsQuery.isPending
+  const loadFailed = cardsQuery.isError && cards.length === 0
 
   async function onUse(card: api.Card) {
     if (!canUseManualKnipje) {
@@ -63,7 +47,7 @@ export function CardsPage() {
     setBusyId(card.id)
     try {
       await api.useKnipje(csrf, card.id)
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
       await refresh()
       await alert({
         title: 'Smakelijk!',
@@ -82,13 +66,13 @@ export function CardsPage() {
     return <p className="text-slate-600">Kaarten laden…</p>
   }
 
-  if (loadFailed && cards.length === 0) {
+  if (loadFailed) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-md">
         <p className="text-slate-600">Je kaarten konden niet worden geladen.</p>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => void cardsQuery.refetch()}
           className="min-h-12 w-full max-w-xs rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
         >
           Opnieuw proberen
@@ -122,7 +106,7 @@ export function CardsPage() {
           >
             <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <span>Kaart #{c.id}</span>
-              <span className={cardKindBadgeClass(c.kind)}>{cardKindLabel(c.kind)}</span>
+              <span className={cardKindBadgeClass(c.kind, 'cards')}>{cardKindLabel(c.kind)}</span>
               {c.source === 'physical' ? (
                 <span className="rounded-md bg-amber-100 px-2 py-0.5 normal-case text-amber-900">
                   Fysieke kaart (schatting)

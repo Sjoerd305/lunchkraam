@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
 import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
 import { formatEUR } from '../../utils/formatMoney'
@@ -69,11 +70,7 @@ export function AdminExpensesOverviewPage() {
     enabled: year !== null && Boolean(user),
   })
 
-  useEffect(() => {
-    if (!statsQuery.isError || !statsQuery.error) return
-    const msg = statsQuery.error instanceof api.ApiError ? statsQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Cijfers laden mislukt', message: msg, variant: 'error' })
-  }, [statsQuery.isError, statsQuery.error, alert])
+  useQueryErrorAlert(statsQuery, { title: 'Cijfers laden mislukt', alert })
 
   const salesStats = statsQuery.data ?? null
   const yearsLoading = yearsQuery.isLoading

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -119,6 +120,64 @@ ORDER BY p.created_at DESC`)
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// MergePendingImportReview accepts a pending Revolut-vs-manual duplicate: inserts/updates the
+// Revolut shop_expense, moves receipts onto it, removes the pending row, then deletes the matched
+// manual expense. All steps run in one transaction so a failure leaves the queue unchanged.
+// The pending row is deleted before the manual expense because matched_expense_id is ON DELETE CASCADE.
+func (s *Store) MergePendingImportReview(ctx context.Context, id int64) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin merge pending import review: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	row := tx.QueryRow(ctx, `
+SELECT id, amount_eur::float8, spent_on, COALESCE(description, ''), purpose, source, external_id, matched_expense_id, created_by, created_at
+FROM pending_import_reviews
+WHERE id = $1
+FOR UPDATE`, id)
+	var review PendingImportReview
+	if err := row.Scan(
+		&review.ID, &review.AmountEUR, &review.SpentOn, &review.Description, &review.Purpose,
+		&review.Source, &review.ExternalID, &review.MatchedExpenseID, &review.CreatedBy, &review.CreatedAt,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	newExpense, err := upsertImportedShopExpense(ctx, tx, review.Source, review.ExternalID, review.CreatedBy,
+		review.AmountEUR, review.SpentOn, review.Description, review.Purpose)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE shop_expense_receipts SET shop_expense_id = $1 WHERE shop_expense_id = $2`,
+		newExpense.ID, review.MatchedExpenseID,
+	); err != nil {
+		return err
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM pending_import_reviews WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("merge pending import review: expected to delete pending row %d", id)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM shop_expenses WHERE id = $1`, review.MatchedExpenseID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit merge pending import review: %w", err)
+	}
+	return nil
 }
 
 // DeletePendingImportReview removes a pending review by id and returns the deleted row.

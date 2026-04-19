@@ -36,7 +36,7 @@ func (d *Deps) APIAdminBankCreditsUnmatched(w http.ResponseWriter, r *http.Reque
 	year := parseYearQueryBank(r, y)
 	rows, err := d.Store.ListBankCreditImportsUnmatched(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListBankCreditImportsUnmatched", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -57,7 +57,7 @@ func (d *Deps) APIAdminBankCreditsMatched(w http.ResponseWriter, r *http.Request
 	year := parseYearQueryBank(r, y)
 	rows, err := d.Store.ListBankCreditImportsMatched(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListBankCreditImportsMatched", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -78,7 +78,7 @@ func (d *Deps) APIAdminBankCreditsWaived(w http.ResponseWriter, r *http.Request)
 	year := parseYearQueryBank(r, y)
 	rows, err := d.Store.ListBankCreditImportsWaived(r.Context(), year)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListBankCreditImportsWaived", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -120,7 +120,7 @@ func (d *Deps) APIAdminBankCreditSuggestions(w http.ResponseWriter, r *http.Requ
 		if httpx.WriteBankCreditStoreError(w, err, false) {
 			return
 		}
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "SuggestCardRequestsForBankCredit", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(cands))
@@ -156,7 +156,7 @@ func (d *Deps) APIAdminBankCreditMatchCandidates(w http.ResponseWriter, r *http.
 		if httpx.WriteBankCreditStoreError(w, err, false) {
 			return
 		}
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListManualMatchCardRequestsForBankCredit", err)
 		return
 	}
 	digital := make([]map[string]any, 0, len(online))

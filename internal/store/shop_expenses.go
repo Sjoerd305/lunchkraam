@@ -7,7 +7,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// pgConn is implemented by *pgxpool.Pool and pgx.Tx for shared shop expense queries.
+type pgConn interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
 
 // Shop expense row sources (must match DB check constraint shop_expenses_source_check).
 const (
@@ -91,6 +98,18 @@ func (s *Store) UpsertImportedShopExpense(
 	spentOn time.Time,
 	description, purpose string,
 ) (*ShopExpense, error) {
+	return upsertImportedShopExpense(ctx, s.pool, source, externalID, createdBy, amountEUR, spentOn, description, purpose)
+}
+
+func upsertImportedShopExpense(
+	ctx context.Context,
+	conn pgConn,
+	source, externalID string,
+	createdBy *int64,
+	amountEUR float64,
+	spentOn time.Time,
+	description, purpose string,
+) (*ShopExpense, error) {
 	source = strings.TrimSpace(strings.ToLower(source))
 	externalID = strings.TrimSpace(externalID)
 	if source == "" || externalID == "" {
@@ -108,7 +127,7 @@ func (s *Store) UpsertImportedShopExpense(
 	if createdBy != nil {
 		created = *createdBy
 	}
-	row := s.pool.QueryRow(ctx, `
+	row := conn.QueryRow(ctx, `
 INSERT INTO shop_expenses (amount_eur, spent_on, description, purpose, created_by, source, external_id, payment_channel)
 VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (source, external_id) DO UPDATE SET

@@ -14,7 +14,7 @@ import (
 func (d *Deps) APIAdminRequests(w http.ResponseWriter, r *http.Request) {
 	rows, err := d.Store.ListPendingRequests(r.Context())
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListPendingRequests", err)
 		return
 	}
 	out := make([]adminRequestJSON, 0, len(rows))
@@ -45,7 +45,7 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 		if httpx.RespondStoreNotFound(w, err, "Aanvraag niet gevonden.") {
 			return
 		}
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "CardRequestKind", err)
 		return
 	}
 	salePrice := parsePaymentEURAmount(d.Config.PaymentAmountEUR)

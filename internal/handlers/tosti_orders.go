@@ -259,7 +259,7 @@ func (d *Deps) APIOperatorTostiSoldToday(w http.ResponseWriter, r *http.Request)
 	dateStr := time.Now().In(loc).Format("2006-01-02")
 	qty, err := d.Store.TostiDeliveredQuantityOnAmsterdamCalendarDate(r.Context(), dateStr)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "TostiDeliveredQuantityOnAmsterdamCalendarDate", err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{

@@ -12,7 +12,7 @@ import (
 func (d *Deps) APIAdminDashboard(w http.ResponseWriter, r *http.Request) {
 	st, err := d.Store.AdminDashboardStats(r.Context())
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "AdminDashboardStats", err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{

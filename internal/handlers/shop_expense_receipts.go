@@ -100,13 +100,13 @@ func (d *Deps) APIShopExpenseReceiptUpload(w http.ResponseWriter, r *http.Reques
 		if httpx.RespondStoreNotFound(w, err, "Uitgave niet gevonden.") {
 			return
 		}
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ShopExpenseByID", err)
 		return
 	}
 
 	n, err := d.Store.CountShopExpenseReceipts(r.Context(), expenseID)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "CountShopExpenseReceipts", err)
 		return
 	}
 	if n >= maxReceiptsPerShopExpense {
@@ -188,12 +188,12 @@ func (d *Deps) APIShopExpenseReceiptMeta(w http.ResponseWriter, r *http.Request)
 		if httpx.RespondStoreNotFound(w, err, "Uitgave niet gevonden.") {
 			return
 		}
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ShopExpenseByID", err)
 		return
 	}
 	recs, err := d.Store.ListShopExpenseReceiptsByExpenseID(r.Context(), expenseID)
 	if err != nil {
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ListShopExpenseReceiptsByExpenseID", err)
 		return
 	}
 	out := make([]map[string]any, 0, len(recs))
@@ -219,7 +219,7 @@ func (d *Deps) APIShopExpenseReceiptImage(w http.ResponseWriter, r *http.Request
 		if httpx.RespondStoreNotFound(w, err, "Bonfoto niet gevonden.") {
 			return
 		}
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ShopExpenseReceiptByID", err)
 		return
 	}
 	if rec.ShopExpenseID != expenseID {
@@ -251,7 +251,7 @@ func (d *Deps) APIShopExpenseReceiptDelete(w http.ResponseWriter, r *http.Reques
 		if httpx.RespondStoreNotFound(w, err, "Bonfoto niet gevonden.") {
 			return
 		}
-		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Databasefout.")
+		httpx.RespondInternalStoreError(w, r, "ShopExpenseReceiptByID", err)
 		return
 	}
 	if rec.ShopExpenseID != expenseID {

@@ -5,6 +5,7 @@ import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { useAlertDialog } from '../../components/useAlertDialog'
 import { useAdminSalesYearsSelect } from '../../hooks/useAdminSalesYearsSelect'
+import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
 import { formatEUR } from '../../utils/formatMoney'
@@ -223,11 +224,7 @@ export function AdminShopExpensesPage() {
     enabled: year !== null && Boolean(user),
   })
 
-  useEffect(() => {
-    if (!listQuery.isError || !listQuery.error) return
-    const msg = listQuery.error instanceof api.ApiError ? listQuery.error.message : 'Laden mislukt.'
-    void alert({ title: 'Uitgaven laden mislukt', message: msg, variant: 'error' })
-  }, [listQuery.isError, listQuery.error, alert])
+  useQueryErrorAlert(listQuery, { title: 'Uitgaven laden mislukt', alert })
 
   const revolutBalanceQuery = useQuery({
     queryKey: queryKeys.admin.revolutBalance(isOperatorOnly),
