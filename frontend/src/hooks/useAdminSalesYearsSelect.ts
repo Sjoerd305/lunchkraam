@@ -34,7 +34,10 @@ export function useAdminSalesYearsSelect(options: UseAdminSalesYearsSelectOption
 } {
   const { isOperatorOnly, enabled, onYearsError, emptyYearsListBehavior } = options
   const onYearsErrorRef = useRef(onYearsError)
-  onYearsErrorRef.current = onYearsError
+
+  useEffect(() => {
+    onYearsErrorRef.current = onYearsError
+  }, [onYearsError])
 
   const yearsQuery = useQuery({
     queryKey: queryKeys.admin.salesYears(isOperatorOnly),

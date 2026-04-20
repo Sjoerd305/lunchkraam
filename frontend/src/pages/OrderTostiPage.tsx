@@ -55,8 +55,8 @@ export function OrderTostiPage() {
     () => (cardsQuery.data ?? []).filter((c) => c.kind === 'tosti'),
     [cardsQuery.data],
   )
-  const orders = ordersQuery.data ?? []
-  const queue = queueQuery.data?.rows ?? []
+  const orders = useMemo(() => ordersQuery.data ?? [], [ordersQuery.data])
+  const queue = useMemo(() => queueQuery.data?.rows ?? [], [queueQuery.data])
   const queueLoadError = queueQuery.data?.loadError ?? false
 
   /** Same as vorige `Promise.all`: UI pas na kaarten + mijn orders + wachtrij-poging. */

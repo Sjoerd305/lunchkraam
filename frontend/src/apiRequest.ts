@@ -25,7 +25,7 @@ function errorMessageFromJson(value: unknown, statusText: string): { code: strin
  */
 export async function parseError(res: Response): Promise<ApiError> {
   const statusText = res.statusText || `HTTP ${res.status}`
-  let bodyText = ''
+  let bodyText: string
   try {
     bodyText = await res.text()
   } catch {

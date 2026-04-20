@@ -130,6 +130,27 @@ export function KraamPage() {
 
   useTostiRealtime('/ws/kraam', kraamEnabled, onKraamRealtime, ['tosti_queue', 'payment_requests'])
 
+  const refreshQueue = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.operator.soldToday }),
+    ])
+  }, [queryClient])
+
+  const refreshPayments = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
+  }, [queryClient])
+
+  const refreshAvondeten = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
+    })
+  }, [queryClient, avondetenMealDate])
+
+  const refreshCardSearch = useCallback(async () => {
+    await invalidateKraamAll()
+  }, [invalidateKraamAll])
+
   if (!user) {
     return <Navigate to="/login" replace />
   }
@@ -372,27 +393,6 @@ export function KraamPage() {
 
   const avondetenSelectable = avondetenRows.filter((r) => !r.registered_for_date && r.knipjes_remaining > 0)
   const avondetenPickableIds = new Set(avondetenSelectable.map((r) => r.card_id))
-
-  const refreshQueue = useCallback(async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.operator.soldToday }),
-    ])
-  }, [queryClient])
-
-  const refreshPayments = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
-  }, [queryClient])
-
-  const refreshAvondeten = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
-    })
-  }, [queryClient, avondetenMealDate])
-
-  const refreshCardSearch = useCallback(async () => {
-    await invalidateKraamAll()
-  }, [invalidateKraamAll])
 
   return (
     <div className="space-y-10">
