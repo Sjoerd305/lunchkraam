@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:25-alpine AS frontend
+FROM node:26-alpine AS frontend
 WORKDIR /f
 ARG APP_VERSION=dev
 ENV VITE_APP_VERSION=${APP_VERSION}
