@@ -23,7 +23,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Zelfde image als Dockerfile frontend-stage — voorkomt dat `npm ci` op ubuntu
       # groen is terwijl `docker build` faalt door lockfile/npm-resolververschillen.
@@ -54,7 +54,7 @@ jobs:
     if: github.ref == 'refs/heads/production'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Copy production .env
         run: |
