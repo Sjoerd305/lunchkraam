@@ -6,7 +6,7 @@ toolchain go1.26.2
 
 require (
 	filippo.io/csrf v0.2.1
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.15.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/gorilla/websocket v1.5.3
