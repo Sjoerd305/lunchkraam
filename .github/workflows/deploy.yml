@@ -35,7 +35,7 @@ jobs:
             node:25-alpine \
             sh -c 'npm ci && npm run lint && npm test'
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
