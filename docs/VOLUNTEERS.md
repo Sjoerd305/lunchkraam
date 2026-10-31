@@ -11,7 +11,7 @@ Korte gids voor penningmeester en andere vrijwilligers die **Revolut**, **Boodsc
 
 | Taak | Scherm in de app |
 |------|------------------|
-| Revolut-afschrift (CSV) importeren en het saldo uit die export zien | **Beheer → Financiën** — blok Revolut-saldo / Revolut-import |
+| Revolut-afschrift (CSV) importeren en het saldo uit die export zien | **Beheer → Financiën** — blok Revolut-saldo / Revolut-import; het saldo staat ook bovenaan **Beheer → Overzicht** |
 | Uitgaven en bonnen, contante kas | **Beheer → Boodschappen** |
 | Jaaroverzicht omzet / uitgaven / tosti’s / grafieken | **Beheer → Overzicht** (jaarkeuze bovenaan) |
 | Betaling van een online kaartaanvraag accorderen (maakt de kaart actief; tot dan kan het lid wel bestellen maar levert de kraam niet) | **Kraam → Betalingen** of de knop *Betaling accorderen* bij de bestelling |

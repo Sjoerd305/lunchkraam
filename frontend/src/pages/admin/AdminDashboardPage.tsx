@@ -9,6 +9,7 @@ import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
 import { formatEUR, formatEURFromString } from '../../utils/formatMoney'
+import { formatDateTimeShortNL } from './adminShopExpensesHelpers'
 
 const AdminSalesCharts = lazy(async () => {
   const m = await import('./AdminSalesCharts')
@@ -78,8 +79,21 @@ export function AdminDashboardPage() {
   })
   useQueryErrorAlert(dashQuery, { title: 'Kaarttellers laden mislukt', alert })
 
+  const revolutBalanceQuery = useQuery({
+    queryKey: queryKeys.admin.revolutBalance(isOperatorOnly),
+    queryFn: () => api.getRevolutBalance(isOperatorOnly),
+    enabled: Boolean(user),
+    retry: false,
+  })
+  useQueryErrorAlert(revolutBalanceQuery, { title: 'Revolut-saldo laden mislukt', alert })
+
   const stats = statsQuery.data ?? null
   const dash = dashQuery.data ?? null
+  const revolutBalance = useMemo(() => {
+    const b = revolutBalanceQuery.data
+    if (!b || b.balance_eur === null || !b.updated_at) return null
+    return { eur: b.balance_eur, statementAsOf: b.statement_as_of, updatedAt: b.updated_at }
+  }, [revolutBalanceQuery.data])
   const yearOptions = useMemo(() => adminYearSelectOptions(yearsQuery.data, year), [yearsQuery.data, year])
 
   const tostiRowsByMonth = useMemo(() => {
@@ -122,6 +136,41 @@ export function AdminDashboardPage() {
         ) : null}
       </section>
 
+      <section className="surface-card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revolut-saldo (rekening)</p>
+          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
+            {revolutBalanceQuery.isPending ? (
+              <span className="text-base font-normal text-slate-500">Laden…</span>
+            ) : revolutBalance ? (
+              formatEUR(revolutBalance.eur)
+            ) : (
+              '—'
+            )}
+          </p>
+        </div>
+        <div className="max-w-md text-sm text-slate-600 sm:text-right">
+          {revolutBalance ? (
+            <>
+              {revolutBalance.statementAsOf ? (
+                <p>Per afschrift: {formatDateTimeShortNL(revolutBalance.statementAsOf)}</p>
+              ) : null}
+              <p className="text-xs text-slate-500">
+                In Lunchkraam bijgewerkt: {formatDateTimeShortNL(revolutBalance.updatedAt)}
+              </p>
+            </>
+          ) : revolutBalanceQuery.isPending ? null : (
+            <p>Nog geen saldo bekend. Importeer een Revolut-csv met saldokolom (zonder proefrun).</p>
+          )}
+          <p className="mt-1 text-xs text-slate-500">
+            Stand uit de laatst geïmporteerde csv, geen live koppeling.{' '}
+            <Link to="/admin/finance" className="font-semibold text-brand-800 underline hover:text-brand-950">
+              Nieuwe export importeren
+            </Link>
+          </p>
+        </div>
+      </section>
+
       {statsQuery.isPending && year !== null ? (
         <p className="text-sm text-slate-600">Cijfers laden…</p>
       ) : stats ? (
@@ -153,7 +202,7 @@ export function AdminDashboardPage() {
                 )}. Contant bij kas telt negatief mee.`}
               />
               <StatCard
-                label="Saldo"
+                label="Netto"
                 value={formatEUR(stats.year_net_eur)}
                 tone={stats.year_net_eur >= 0 ? 'brand' : 'amber'}
                 hint={
