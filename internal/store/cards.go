@@ -29,39 +29,21 @@ FROM cards WHERE user_id = $1 ORDER BY created_at DESC`
 	return out, rows.Err()
 }
 
-func (s *Store) useKnipjeAnyCard(ctx context.Context, cardID int64) error {
-	const q = `
-UPDATE cards SET knipjes_remaining = knipjes_remaining - 1
-WHERE id = $1 AND knipjes_remaining > 0`
-	tag, err := s.pool.Exec(ctx, q, cardID)
+// UseKnipje lets an admin/operator use one punch on a non-physical card (tosti or avondeten) and writes a
+// 'manual_knipje' line to the knipje-logboek. Physical cards hold an estimate: use SetPhysicalCardEstimate.
+func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
+	if actor == nil || (!actor.IsAdmin && !actor.IsOperator) {
+		return ErrForbidden
+	}
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		var rem int
-		err := s.pool.QueryRow(ctx, `SELECT knipjes_remaining FROM cards WHERE id = $1`, cardID).Scan(&rem)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if rem == 0 {
-			return ErrNoKnipjes
-		}
-		return ErrForbidden
-	}
-	return nil
-}
+	defer tx.Rollback(ctx)
 
-// UseKnipje lets an admin/operator use one punch on a non-physical card (tosti or avondeten).
-// Physical cards are read-only in the app; Avondeten day-list debits use RegisterAvondetenMealsForDate.
-func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error {
-	if !actor.IsAdmin && !actor.IsOperator {
-		return ErrForbidden
-	}
+	var knip int
 	var source string
-	err := s.pool.QueryRow(ctx, `SELECT source::text FROM cards WHERE id = $1`, cardID).Scan(&source)
+	err = tx.QueryRow(ctx, `SELECT knipjes_remaining, source::text FROM cards WHERE id = $1 FOR UPDATE`, cardID).Scan(&knip, &source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -71,7 +53,22 @@ func (s *Store) UseKnipje(ctx context.Context, cardID int64, actor *User) error 
 	if source == "physical" {
 		return ErrCardPhysicalReadonly
 	}
-	return s.useKnipjeAnyCard(ctx, cardID)
+	if knip <= 0 {
+		return ErrNoKnipjes
+	}
+	if _, err := tx.Exec(ctx, `UPDATE cards SET knipjes_remaining = knipjes_remaining - 1 WHERE id = $1`, cardID); err != nil {
+		return err
+	}
+	if _, err := insertCardTransaction(ctx, tx, cardTxInput{
+		CardID:       cardID,
+		Delta:        -1,
+		BalanceAfter: knip - 1,
+		Reason:       TxReasonManualKnipje,
+		ActorUserID:  int64Ptr(actor.ID),
+	}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) SearchCardsWithOwners(ctx context.Context, query string, limit int) ([]CardWithOwner, error) {

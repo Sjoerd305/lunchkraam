@@ -466,7 +466,7 @@ export function AdminFinancePage() {
           afhandelen zonder verkoop (bijv. terugbetaling).
         </p>
         <p className="text-sm text-slate-600">
-          <Link to="/admin/expenses-overview" className="font-semibold text-brand-800 underline hover:text-brand-950">
+          <Link to="/admin" className="font-semibold text-brand-800 underline hover:text-brand-950">
             Jaaroverzichten
           </Link>
           {' · '}

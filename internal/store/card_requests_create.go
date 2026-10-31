@@ -51,6 +51,11 @@ func (s *Store) CreateCardRequest(ctx context.Context, userID int64, kind string
 	).Scan(&cardID); err != nil {
 		return 0, err
 	}
+	if _, err := insertCardTransaction(ctx, tx, cardTxInput{
+		CardID: cardID, Delta: 10, BalanceAfter: 10, Reason: TxReasonIssued, Note: "Online aangevraagd",
+	}); err != nil {
+		return 0, err
+	}
 
 	var reqID int64
 	err = tx.QueryRow(ctx,
@@ -116,6 +121,12 @@ func (s *Store) CreatePhysicalCardSale(ctx context.Context, in PhysicalCardSaleI
 		`INSERT INTO cards (user_id, knipjes_remaining, kind, source) VALUES ($1, 10, $2::card_kind, 'physical'::card_source) RETURNING id`,
 		in.BuyerUserID, kind,
 	).Scan(&cardID); err != nil {
+		return 0, err
+	}
+	if _, err := insertCardTransaction(ctx, tx, cardTxInput{
+		CardID: cardID, Delta: 10, BalanceAfter: 10, Reason: TxReasonIssued,
+		ActorUserID: int64Ptr(in.SellerUserID), Note: "Fysieke kaart verkocht (" + paymentMethod + ")",
+	}); err != nil {
 		return 0, err
 	}
 

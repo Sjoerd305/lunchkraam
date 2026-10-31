@@ -1,11 +1,11 @@
 # Lunchkraam
 
-Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de kaart). Leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, beheren kaarten via het dashboard en **Kaart kopen** (`/buy`), en kunnen **tosti’s bestellen** (1 tosti = 1 knipje; meerdere stuks per bestelling mogelijk). Zonder vrije digitale knipjes kan iemand met een **fysieke tostikaart** bestellen; de kraam knipt dan op de kaart en de app houdt een **schatting** van resterende knipjes bij. Fysieke kaarten zijn in de app **read-only** en niet digitaal bruikbaar. Betaling verloopt handmatig (Tikkie/overschrijving), en fysieke kaartverkoop kan bij de kraam met **tikkie** of **contant** worden geregistreerd. Een **admin** accordeert aanvragen en beheert gebruikers. Operators zien de tosti-wachtrij op de **kraampagina** en kunnen daar ook **avondeten per datum** afboeken.
+Webapp voor **tostikaarten** en **avondetenkaarten** (beide met 10 knipjes op de kaart). Leden loggen in via **Google Workspace** of een **lokale gebruikersnaam/wachtwoord**, zien op het dashboard hun saldo en open bestellingen, kopen kaarten via **Kaart kopen** (`/buy`) en **bestellen tosti’s** (1 tosti = 1 knipje; meerdere stuks per bestelling mogelijk). Zonder vrije digitale knipjes kan iemand met een **fysieke tostikaart** bestellen; de kraam knipt dan op de kaart en de app houdt een **schatting** van resterende knipjes bij die de kraam kan bijstellen. Elke saldowijziging staat in het **knipje-logboek** per kaart (zichtbaar voor het lid onder Mijn kaarten; kraam/admin kan een boeking **terugdraaien**). Betaling verloopt handmatig (Tikkie/overschrijving), en fysieke kaartverkoop kan bij de kraam met **tikkie** of **contant** worden geregistreerd. Een **beheerder** accordeert aanvragen en beheert accounts. Kraammedewerkers werken op de **kraampagina** met tabbladen: bestellingen, knipje/historie, avondeten per datum, verkoop en de betalingswachtrij.
 
 - **PostgreSQL** + migraties (goose)
 - **SPA** (React/Vite), in productie door de Go-server geserveerd
 - **Realtime**: WebSocket-hints voor kraam en “mijn tosti” (lijsten verversen zonder polling)
-- **Instellingen**: o.a. Tikkie-URL’s en tarieven per kaartsoort via admin (of defaults in `.env`)
+- **Instellingen**: Tikkie-links (met vervaldatum), prijzen per kaartsoort en overschrijfinstructies via Beheer → Instellingen; `.env` is de fallback
 
 ## Documentatie
 
@@ -70,21 +70,23 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 
 ## Rollen
 
-- **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je adminrechten (dashboard, verkoopcijfers, accounts, instellingen, **betalingswachtrij**, **boodschappen & uitgaven**). In instellingen kun je o.a. een aparte Tikkie voor de avondetenkaart zetten (aanvullend op `.env`).
-- **Operator (matroos)**: kraampagina (tosti-wachtrij incl. fysieke kaart, kaarten zoeken, avondeten afboeken). Kan **fysieke kaartverkoop registreren** (tikkie/contant) en de **fysieke knipjesschatting** bijstellen. Onder **Beheer**: **Betalingswachtrij** (accorderen/weigeren), **Overzichten**, **Financiën** (Revolut afstemmen tegen verkopen) en **Boodschappen** (uitgaven registreren). Een admin zet operator-rechten in de UI bij **lokale** gebruikers; voor Google-accounts bestaat die schakelaar niet (alleen handmatig in de database als je dat nodig hebt).
-- **Matroos jeugd** (vlag op gebruiker): alleen wie deze vlag heeft ziet de **avondetenkaart** op Kaart kopen. Admins zetten dat bij **lokale** gebruikers in de UI; voor Google-accounts geldt hetzelfde patroon als bij operator (zo nodig handmatig in de database).
+- **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je beheerdersrechten. Daarna zet je rechten voor **elk** account (Google of lokaal) in de UI onder **Beheer → Accounts**; je eigen rechten en status zijn daar vergrendeld.
+- **Beheerder (admin)**: alles van kraammedewerker, plus **Accounts** (rechten, jeugd-vlag, (de)activeren, kaarten en historie per lid), **Instellingen** en het accorderen van avondetenkaarten.
+- **Kraammedewerker (operator)**: **kraampagina** (`/kraam`, tabbladen Bestellingen · Knipje · Avondeten · Verkoop · Betalingen) en onder **Beheer**: **Overzicht**, **Financiën**, **Verkoopcontrole** en **Boodschappen**. De betalingswachtrij staat alleen op de kraampagina (`/kraam?tab=betalingen`).
+- **Matroos (jeugd)** (vlag op gebruiker, geen rechten): alleen wie deze vlag heeft ziet de **avondetenkaart** op Kaart kopen.
+- **Gedeactiveerd account**: kan niet meer inloggen (Google én lokaal), staat niet in de ledenkeuze aan de kraam; kaarten en historie blijven bewaard en het account kan weer worden geactiveerd.
 
 Geaccordeerde verkopen leggen het tarief vast zodat latere wijzigingen van `PAYMENT_AMOUNT_EUR` / admin-tarieven de historische omzet niet verstoren.
 
 **Omzetrapportage en Revolut:** jaarcijfers tellen geaccordeerde **kaartverkopen** plus **Revolut-bijschrijvingen die nog open staan** (niet gekoppeld en niet als *afgehandeld zonder verkoop* gemarkeerd). Zo voorkom je dubbele telling (Tikkie in de app en dezelfde storting op de bank). Koppelen, **ontkoppelen** en *zonder verkoop afhandelen* doe je onder **Beheer → Financiën** (`/admin/finance`); na koppeling telt de bankregel niet meer mee als losse omzetpost. *Afgehandeld zonder verkoop* haalt de regel uit de open-bank-omzet in deze rapportage maar is geen vervanging voor een aparte grootboek-export of terugboeking in je boekhoudpakket.
 
-## Fysieke kaarten
+## Fysieke kaarten en het knipje-logboek
 
 - Fysieke kaarten worden bij verkoop aan de kraam geregistreerd met betaalmiddel `tikkie` of `contant`.
-- De app toont fysieke kaarten als **read-only** met een schatting van resterende knipjes.
-- Digitale acties gebruiken alleen online kaarten; fysieke kaarten zijn niet digitaal inzetbaar.
-- Bij fysieke tosti-bestellingen boekt de app de schatting af bij leveren door de kraam.
-- Operator/admin kan de schatting handmatig corrigeren in de kraampagina.
+- De app toont fysieke kaarten als **schatting** van resterende knipjes; digitale acties (tosti bestellen met kaart) gebruiken alleen online kaarten.
+- Bij een fysieke tosti-bestelling boekt de app de schatting af bij leveren. Een te lage schatting **blokkeert de levering nooit**: de schatting gaat dan naar 0 en het logboek vermeldt dat.
+- Kraam/admin zet de schatting direct op het juiste aantal via **Kraam → Knipje → Schatting zetten**; een handmatig knipje is alleen voor online kaarten.
+- Tabel `card_transactions` legt elke saldowijziging vast (uitgifte, tosti geleverd, avondeten, handmatig knipje, schatting, terugdraaien). Leden zien de historie onder **Mijn kaarten**; kraam/admin kan een boeking **terugdraaien** (een avondetenregistratie wordt dan verwijderd, een geleverde tosti blijft geleverd en alleen de knipjes gaan terug). Bij invoering is het logboek gevuld uit bestaande bestellingen en avondetenregistraties, met een `backfill`-regel voor verschillen.
 
 ## Databasebackups
 
@@ -121,7 +123,7 @@ scripts/restore-database.sh --skip-receipts backups/lunchkraam-20260401-031500.s
 
 ## Milieuvariabelen
 
-Zie [.env.example](.env.example). Gebruik je de avondetenkaart, zet dan minimaal ook **TIKKIE_URL_AVONDETEN** en **AVONDETEN_PAYMENT_AMOUNT_EUR** (of de equivalenten in de admin-instellingen).
+Zie [.env.example](.env.example). `TIKKIE_URL`, `TIKKIE_URL_AVONDETEN`, `PAYMENT_AMOUNT_EUR`, `AVONDETEN_PAYMENT_AMOUNT_EUR` en `BANK_TRANSFER_INSTRUCTIONS` zijn **fallbacks**: wat een beheerder onder **Beheer → Instellingen** invult gaat voor.
 Voor bonfoto-opslag: in Docker meestal `RECEIPTS_DIR=/app/data/receipts` (zoals in [.env.example](.env.example)); lokaal zonder Docker gelijk aan de default `data/receipts`. Pas het compose-volume-pad mee aan als je `RECEIPTS_DIR` in de container wijzigt. Zie **DOCKER_UID** / **DOCKER_GID** in [.env.example](.env.example) voor schrijfrechten op `./data/receipts`.
 
 ## Licentie

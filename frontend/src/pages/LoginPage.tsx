@@ -11,6 +11,7 @@ const loginErrors: Record<string, string> = {
   profile: 'Je Google-profiel kon niet worden opgehaald.',
   domain: 'Alleen accounts van jullie Google Workspace-organisatie mogen inloggen.',
   db: 'Account kon niet worden opgeslagen. Probeer het later opnieuw.',
+  disabled: 'Dit account is gedeactiveerd. Neem contact op met een beheerder.',
 }
 
 export function LoginPage() {
@@ -66,7 +67,7 @@ export function LoginPage() {
         </div>
         <h1 className="mb-2 text-center text-2xl font-bold text-slate-900">Maasgroep 18</h1>
         <p className="mb-6 text-center text-slate-600">
-          Log in met Google, of met een door de beheerder aangemaakt account (jeugd / zonder Google).
+          Log in met Google, of met een door de beheerder aangemaakt account (zonder Google).
         </p>
         {errMsg ? (
           <div

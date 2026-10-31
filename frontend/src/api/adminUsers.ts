@@ -1,6 +1,6 @@
 import { ApiError, apiJson, apiVoid } from '../apiRequest'
-import { adminUsersResponseSchema, userEnvelopeSchema } from '../api.schemas'
-import type { AdminUserRow, User } from './types'
+import { adminUsersResponseSchema, cardsResponseSchema, userEnvelopeSchema } from '../api.schemas'
+import type { AdminUserRow, Card, User } from './types'
 
 export async function getAdminUsers(): Promise<AdminUserRow[]> {
   const payload = await apiJson('/api/admin/users', adminUsersResponseSchema)
@@ -54,4 +54,23 @@ export async function patchLocalUser(
     body,
   })
   return payload.user
+}
+
+/** Rechten voor elk account (Google of lokaal); je eigen account kan niet worden gewijzigd. */
+export async function patchUserRoles(
+  csrf: string,
+  userId: number,
+  body: { is_admin: boolean; is_operator: boolean },
+): Promise<void> {
+  await apiVoid(`/api/admin/users/${userId}/roles`, { method: 'PATCH', csrf, body })
+}
+
+/** Account (de)activeren; gedeactiveerde accounts kunnen niet inloggen. */
+export async function patchUserActive(csrf: string, userId: number, isActive: boolean): Promise<void> {
+  await apiVoid(`/api/admin/users/${userId}/active`, { method: 'PATCH', csrf, body: { is_active: isActive } })
+}
+
+export async function getAdminUserCards(userId: number): Promise<Card[]> {
+  const payload = await apiJson(`/api/admin/users/${userId}/cards`, cardsResponseSchema)
+  return payload.cards
 }

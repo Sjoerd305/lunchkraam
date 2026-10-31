@@ -7,6 +7,7 @@ import (
 
 	"lunchkraam/internal/httpx"
 	"lunchkraam/internal/money"
+	"lunchkraam/internal/store"
 )
 
 func (d *Deps) APIAdminDashboard(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +26,7 @@ func (d *Deps) APIAdminDashboard(w http.ResponseWriter, r *http.Request) {
 		"fulfilled_requests":                st.FulfilledRequests,
 		"fulfilled_knipjes_remaining":       st.FulfilledKnipjesRemaining,
 		"cancelled_requests":                st.CancelledRequests,
-		"payment_amount_eur":                d.Config.PaymentAmountEUR,
+		"payment_amount_eur":                d.effectivePaymentAmountStr(r.Context(), store.CardKindTosti),
 		"finance_year":                      st.FinanceYear,
 		"year_revenue_eur":                  money.RoundEUR(st.YearRevenueEUR),
 		"year_revenue_card_sales_eur":       money.RoundEUR(st.YearRevenueCardSalesEUR),

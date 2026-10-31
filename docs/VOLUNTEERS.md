@@ -4,8 +4,8 @@ Korte gids voor penningmeester en andere vrijwilligers die **Revolut**, **Boodsc
 
 ## Rollen
 
-- **Admin:** volledig beheer (o.a. accounts, instellingen, alle financiële schermen).
-- **Operator:** kraam, betalingswachtrij, en een beperkte set financiële schermen (o.a. Financiën, Boodschappen, **Verkoopcontrole**).
+- **Beheerder (admin):** volledig beheer (o.a. accounts, instellingen, alle financiële schermen).
+- **Kraammedewerker (operator):** kraampagina (incl. betalingswachtrij onder het tabblad **Betalingen**) en de financiële schermen **Overzicht**, **Financiën**, **Verkoopcontrole** en **Boodschappen**.
 
 ## Waar vind je wat?
 
@@ -13,7 +13,11 @@ Korte gids voor penningmeester en andere vrijwilligers die **Revolut**, **Boodsc
 |------|------------------|
 | Saldo uit het Revolut-afschrift (CSV-kolom) | **Beheer → Boodschappen** — bovenaan bij Revolut-import |
 | Uitgaven en bonnen, contante kas | **Beheer → Boodschappen** |
-| Jaaroverzicht omzet / uitgaven / tosti’s | **Beheer → Jaaroverzichten** |
+| Jaaroverzicht omzet / uitgaven / tosti’s / grafieken | **Beheer → Overzicht** (jaarkeuze bovenaan) |
+| Betaling van een online kaartaanvraag accorderen | **Kraam → Betalingen** |
+| Knipje-historie van een kaart bekijken of terugdraaien | **Kraam → Knipje** (lid: **Mijn kaarten**) |
+| Schatting van een fysieke kaart corrigeren | **Kraam → Knipje → Schatting zetten** |
+| Prijzen, Tikkie-links en overschrijfinstructies | **Beheer → Instellingen** (alleen beheerder) |
 | Openstaande bankregels koppelen aan een kaartverkoop | **Beheer → Financiën** |
 | Maandvergelijking Revolut-import vs app-omzet | **Beheer → Verkoopcontrole** (nieuw) |
 

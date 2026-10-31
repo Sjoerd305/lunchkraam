@@ -16,12 +16,12 @@ var (
 
 // AvondetenRegistrationRow is one avondeten card with optional registration for a calendar day.
 type AvondetenRegistrationRow struct {
-	CardID             int64
-	UserID             int64
-	OwnerName          string
-	OwnerEmail         string
-	KnipjesRemaining   int
-	RegisteredForDate  bool
+	CardID            int64
+	UserID            int64
+	OwnerName         string
+	OwnerEmail        string
+	KnipjesRemaining  int
+	RegisteredForDate bool
 }
 
 // ListAvondetenCardsForMealDate returns all avondeten cards and whether each is already used on mealDate (calendar date in Europe/Amsterdam).
@@ -122,11 +122,13 @@ func (s *Store) RegisterAvondetenMealsForDate(ctx context.Context, mealDate time
 			return 0, fmt.Errorf("kaart %d: %w", cardID, ErrAvondetenAlreadyRegistered)
 		}
 
-		if _, err := tx.Exec(ctx, `
+		var mealID int64
+		if err := tx.QueryRow(ctx, `
 INSERT INTO avondeten_meals (card_id, meal_date, recorded_by_user_id)
-VALUES ($1, $2::date, $3)`,
+VALUES ($1, $2::date, $3)
+RETURNING id`,
 			cardID, day, recordedByUserID,
-		); err != nil {
+		).Scan(&mealID); err != nil {
 			return 0, err
 		}
 		tag, err := tx.Exec(ctx, `
@@ -139,6 +141,17 @@ WHERE id = $1 AND knipjes_remaining > 0`,
 		}
 		if tag.RowsAffected() == 0 {
 			return 0, fmt.Errorf("kaart %d: %w", cardID, ErrNoKnipjes)
+		}
+		if _, err := insertCardTransaction(ctx, tx, cardTxInput{
+			CardID:          cardID,
+			Delta:           -1,
+			BalanceAfter:    knip - 1,
+			Reason:          TxReasonAvondetenMeal,
+			ActorUserID:     int64Ptr(recordedByUserID),
+			AvondetenMealID: int64Ptr(mealID),
+			Note:            "Avondeten " + day.Format("2006-01-02"),
+		}); err != nil {
+			return 0, err
 		}
 		n++
 	}

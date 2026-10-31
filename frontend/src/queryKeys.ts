@@ -6,6 +6,8 @@ export const queryKeys = {
     buyInfo: ['member', 'buy-info'] as const,
     myTostiOrders: ['member', 'my-tosti-orders'] as const,
     tostiQueue: ['member', 'tosti-queue'] as const,
+    /** Knipje-logboek van één kaart (lid én kraam gebruiken dezelfde key). */
+    cardTransactions: (cardId: number) => ['member', 'card-transactions', cardId] as const,
   },
   /** Operator / kraam console (invalidate prefix `['operator']` for full kraam refresh). */
   operator: {
@@ -19,6 +21,7 @@ export const queryKeys = {
     dashboard: ['admin', 'dashboard'] as const,
     requests: ['admin', 'requests'] as const,
     users: ['admin', 'users'] as const,
+    userCards: (userId: number) => ['admin', 'user-cards', userId] as const,
     settings: ['admin', 'settings'] as const,
     salesYears: (operator: boolean) => ['admin', 'sales-years', operator] as const,
     salesStats: (year: number, operator: boolean) => ['admin', 'sales-stats', year, operator] as const,

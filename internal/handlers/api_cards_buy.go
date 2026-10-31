@@ -129,11 +129,11 @@ func (d *Deps) APIBuy(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"payment_amount_eur":           d.Config.PaymentAmountEUR,
-		"payment_amount_avondeten_eur": d.Config.AvondetenPaymentAmountEUR,
+		"payment_amount_eur":           d.effectivePaymentAmountStr(r.Context(), store.CardKindTosti),
+		"payment_amount_avondeten_eur": d.effectivePaymentAmountStr(r.Context(), store.CardKindAvondeten),
 		"tikkie_url":                   store.EffectiveTikkieURL(dbTikkie, d.Config.TikkieURL),
 		"tikkie_url_avondeten":         store.EffectiveTikkieURL(dbTikkieAvondeten, d.Config.TikkieURLAvondeten),
-		"bank_transfer_instructions":   d.Config.BankTransferInstructions,
+		"bank_transfer_instructions":   d.effectiveBankTransferInstructions(r.Context()),
 		"my_pending_requests":          out,
 	})
 }
@@ -182,10 +182,7 @@ func (d *Deps) APIOperatorCardSale(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Ongeldige invoer.")
 		return
 	}
-	salePrice := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
-	if in.Kind == store.CardKindAvondeten {
-		salePrice = parsePaymentEURAmount(d.Config.AvondetenPaymentAmountEUR)
-	}
+	salePrice := d.effectivePaymentAmount(r.Context(), in.Kind)
 	reqID, err := d.Store.CreatePhysicalCardSale(r.Context(), store.PhysicalCardSaleInput{
 		BuyerUserID:   body.UserID,
 		SellerUserID:  u.ID,

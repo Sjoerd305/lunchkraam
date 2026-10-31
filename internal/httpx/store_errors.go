@@ -168,7 +168,7 @@ func WriteCardUseStoreError(w http.ResponseWriter, err error) bool {
 		JSONError(w, http.StatusNotFound, "not_found", "Kaart niet gevonden.")
 		return true
 	case errors.Is(err, store.ErrCardPhysicalReadonly):
-		JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Fysieke kaarten zijn read-only in de app.")
+		JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Een fysieke kaart heeft een schatting; gebruik 'Schatting zetten' in plaats van een knipje.")
 		return true
 	default:
 		return false
@@ -268,6 +268,57 @@ func WriteLocalChangePasswordStoreError(w http.ResponseWriter, err error) bool {
 		return true
 	case errors.Is(err, store.ErrNotFound):
 		JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
+		return true
+	default:
+		return false
+	}
+}
+
+// WriteCardTransactionUndoError maps store errors from UndoCardTransaction.
+func WriteCardTransactionUndoError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		JSONError(w, http.StatusNotFound, "not_found", "Boeking niet gevonden.")
+		return true
+	case errors.Is(err, store.ErrTxNotUndoable):
+		JSONError(w, http.StatusBadRequest, "not_undoable", "Deze boeking kan niet worden teruggedraaid.")
+		return true
+	case errors.Is(err, store.ErrTxAlreadyUndone):
+		JSONError(w, http.StatusConflict, "already_undone", "Deze boeking is al teruggedraaid.")
+		return true
+	case errors.Is(err, store.ErrUndoOutOfRange):
+		JSONError(w, http.StatusConflict, "out_of_range", "Terugdraaien zou het saldo buiten 0–10 brengen.")
+		return true
+	default:
+		return false
+	}
+}
+
+// WriteCardEstimateStoreError maps store errors from SetPhysicalCardEstimate.
+func WriteCardEstimateStoreError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		JSONError(w, http.StatusNotFound, "not_found", "Kaart niet gevonden.")
+		return true
+	case errors.Is(err, store.ErrCardNotPhysical):
+		JSONError(w, http.StatusBadRequest, "not_physical", "Alleen de schatting van een fysieke kaart kan worden gezet.")
+		return true
+	case errors.Is(err, store.ErrEstimateOutOfRange):
+		JSONError(w, http.StatusBadRequest, "out_of_range", "Schatting moet tussen 0 en 10 liggen.")
+		return true
+	default:
+		return false
+	}
+}
+
+// WriteAdminUserChangeError maps store errors from AdminSetUserRoles / AdminSetUserDisabled.
+func WriteAdminUserChangeError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		JSONError(w, http.StatusNotFound, "not_found", "Gebruiker niet gevonden.")
+		return true
+	case errors.Is(err, store.ErrCannotChangeSelf):
+		JSONError(w, http.StatusBadRequest, "cannot_change_self", "Je kunt je eigen rechten of status niet wijzigen.")
 		return true
 	default:
 		return false

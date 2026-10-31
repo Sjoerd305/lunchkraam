@@ -12,7 +12,13 @@ type User struct {
 	IsOperator         bool
 	IsMatroosJeugd     bool
 	MustChangePassword bool
+	DisabledAt         *time.Time
 	CreatedAt          time.Time
+}
+
+// IsDisabled reports whether the account has been deactivated by an admin.
+func (u *User) IsDisabled() bool {
+	return u != nil && u.DisabledAt != nil
 }
 
 type CardWithOwner struct {
@@ -31,7 +37,11 @@ type AdminUserSummary struct {
 	IsOperator         bool
 	IsMatroosJeugd     bool
 	MustChangePassword bool
+	DisabledAt         *time.Time
 	CreatedAt          time.Time
+	CardsTotal         int64
+	KnipjesTotal       int64
+	PendingRequests    int64
 }
 
 type OperatorMemberSummary struct {
@@ -72,14 +82,14 @@ type CardRequestRow struct {
 // AdminSalesMonthAgg is fulfilled card count and revenue for one calendar month (Europe/Amsterdam).
 // RevenueEUR is kaartverkoop (app) plus alleen niet-afgestemde bankregels (Revolut zonder match op card_request).
 type AdminSalesMonthAgg struct {
-	FulfilledCount          int64
-	RevenueEUR              float64
-	FulfilledCountTosti     int64
-	FulfilledCountAvondeten int64
-	RevenueEURTosti         float64
-	RevenueEURAvondeten     float64
-	RevenueCardTosti        float64
-	RevenueCardAvondeten    float64
+	FulfilledCount                int64
+	RevenueEUR                    float64
+	FulfilledCountTosti           int64
+	FulfilledCountAvondeten       int64
+	RevenueEURTosti               float64
+	RevenueEURAvondeten           float64
+	RevenueCardTosti              float64
+	RevenueCardAvondeten          float64
 	RevenueBankUnmatchedTosti     float64
 	RevenueBankUnmatchedAvondeten float64
 }
@@ -100,20 +110,20 @@ type PendingCardRequestSummary struct {
 }
 
 type AdminDashboardStats struct {
-	ActiveCardsTotal          int64
-	KnipjesRemainingTotal     int64
-	PendingRequests           int64
-	PendingWithCard           int64
-	PendingKnipjesRemaining   int64
-	PendingKnipjesConsumedEst int64
-	FulfilledRequests         int64
-	FulfilledKnipjesRemaining int64
-	CancelledRequests         int64
-	FinanceYear                    int
-	YearRevenueEUR                 float64
-	YearRevenueCardSalesEUR        float64
-	YearRevenueBankUnmatchedEUR    float64
-	YearBankCreditsUnmatchedCount  int64
-	YearExpensesEUR                float64
-	YearNetEUR                     float64
+	ActiveCardsTotal              int64
+	KnipjesRemainingTotal         int64
+	PendingRequests               int64
+	PendingWithCard               int64
+	PendingKnipjesRemaining       int64
+	PendingKnipjesConsumedEst     int64
+	FulfilledRequests             int64
+	FulfilledKnipjesRemaining     int64
+	CancelledRequests             int64
+	FinanceYear                   int
+	YearRevenueEUR                float64
+	YearRevenueCardSalesEUR       float64
+	YearRevenueBankUnmatchedEUR   float64
+	YearBankCreditsUnmatchedCount int64
+	YearExpensesEUR               float64
+	YearNetEUR                    float64
 }

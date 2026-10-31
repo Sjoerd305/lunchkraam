@@ -28,7 +28,9 @@ export function KraamPaymentQueueSection({
         <div>
           <h2 className="text-lg font-semibold text-amber-950">Betalingen in de wachtrij</h2>
           <p className="text-sm text-amber-900/85">
-            Accordeer als betaald. Weigeren kan alleen zolang er nog geen knipje is gebruikt.
+            Online aangevraagde kaarten. Accordeer zodra de Tikkie of overschrijving binnen is. Weigeren kan alleen zolang er
+            nog geen knipje is gebruikt.
+            {!user.is_admin ? ' Avondetenkaarten accordeert een beheerder.' : ''}
           </p>
         </div>
         <button
@@ -59,7 +61,7 @@ export function KraamPaymentQueueSection({
           canManageRequest={(row) => Boolean(user.is_admin || row.kind !== 'avondeten')}
           onFulfill={(id, k) => void onFulfill(id, k)}
           onReject={(id) => void onReject(id)}
-          layout="cards-only"
+          layout="responsive"
         />
       )}
     </section>

@@ -19,6 +19,15 @@ const SettingKeyTikkieURLSetAt = "tikkie_url_set_at"
 // SettingKeyTikkieURLAvondetenSetAt stores when the avondeten tikkie URL was last changed (RFC3339 UTC).
 const SettingKeyTikkieURLAvondetenSetAt = "tikkie_url_avondeten_set_at"
 
+// SettingKeyPaymentAmountEUR overrides PAYMENT_AMOUNT_EUR (prijs tostikaart) when non-empty.
+const SettingKeyPaymentAmountEUR = "payment_amount_eur"
+
+// SettingKeyPaymentAmountAvondetenEUR overrides AVONDETEN_PAYMENT_AMOUNT_EUR when non-empty.
+const SettingKeyPaymentAmountAvondetenEUR = "payment_amount_avondeten_eur"
+
+// SettingKeyBankTransferInstructions overrides BANK_TRANSFER_INSTRUCTIONS when non-empty.
+const SettingKeyBankTransferInstructions = "bank_transfer_instructions"
+
 func (s *Store) GetAppSetting(ctx context.Context, key string) (string, error) {
 	var v string
 	err := s.pool.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = $1`, key).Scan(&v)

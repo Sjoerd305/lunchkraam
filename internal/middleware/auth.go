@@ -22,7 +22,7 @@ func OptionalUser(st *store.Store) func(http.Handler) http.Handler {
 				return
 			}
 			u, err := st.UserByID(r.Context(), id)
-			if err != nil {
+			if err != nil || u.IsDisabled() {
 				auth.ClearSessionUser(sess)
 				_ = sess.Save(r, w)
 				next.ServeHTTP(w, r)
@@ -47,7 +47,7 @@ func RequireUser(st *store.Store) func(http.Handler) http.Handler {
 				return
 			}
 			u, err := st.UserByID(r.Context(), id)
-			if err != nil {
+			if err != nil || u.IsDisabled() {
 				auth.ClearSessionUser(sess)
 				_ = sess.Save(r, w)
 				http.Redirect(w, r, "/login", http.StatusSeeOther)

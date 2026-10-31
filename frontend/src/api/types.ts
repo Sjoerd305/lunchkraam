@@ -27,6 +27,9 @@ import {
   buyInfoResponseSchema,
   cardKindSchema,
   cardSchema,
+  cardTransactionReasonSchema,
+  cardTransactionSchema,
+  cardTransactionsResponseSchema,
   meResponseSchema,
   myPendingRequestSchema,
   operatorCardRowSchema,
@@ -136,3 +139,16 @@ export type CreateTostiOrderBody =
 export type OperatorTostiSoldToday = z.infer<typeof operatorTostiSoldTodaySchema>
 
 export type AdminAppSettings = z.infer<typeof adminSettingsResponseSchema>
+
+/** Velden die een beheerder via PATCH /api/admin/settings kan zetten (leeg = server-fallback). */
+export type AdminAppSettingsPatch = {
+  tikkie_url: string
+  tikkie_url_avondeten: string
+  payment_amount_eur: string
+  payment_amount_avondeten_eur: string
+  bank_transfer_instructions: string
+}
+
+export type CardTransactionReason = z.infer<typeof cardTransactionReasonSchema>
+export type CardTransaction = z.infer<typeof cardTransactionSchema>
+export type CardTransactionsPayload = z.infer<typeof cardTransactionsResponseSchema>

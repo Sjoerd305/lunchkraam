@@ -4,28 +4,35 @@ import type { OperatorTostiSoldToday } from '../../api'
 type Props = {
   soldTodayLoading: boolean
   soldToday: OperatorTostiSoldToday | null
+  onRefreshAll: () => void
 }
 
-export function KraamSoldTodayHeader({ soldTodayLoading, soldToday }: Props) {
+/** Compacte kop: titel, dagtotaal en één knop om alles te verversen. */
+export function KraamSoldTodayHeader({ soldTodayLoading, soldToday, onRefreshAll }: Props) {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
-      <h1 className="text-2xl font-bold text-slate-900 lg:shrink-0">Lunchkraam</h1>
-      <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm lg:max-w-md lg:shrink-0">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Verkocht vandaag</p>
-        {soldTodayLoading ? (
-          <p className="mt-2 text-sm text-slate-600">Laden…</p>
-        ) : soldToday ? (
-          <>
-            <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">{soldToday.quantity}</p>
-            <p className="mt-1 text-sm text-slate-700">
-              {soldToday.quantity === 1 ? 'tosti geleverd' : 'tosti’s geleverd'}
-            </p>
-            <p className="mt-2 text-xs text-slate-500">{formatAmsterdamDateLong(soldToday.amsterdam_date)}</p>
-          </>
-        ) : (
-          <p className="mt-2 text-sm text-amber-800">Kon het totaal niet laden. Vernieuw de pagina.</p>
-        )}
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Kraam</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          {soldTodayLoading ? (
+            'Verkocht vandaag: laden…'
+          ) : soldToday ? (
+            <>
+              Vandaag <strong className="text-slate-900">{soldToday.quantity}</strong>{' '}
+              {soldToday.quantity === 1 ? 'tosti' : 'tosti’s'} geleverd · {formatAmsterdamDateLong(soldToday.amsterdam_date)}
+            </>
+          ) : (
+            <span className="text-amber-800">Kon het dagtotaal niet laden.</span>
+          )}
+        </p>
       </div>
+      <button
+        type="button"
+        onClick={() => void onRefreshAll()}
+        className="btn-secondary min-h-10 self-start rounded-xl px-4 lg:self-auto"
+      >
+        Alles vernieuwen
+      </button>
     </div>
   )
 }

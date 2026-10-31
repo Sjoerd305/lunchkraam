@@ -104,7 +104,7 @@ flowchart TD
 
 ## Voorbeelddomein: digitale kaart kopen
 
-Een lid vraagt een kaart aan; een admin of operator accordeert in de betalingswachtrij. De server voltooit de aanvraag en legt o.a. het accorderingsbedrag vast. De UI parseert antwoorden met Zod (`api.schemas.ts`).
+Een lid vraagt een kaart aan; een beheerder of kraammedewerker accordeert in de betalingswachtrij (kraampagina, tabblad **Betalingen**, `/kraam?tab=betalingen`). Elke saldowijziging op een kaart wordt daarnaast vastgelegd in `card_transactions` (knipje-logboek, migratie 00029) en is per kaart terug te draaien via `POST /api/operator/card-transactions/{id}/undo`. De server voltooit de aanvraag en legt o.a. het accorderingsbedrag vast. De UI parseert antwoorden met Zod (`api.schemas.ts`).
 
 ```mermaid
 sequenceDiagram

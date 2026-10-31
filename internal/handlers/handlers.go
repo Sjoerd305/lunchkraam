@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -102,6 +103,10 @@ func (d *Deps) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	u, err := d.Store.UpsertUser(ctx, profile.ID, profile.Email, profile.Name, bootstrap)
 	if err != nil {
 		if !saveSess() {
+			return
+		}
+		if errors.Is(err, store.ErrUserDisabled) {
+			http.Redirect(w, r, "/login?error=disabled", http.StatusSeeOther)
 			return
 		}
 		http.Redirect(w, r, "/login?error=db", http.StatusSeeOther)
