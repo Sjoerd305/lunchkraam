@@ -29,7 +29,7 @@ function statusBadgeClasses(status: FinanceControlMonthStatus): string {
 function statusLabelNl(status: FinanceControlMonthStatus): string {
   switch (status) {
     case 'no_activity':
-      return '—'
+      return 'Geen activiteit'
     case 'in_sync':
       return 'Synchroon'
     case 'revolut_imports_higher':
@@ -39,6 +39,19 @@ function statusLabelNl(status: FinanceControlMonthStatus): string {
     default:
       return '—'
   }
+}
+
+/** Verschil Revolut − app; de kleur volgt de status uit de legenda. */
+function DeltaCell({ amount, status }: { amount: number; status: FinanceControlMonthStatus }) {
+  return (
+    <span
+      title={statusLabelNl(status)}
+      className={`inline-flex rounded-lg border px-2 py-0.5 text-xs font-semibold tabular-nums ${statusBadgeClasses(status)}`}
+    >
+      {formatEUR(amount)}
+      <span className="sr-only"> · {statusLabelNl(status)}</span>
+    </span>
+  )
 }
 
 export function AdminFinanceControlPage() {
@@ -120,6 +133,7 @@ export function AdminFinanceControlPage() {
 
       <section className="surface-card space-y-4">
         <h3 className="text-sm font-semibold text-slate-800">Legenda</h3>
+        <p className="text-sm text-slate-600">De kleur van de verschil-cellen in de maandtabel betekent:</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`rounded-xl border px-3 py-2 text-sm ${statusBadgeClasses('in_sync')}`}>
             <p className="font-semibold">Synchroon</p>
@@ -141,13 +155,13 @@ export function AdminFinanceControlPage() {
       </section>
 
       {year !== null ? (
-        <section className="surface-card space-y-3 overflow-x-auto">
+        <section className="surface-card space-y-3">
           <h3 className="text-sm font-semibold text-slate-800">Maandtabel ({year})</h3>
           {tableLoading && !payload ? (
             <p className="text-sm text-slate-600">Laden…</p>
           ) : payload ? (
             <>
-              <table className="min-w-[58rem] w-full border-collapse text-sm">
+              <table className="table-stack w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <th className="py-2 pr-3">Maand</th>
@@ -155,48 +169,31 @@ export function AdminFinanceControlPage() {
                     <th className="py-2 pr-3 text-right">App</th>
                     <th className="py-2 pr-3 text-right">Correcties</th>
                     <th className="py-2 pr-3 text-right">App incl.</th>
-                    <th className="py-2 pr-3 text-right">Δ</th>
-                    <th className="py-2 pr-3">Status</th>
-                    <th className="py-2 pr-3 text-right">Δ incl.</th>
-                    <th className="py-2">St. incl.</th>
+                    <th className="py-2 pr-3 text-right">Verschil</th>
+                    <th className="py-2 text-right">Verschil incl.</th>
                   </tr>
                 </thead>
                 <tbody>
                   {payload.months.map((row) => (
                     <tr key={row.month} className="border-b border-slate-100 last:border-0">
-                      <td className="py-2 pr-3 font-medium text-slate-800">
-                        {row.label_nl}
-                        <span className="ml-1 text-xs font-normal text-slate-500">({row.month})</span>
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
+                      <td className="py-2 pr-3 font-medium text-slate-800">{row.label_nl}</td>
+                      <td data-label="Revolut" className="py-2 pr-3 text-right tabular-nums text-slate-800">
                         {formatEUR(row.revolut_imports_eur)}
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
+                      <td data-label="App" className="py-2 pr-3 text-right tabular-nums text-slate-800">
                         {formatEUR(row.app_revenue_eur)}
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
+                      <td data-label="Correcties" className="py-2 pr-3 text-right tabular-nums text-slate-800">
                         {formatEUR(row.corrections_eur)}
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
+                      <td data-label="App incl." className="py-2 pr-3 text-right tabular-nums text-slate-800">
                         {formatEUR(row.app_incl_corrections_eur)}
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">{formatEUR(row.delta_eur)}</td>
-                      <td className="py-2 pr-3">
-                        <span
-                          className={`inline-flex rounded-lg border px-2 py-0.5 text-xs font-semibold ${statusBadgeClasses(row.status)}`}
-                        >
-                          {statusLabelNl(row.status)}
-                        </span>
+                      <td data-label="Verschil" className="py-2 pr-3 text-right">
+                        <DeltaCell amount={row.delta_eur} status={row.status} />
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-slate-800">
-                        {formatEUR(row.delta_incl_corrections_eur)}
-                      </td>
-                      <td className="py-2">
-                        <span
-                          className={`inline-flex rounded-lg border px-2 py-0.5 text-xs font-semibold ${statusBadgeClasses(row.status_incl_corrections)}`}
-                        >
-                          {statusLabelNl(row.status_incl_corrections)}
-                        </span>
+                      <td data-label="Verschil incl." className="py-2 text-right">
+                        <DeltaCell amount={row.delta_incl_corrections_eur} status={row.status_incl_corrections} />
                       </td>
                     </tr>
                   ))}

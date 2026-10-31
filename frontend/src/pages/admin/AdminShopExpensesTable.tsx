@@ -72,15 +72,14 @@ export function AdminShopExpensesTable(props: AdminShopExpensesTableProps) {
           Geen boekingen in {year ?? 'dit jaar'}.
         </p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[32rem] text-left text-sm">
+        <div className="mt-4">
+          <table className="table-stack w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="py-2 pr-4">Datum</th>
                 <th className="py-2 pr-4">Bedrag</th>
                 <th className="py-2 pr-4">Soort</th>
                 <th className="py-2 pr-4">Waarvoor</th>
-                <th className="py-2 pr-4">Bron</th>
                 <th className="py-2 pr-4">Omschrijving</th>
                 <th className="py-2 pr-4">Bon</th>
                 {isAdmin ? <th className="py-2 text-right">Actie</th> : null}
@@ -89,12 +88,15 @@ export function AdminShopExpensesTable(props: AdminShopExpensesTableProps) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100">
-                  <td className="py-3 pr-4 tabular-nums text-slate-800">{r.spent_on}</td>
-                  <td className="py-3 pr-4 font-medium tabular-nums text-slate-900">{formatEUR(r.amount_eur)}</td>
-                  <td className="py-3 pr-4 text-xs text-slate-600">
-                    <span className={shopExpenseKindBadgeClass(r)}>{shopExpenseKindLabel(r)}</span>
+                  <td className="whitespace-nowrap py-3 pr-4 tabular-nums text-slate-800">{r.spent_on}</td>
+                  <td data-label="Bedrag" className="whitespace-nowrap py-3 pr-4 font-medium tabular-nums text-slate-900">{formatEUR(r.amount_eur)}</td>
+                  <td data-label="Soort" className="whitespace-nowrap py-3 pr-4 text-xs text-slate-600">
+                    <div className="flex flex-col items-end gap-1 md:items-start">
+                      <span className={shopExpenseKindBadgeClass(r)}>{shopExpenseKindLabel(r)}</span>
+                      <span className="text-slate-500">{r.source === 'revolut' ? 'Revolut' : 'Handmatig'}</span>
+                    </div>
                   </td>
-                  <td className="py-3 pr-4 text-slate-700">
+                  <td data-label="Waarvoor" className="py-3 pr-4 text-slate-700">
                     <select
                       value={r.purpose}
                       disabled={patchingPurposeId === r.id}
@@ -106,12 +108,9 @@ export function AdminShopExpensesTable(props: AdminShopExpensesTableProps) {
                       <option value="avondeten">{shopExpensePurposeLabel('avondeten')}</option>
                     </select>
                   </td>
-                  <td className="py-3 pr-4 text-xs text-slate-600">
-                    {r.source === 'revolut' ? 'Revolut' : 'Handmatig'}
-                  </td>
-                  <td className="py-3 pr-4 text-slate-700">{r.description || '—'}</td>
-                  <td className="py-3 pr-4 text-slate-700">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <td data-label="Omschrijving" className="py-3 pr-4 text-slate-700">{r.description || '—'}</td>
+                  <td data-label="Bon" className="py-3 pr-4 text-slate-700">
+                    <div className="flex flex-wrap items-center justify-end gap-2 md:justify-start">
                       <label className="btn-secondary inline-flex min-h-9 cursor-pointer items-center px-3 text-xs">
                         {uploadingReceiptId === r.id ? 'Uploaden…' : 'Camera'}
                         <input

@@ -213,7 +213,7 @@ function FinanceCorrectionsSection({ year, csrf, alert, confirm }: FinanceCorrec
         </div>
       </form>
 
-      <div className="overflow-x-auto">
+      <div>
         {listQuery.isFetching && rows.length === 0 ? (
           <p className="text-sm text-slate-600">Laden…</p>
         ) : rows.length === 0 ? (
@@ -221,7 +221,7 @@ function FinanceCorrectionsSection({ year, csrf, alert, confirm }: FinanceCorrec
             Geen correcties voor {year}.
           </p>
         ) : (
-          <table className="w-full min-w-[40rem] text-left text-sm">
+          <table className="table-stack w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="py-2 pr-3">Datum</th>
@@ -236,12 +236,12 @@ function FinanceCorrectionsSection({ year, csrf, alert, confirm }: FinanceCorrec
               {rows.map((row) => (
                 <tr key={row.id} className="border-b border-slate-100">
                   <td className="py-2.5 pr-3 whitespace-nowrap text-slate-800">{row.recorded_on}</td>
-                  <td className="py-2.5 pr-3 text-slate-700">{financeCorrectionKindLabel(row.kind)}</td>
-                  <td className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
-                  <td className="py-2.5 pr-3 text-right tabular-nums font-medium text-slate-900">
+                  <td data-label="Type" className="py-2.5 pr-3 text-slate-700">{financeCorrectionKindLabel(row.kind)}</td>
+                  <td data-label="Doel" className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
+                  <td data-label="Bedrag" className="py-2.5 pr-3 text-right tabular-nums font-medium text-slate-900">
                     {formatEUR(row.amount_eur)}
                   </td>
-                  <td className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
+                  <td data-label="Toelichting" className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
                   <td className="py-2.5">
                     <button
                       type="button"
@@ -592,8 +592,8 @@ export function AdminFinancePage() {
                 Geen openstaande bankregels voor dit jaar.
               </p>
             ) : (
-              <div className="surface-card overflow-x-auto">
-                <table className="w-full min-w-[40rem] text-left text-sm">
+              <div className="surface-card">
+                <table className="table-stack w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <th className="py-2 pr-3">Datum</th>
@@ -608,11 +608,11 @@ export function AdminFinancePage() {
                       <Fragment key={row.id}>
                         <tr className="border-b border-slate-100 align-top">
                           <td className="py-2.5 pr-3 whitespace-nowrap text-slate-800">{row.received_on}</td>
-                          <td className="py-2.5 pr-3 tabular-nums font-medium text-slate-900">
+                          <td data-label="Bedrag" className="py-2.5 pr-3 tabular-nums font-medium text-slate-900">
                             {formatEUR(row.amount_eur)}
                           </td>
-                          <td className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
-                          <td className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
+                          <td data-label="Doel" className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
+                          <td data-label="Omschrijving" className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
                           <td className="py-2.5">
                             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                               <button
@@ -764,8 +764,8 @@ export function AdminFinancePage() {
                 Geen gekoppelde bankregels voor dit jaar (of max. 500 meest recente).
               </p>
             ) : (
-              <div className="surface-card overflow-x-auto">
-                <table className="w-full min-w-[44rem] text-left text-sm">
+              <div className="surface-card">
+                <table className="table-stack w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <th className="py-2 pr-3">Datum</th>
@@ -780,14 +780,14 @@ export function AdminFinancePage() {
                     {matchedRows.map((row) => (
                       <tr key={row.id} className="border-b border-slate-100 align-top">
                         <td className="py-2.5 pr-3 whitespace-nowrap text-slate-800">{row.received_on}</td>
-                        <td className="py-2.5 pr-3 tabular-nums font-medium text-slate-900">
+                        <td data-label="Bedrag" className="py-2.5 pr-3 tabular-nums font-medium text-slate-900">
                           {formatEUR(row.amount_eur)}
                         </td>
-                        <td className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
-                        <td className="py-2.5 pr-3 tabular-nums text-slate-800">
+                        <td data-label="Doel" className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
+                        <td data-label="Kaartverkoop" className="py-2.5 pr-3 tabular-nums text-slate-800">
                           #{row.matched_card_request_id ?? '—'}
                         </td>
-                        <td className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
+                        <td data-label="Omschrijving" className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
                         <td className="py-2.5">
                           <button
                             type="button"
@@ -818,8 +818,8 @@ export function AdminFinancePage() {
                 Geen op deze manier afgehandelde regels voor dit jaar.
               </p>
             ) : (
-              <div className="surface-card overflow-x-auto">
-                <table className="w-full min-w-[36rem] text-left text-sm">
+              <div className="surface-card">
+                <table className="table-stack w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <th className="py-2 pr-3">Datum</th>
@@ -833,11 +833,11 @@ export function AdminFinancePage() {
                     {waivedRows.map((row) => (
                       <tr key={row.id} className="border-b border-slate-100 align-top">
                         <td className="py-2.5 pr-3 whitespace-nowrap text-slate-800">{row.received_on}</td>
-                        <td className="py-2.5 pr-3 tabular-nums font-medium text-slate-900">
+                        <td data-label="Bedrag" className="py-2.5 pr-3 tabular-nums font-medium text-slate-900">
                           {formatEUR(row.amount_eur)}
                         </td>
-                        <td className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
-                        <td className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
+                        <td data-label="Doel" className="py-2.5 pr-3 text-slate-700">{purposeLabel(row.purpose)}</td>
+                        <td data-label="Omschrijving" className="py-2.5 pr-3 text-slate-600">{row.description || '—'}</td>
                         <td className="py-2.5">
                           <button
                             type="button"

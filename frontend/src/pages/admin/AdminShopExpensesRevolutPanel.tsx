@@ -3,6 +3,19 @@ import type * as api from '../../api'
 import { formatDateTimeShortNL } from './adminShopExpensesHelpers'
 import { formatEUR } from '../../utils/formatMoney'
 
+type PreviewSide = 'debit' | 'credit'
+
+/**
+ * Een transactie is óf een afschrijving (uitgave) óf een bijschrijving (inkomst); de andere kant
+ * bevat alleen "geen afschrijving/bijschrijving". Toon dus één kant in plaats van zes kolommen.
+ */
+function relevantPreviewSide(pr: api.RevolutPreviewRow): PreviewSide {
+  if (pr.debit.selectable) return 'debit'
+  if (pr.credit.selectable) return 'credit'
+  if (pr.debit.outcome === 'not_debit') return 'credit'
+  return 'debit'
+}
+
 export type AdminShopExpensesRevolutPanelProps = {
   revolutBalance: api.RevolutBalance | null
   revolutBalanceLoading: boolean
@@ -290,48 +303,57 @@ export function AdminShopExpensesRevolutPanel(props: AdminShopExpensesRevolutPan
               per regel <strong>Waarvoor</strong> (lunchkraam of avondeten) vóór je importeert — dat overschrijft
               tijdafleiding voor uitgaven en het standaard kaartbedrag-label voor inkomsten. Bedragen wijzig je in het CSV.
             </p>
-            <div className="mt-3 max-h-[min(70vh,28rem)] overflow-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[72rem] text-left text-xs">
+            <div className="mt-3 max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-slate-200 px-3 md:px-0">
+              <table className="table-stack w-full text-left text-xs">
                 <thead className="sticky top-0 z-10 bg-slate-100 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-600">
                   <tr>
                     <th className="px-2 py-2">#</th>
                     <th className="px-2 py-2">Datum</th>
-                    <th className="px-2 py-2">Bedrag</th>
-                    <th className="px-2 py-2">Type</th>
-                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2 text-right">Bedrag</th>
                     <th className="px-2 py-2">Omschrijving</th>
-                    <th className="px-2 py-2">Waarvoor uit</th>
-                    <th className="px-2 py-2">Uitgave</th>
-                    <th className="px-2 py-2 text-center">Uit.</th>
-                    <th className="px-2 py-2">Waarvoor ink.</th>
-                    <th className="px-2 py-2">Inkomsten</th>
-                    <th className="px-2 py-2 text-center">Ink.</th>
+                    <th className="px-2 py-2">Waarvoor</th>
+                    <th className="px-2 py-2">Actie bij import</th>
+                    <th className="px-2 py-2 text-center">Meenemen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {revolutPreview.rows.map((pr) => {
-                    const dk = pr.debit.row_key ?? ''
-                    const ck = pr.credit.row_key ?? ''
-                    const debitIn = pr.debit.selectable && dk ? !excludedDebit[dk] : false
-                    const creditIn = pr.credit.selectable && ck ? !excludedCredit[ck] : false
+                    const side = relevantPreviewSide(pr)
+                    const branch = side === 'debit' ? pr.debit : pr.credit
+                    const key = branch.row_key ?? ''
+                    const selectable = branch.selectable && key !== ''
+                    const included = selectable
+                      ? side === 'debit'
+                        ? !excludedDebit[key]
+                        : !excludedCredit[key]
+                      : false
+                    const purpose =
+                      (side === 'debit' ? debitPurposeByKey[key] : creditPurposeByKey[key]) ?? 'lunchkraam'
+                    const meta = [pr.type, pr.state].filter(Boolean).join(' · ')
                     return (
                       <tr key={pr.line} className="align-top text-slate-800">
-                        <td className="px-2 py-1.5 tabular-nums text-slate-500">{pr.line}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">
+                        <td data-label="Regel" className="px-2 py-1.5 tabular-nums text-slate-500">
+                          {pr.line}
+                        </td>
+                        <td data-label="Datum" className="whitespace-nowrap px-2 py-1.5 text-slate-600">
                           {formatDateTimeShortNL(pr.completed_at)}
                         </td>
-                        <td className="px-2 py-1.5 tabular-nums font-medium">{formatEUR(pr.amount_eur)}</td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.type || '—'}</td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.state || '—'}</td>
-                        <td className="max-w-[14rem] px-2 py-1.5 break-words text-slate-700">{pr.description || '—'}</td>
-                        <td className="px-2 py-1.5">
-                          {pr.debit.selectable && dk ? (
+                        <td data-label="Bedrag" className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums font-medium">
+                          {formatEUR(pr.amount_eur)}
+                        </td>
+                        <td className="px-2 py-1.5 text-slate-700">
+                          <div className="break-words">{pr.description || '—'}</div>
+                          {meta ? <div className="text-slate-500">{meta}</div> : null}
+                        </td>
+                        <td data-label="Waarvoor" className="px-2 py-1.5">
+                          {selectable ? (
                             <select
-                              className="select-control max-w-[10.5rem] py-1 text-xs"
-                              value={debitPurposeByKey[dk] ?? 'lunchkraam'}
+                              className="select-control py-1 text-xs"
+                              value={purpose}
                               onChange={(e) => {
                                 const v = e.target.value as api.ShopExpensePurpose
-                                onDebitPurposeChange(dk, v)
+                                if (side === 'debit') onDebitPurposeChange(key, v)
+                                else onCreditPurposeChange(key, v)
                               }}
                             >
                               <option value="lunchkraam">Lunchkraam</option>
@@ -341,46 +363,23 @@ export function AdminShopExpensesRevolutPanel(props: AdminShopExpensesRevolutPan
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.debit.label_nl}</td>
-                        <td className="px-2 py-1.5 text-center">
-                          {pr.debit.selectable && dk ? (
+                        <td data-label="Actie" className="px-2 py-1.5 text-slate-600">
+                          <span>
+                            <span className="font-semibold text-slate-700">{side === 'debit' ? 'Uitgave' : 'Inkomst'}: </span>
+                            {branch.label_nl}
+                          </span>
+                        </td>
+                        <td data-label="Meenemen" className="px-2 py-1.5 text-center">
+                          {selectable ? (
                             <input
                               type="checkbox"
                               className="h-4 w-4 rounded border-slate-300"
-                              checked={debitIn}
-                              title="Meenemen als uitgave"
-                              onChange={(e) => onExcludedDebitChange(dk, e.target.checked)}
-                            />
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {pr.credit.selectable && ck ? (
-                            <select
-                              className="select-control max-w-[10.5rem] py-1 text-xs"
-                              value={creditPurposeByKey[ck] ?? 'lunchkraam'}
+                              checked={included}
+                              title={side === 'debit' ? 'Meenemen als uitgave' : 'Meenemen als omzet'}
                               onChange={(e) => {
-                                const v = e.target.value as api.ShopExpensePurpose
-                                onCreditPurposeChange(ck, v)
+                                if (side === 'debit') onExcludedDebitChange(key, e.target.checked)
+                                else onExcludedCreditChange(key, e.target.checked)
                               }}
-                            >
-                              <option value="lunchkraam">Lunchkraam</option>
-                              <option value="avondeten">Avondeten</option>
-                            </select>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 text-slate-600">{pr.credit.label_nl}</td>
-                        <td className="px-2 py-1.5 text-center">
-                          {pr.credit.selectable && ck ? (
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300"
-                              checked={creditIn}
-                              title="Meenemen als omzet"
-                              onChange={(e) => onExcludedCreditChange(ck, e.target.checked)}
                             />
                           ) : (
                             <span className="text-slate-300">—</span>
@@ -403,7 +402,7 @@ export function AdminShopExpensesRevolutPanel(props: AdminShopExpensesRevolutPan
                 : ''}
               .
               {revolutPreview.credits_enabled && revolutPreview.credits_inferred_non_standard > 0
-                ? ` Daarvan ${revolutPreview.credits_inferred_non_standard} met een afwijkend bedrag t.o.v. de ingestelde kaartprijzen (doel via tijdvenster of standaard-doel; aanpasbaar onder Waarvoor ink.).`
+                ? ` Daarvan ${revolutPreview.credits_inferred_non_standard} met een afwijkend bedrag t.o.v. de ingestelde kaartprijzen (doel via tijdvenster of standaard-doel; aanpasbaar onder Waarvoor).`
                 : ''}
               {previewCreditSplit && previewCreditSplit.total > 0 ? (
                 <>

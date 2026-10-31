@@ -230,90 +230,127 @@ export function AdminDashboardPage() {
             )}
           </section>
 
-          <section className="grid gap-6 lg:grid-cols-2">
-            <div className="surface-card overflow-x-auto">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Financieel per maand</h4>
-              <table className="mt-3 w-full min-w-[34rem] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="py-2 pr-3">Maand</th>
-                    <th className="py-2 pr-3">Kaarten</th>
-                    <th className="py-2 pr-3">Omzet</th>
-                    <th className="py-2 pr-3">App</th>
-                    <th className="py-2 pr-3">Bank open</th>
-                    <th className="py-2 pr-3">Uitgaven</th>
-                    <th className="py-2">Netto</th>
+          <section className="surface-card">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Financieel per maand</h4>
+            <table className="table-stack mt-3 w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="py-2 pr-3">Maand</th>
+                  <th className="py-2 pr-3 text-right">Kaarten</th>
+                  <th className="py-2 pr-3 text-right">Omzet</th>
+                  <th className="py-2 pr-3 text-right">App</th>
+                  <th className="py-2 pr-3 text-right">Bank open</th>
+                  <th className="py-2 pr-3 text-right">Uitgaven</th>
+                  <th className="py-2 text-right">Netto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.monthly.map((m) => (
+                  <tr key={m.month} className="border-b border-slate-100">
+                    <td className="py-2 pr-3 font-medium text-slate-800">{m.label_nl}</td>
+                    <td data-label="Kaarten" className="py-2 pr-3 text-right tabular-nums text-slate-700">
+                      {m.fulfilled_count}
+                    </td>
+                    <td data-label="Omzet" className="py-2 pr-3 text-right tabular-nums text-slate-900">
+                      {formatEUR(m.revenue_eur)}
+                    </td>
+                    <td data-label="App" className="py-2 pr-3 text-right tabular-nums text-slate-700">
+                      {formatEUR(m.revenue_card_sales_eur)}
+                    </td>
+                    <td data-label="Bank open" className="py-2 pr-3 text-right tabular-nums text-amber-900/90">
+                      {formatEUR(m.revenue_bank_unmatched_eur)}
+                    </td>
+                    <td data-label="Uitgaven" className="py-2 pr-3 text-right tabular-nums text-slate-700">
+                      {formatEUR(m.expenses_eur)}
+                    </td>
+                    <td data-label="Netto" className="py-2 text-right tabular-nums font-medium text-slate-900">
+                      {formatEUR(m.net_eur)}
+                    </td>
                   </tr>
-                </thead>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-300 font-semibold text-slate-900">
+                  <td className="py-2 pr-3">Totaal {stats.year}</td>
+                  <td data-label="Kaarten" className="py-2 pr-3 text-right tabular-nums">
+                    {stats.year_fulfilled_count}
+                  </td>
+                  <td data-label="Omzet" className="py-2 pr-3 text-right tabular-nums">
+                    {formatEUR(stats.year_revenue_eur)}
+                  </td>
+                  <td data-label="App" className="py-2 pr-3 text-right tabular-nums">
+                    {formatEUR(stats.year_revenue_card_sales_eur)}
+                  </td>
+                  <td data-label="Bank open" className="py-2 pr-3 text-right tabular-nums text-amber-900/90">
+                    {formatEUR(stats.year_revenue_bank_unmatched_eur)}
+                  </td>
+                  <td data-label="Uitgaven" className="py-2 pr-3 text-right tabular-nums">
+                    {formatEUR(stats.year_expenses_eur)}
+                  </td>
+                  <td data-label="Netto" className="py-2 text-right tabular-nums">
+                    {formatEUR(stats.year_net_eur)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+            <p className="mt-3 text-xs text-slate-500">
+              Omzet = App (geaccordeerde kaartverkopen) + Bank open (Revolut-bijschrijvingen zonder gekoppelde verkoop).
+            </p>
+          </section>
+
+          <section className="grid gap-6 lg:grid-cols-2">
+            <div className="surface-card">
+              <div className="flex items-baseline justify-between gap-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tosti's per maand</h4>
+                <span className="text-sm font-semibold tabular-nums text-slate-900">
+                  {stats.year_tosti_quantity} {stats.year_tosti_quantity === 1 ? 'tosti' : 'tosti’s'} in {stats.year}
+                </span>
+              </div>
+              <table className="mt-3 w-full text-left text-sm">
                 <tbody>
-                  {stats.monthly.map((m) => (
-                    <tr key={m.month} className="border-b border-slate-100">
-                      <td className="py-2 pr-3 text-slate-800">{m.label_nl}</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-700">{m.fulfilled_count}</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-900">{formatEUR(m.revenue_eur)}</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-700">{formatEUR(m.revenue_card_sales_eur)}</td>
-                      <td className="py-2 pr-3 tabular-nums text-amber-900/90">{formatEUR(m.revenue_bank_unmatched_eur)}</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-700">{formatEUR(m.expenses_eur)}</td>
-                      <td className="py-2 tabular-nums text-slate-900">{formatEUR(m.net_eur)}</td>
+                  {tostiRowsByMonth.map((row) => (
+                    <tr key={row.month} className="border-b border-slate-100">
+                      <td className="py-1.5 pr-4 text-slate-800">{row.label}</td>
+                      <td className="py-1.5 text-right tabular-nums text-slate-900">{row.quantity}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="space-y-6">
-              <div className="surface-card overflow-x-auto">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tosti's per maand</h4>
-                  <span className="text-sm font-semibold tabular-nums text-slate-900">
-                    {stats.year_tosti_quantity} {stats.year_tosti_quantity === 1 ? 'tosti' : 'tosti’s'} in {stats.year}
-                  </span>
-                </div>
-                <table className="mt-3 w-full min-w-[14rem] text-left text-sm">
-                  <tbody>
-                    {tostiRowsByMonth.map((row) => (
-                      <tr key={row.month} className="border-b border-slate-100">
-                        <td className="py-1.5 pr-4 text-slate-800">{row.label}</td>
-                        <td className="py-1.5 text-right tabular-nums text-slate-900">{row.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="surface-card overflow-x-auto">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tosti's per soort</h4>
-                <table className="mt-3 w-full min-w-[18rem] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="py-2 pr-4">Brood</th>
-                      <th className="py-2 pr-4">Vulling</th>
-                      <th className="py-2 text-right">Aantal</th>
-                      <th className="py-2 text-right">%</th>
+            <div className="surface-card">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tosti's per soort</h4>
+              <table className="mt-3 w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="py-2 pr-4">Brood</th>
+                    <th className="py-2 pr-4">Vulling</th>
+                    <th className="py-2 text-right">Aantal</th>
+                    <th className="py-2 text-right">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.tosti_by_kind.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-slate-600">
+                        Geen geleverde tosti's in dit jaar.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {stats.tosti_by_kind.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="py-6 text-center text-slate-600">
-                          Geen geleverde tosti's in dit jaar.
+                  ) : (
+                    stats.tosti_by_kind.map((row, idx) => (
+                      <tr key={`${row.bread}-${row.filling}-${idx}`} className="border-b border-slate-100">
+                        <td className="py-1.5 pr-4 text-slate-800">{breadText(row.bread)}</td>
+                        <td className="py-1.5 pr-4 text-slate-800">{fillingText(row.filling)}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-900">{row.quantity}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-600">
+                          {stats.year_tosti_quantity > 0
+                            ? `${((100 * row.quantity) / stats.year_tosti_quantity).toFixed(1)}%`
+                            : '—'}
                         </td>
                       </tr>
-                    ) : (
-                      stats.tosti_by_kind.map((row, idx) => (
-                        <tr key={`${row.bread}-${row.filling}-${idx}`} className="border-b border-slate-100">
-                          <td className="py-1.5 pr-4 text-slate-800">{breadText(row.bread)}</td>
-                          <td className="py-1.5 pr-4 text-slate-800">{fillingText(row.filling)}</td>
-                          <td className="py-1.5 text-right tabular-nums text-slate-900">{row.quantity}</td>
-                          <td className="py-1.5 text-right tabular-nums text-slate-600">
-                            {stats.year_tosti_quantity > 0
-                              ? `${((100 * row.quantity) / stats.year_tosti_quantity).toFixed(1)}%`
-                              : '—'}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </section>
         </>

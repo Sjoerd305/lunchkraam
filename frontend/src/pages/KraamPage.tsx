@@ -433,8 +433,8 @@ export function KraamPage() {
         onRefreshAll={() => void invalidateKraamAll()}
       />
 
-      <nav className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Kraam-onderdelen">
-        <div className="flex min-w-max gap-1 border-b border-line">
+      <nav aria-label="Kraam-onderdelen">
+        <div className="flex flex-wrap gap-1 border-b border-line pb-2">
           {tabs.map((t) => {
             const active = tab === t.id
             return (
@@ -443,15 +443,15 @@ export function KraamPage() {
                 type="button"
                 onClick={() => setTab(t.id)}
                 aria-current={active ? 'page' : undefined}
-                className={`-mb-px flex min-h-12 items-center gap-2 border-b-[3px] px-4 text-[15px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                  active ? 'border-accent-400 text-brand-900' : 'border-transparent text-ink-muted hover:text-ink'
+                className={`flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[15px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  active ? 'bg-brand-900 text-white' : 'text-ink-muted hover:bg-ground-deep hover:text-ink'
                 }`}
               >
                 {t.label}
                 {t.badge ? (
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${
-                      active ? 'bg-brand-900 text-white' : 'bg-accent-100 text-accent-800'
+                      active ? 'bg-accent-400 text-ink' : 'bg-accent-100 text-accent-800'
                     }`}
                   >
                     {t.badge}

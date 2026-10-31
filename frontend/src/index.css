@@ -96,3 +96,62 @@ body {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-ground-deep text-ink;
   }
 }
+
+/*
+ * Datatabel die altijd in de kolom past (geen min-width, dus nooit opzij scrollen).
+ * Onder md wordt elke rij een blok met label/waarde-regels; het label komt uit data-label
+ * op de cel. Een cel zonder data-label (naam, datum, knoppen) staat links als kopregel.
+ * Bewust buiten @layer: deze regels moeten winnen van utility-classes op de cellen (py-2, pr-3, text-right).
+ */
+.table-stack {
+  width: 100%;
+}
+@media (width < 48rem) {
+  .table-stack thead {
+    display: none;
+  }
+  .table-stack,
+  .table-stack tbody,
+  .table-stack tfoot,
+  .table-stack tr {
+    display: block;
+  }
+  .table-stack tr {
+    border: 0;
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.625rem 0;
+  }
+  .table-stack tr:last-child {
+    border-bottom: 0;
+  }
+  .table-stack tfoot tr {
+    border-top: 2px solid var(--color-line);
+  }
+  .table-stack td {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 1rem;
+    max-width: none;
+    border: 0;
+    padding: 0.3rem 0;
+    text-align: left;
+  }
+  .table-stack td:empty {
+    display: none;
+  }
+  .table-stack td[data-label] {
+    justify-content: space-between;
+    text-align: right;
+  }
+  .table-stack td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+  }
+}

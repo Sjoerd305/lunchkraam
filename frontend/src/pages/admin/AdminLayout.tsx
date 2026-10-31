@@ -23,7 +23,7 @@ export function AdminLayout() {
   return (
     <div className="flex flex-wrap gap-8">
       <nav className="w-full shrink-0 md:w-52" aria-label="Beheer">
-        <div className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-col md:gap-1 md:overflow-visible md:px-0">
+        <div className="flex flex-wrap gap-1 md:flex-col">
           <SideGroup label="Dagelijks" />
           <SideLink to="/admin" end>
             Overzicht

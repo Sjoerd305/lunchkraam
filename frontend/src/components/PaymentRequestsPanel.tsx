@@ -6,6 +6,13 @@ function canRejectPaymentRequest(knipjesRemaining: number): boolean {
   return knipjesRemaining === 10
 }
 
+/** "31-10-2026 14:05" — zonder seconden, zodat de kolom smal blijft. */
+function formatRequestedAt(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 type LayoutMode = 'responsive' | 'cards-only'
 
 type Props = {
@@ -47,9 +54,7 @@ export function PaymentRequestsPanel({
               <li key={r.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-md">
                 <div className="mb-3 flex items-start justify-between gap-2 text-xs text-slate-500">
                   <span className="font-mono">#{r.id}</span>
-                  <span className="shrink-0 text-right">
-                    {new Date(r.created_at).toLocaleString('nl-NL')}
-                  </span>
+                  <span className="shrink-0 text-right">{formatRequestedAt(r.created_at)}</span>
                 </div>
                 <p className="font-medium text-slate-900">{r.user_name}</p>
                 <p className="mt-1 break-all text-sm text-slate-600">{r.user_email}</p>
@@ -100,33 +105,30 @@ export function PaymentRequestsPanel({
           </ul>
 
           {!cardsOnly ? (
-            <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-md md:block">
-              <table className="w-full min-w-[52rem] text-left text-sm">
+            <div className="hidden rounded-2xl border border-slate-200 bg-white shadow-md md:block">
+              <table className="w-full text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3">ID</th>
-                    <th className="px-4 py-3">Lid</th>
-                    <th className="px-4 py-3">E-mail</th>
-                    <th className="px-4 py-3">Aangevraagd</th>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Resterend</th>
-                    <th className="px-4 py-3 text-right">Acties</th>
+                    <th className="px-3 py-3">ID</th>
+                    <th className="px-3 py-3">Lid</th>
+                    <th className="px-3 py-3">Aangevraagd</th>
+                    <th className="px-3 py-3">Type</th>
+                    <th className="px-3 py-3">Knipjes</th>
+                    <th className="px-3 py-3 text-right">Acties</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rows.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80">
-                      <td className="px-4 py-3 font-mono text-slate-600">{r.id}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{r.user_name}</td>
-                      <td className="px-4 py-3 text-slate-600">{r.user_email}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {new Date(r.created_at).toLocaleString('nl-NL')}
+                      <td className="px-3 py-3 font-mono text-slate-600">{r.id}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-900">{r.user_name}</div>
+                        <div className="break-all text-xs text-slate-500">{r.user_email}</div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{cardKindLabel(r.kind)}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {r.knipjes_remaining ?? 10} / 10 knipjes
-                      </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatRequestedAt(r.created_at)}</td>
+                      <td className="px-3 py-3 text-slate-600">{cardKindLabel(r.kind)}</td>
+                      <td className="px-3 py-3 tabular-nums text-slate-600">{r.knipjes_remaining ?? 10} / 10</td>
+                      <td className="px-3 py-3 text-right">
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
                             type="button"

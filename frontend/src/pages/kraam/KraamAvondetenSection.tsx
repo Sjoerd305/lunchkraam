@@ -57,11 +57,10 @@ export function KraamAvondetenSection({
         <p className="text-sm text-brand-900/80">Er zijn nog geen avondetenkaarten uitgegeven.</p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-brand-100 bg-white shadow-sm">
-            <table className="w-full min-w-[36rem] text-left text-sm">
+          <div className="rounded-xl border border-brand-100 bg-white px-3 shadow-sm md:px-0">
+            <table className="table-stack w-full text-left text-sm">
               <thead className="border-b border-brand-100 bg-brand-50/80 text-xs font-semibold uppercase tracking-wide text-brand-900/70">
                 <tr>
-                  <th className="w-10 px-3 py-2.5" />
                   <th className="px-3 py-2.5">Naam</th>
                   <th className="px-3 py-2.5">Kaart</th>
                   <th className="px-3 py-2.5">Knipjes</th>
@@ -75,23 +74,26 @@ export function KraamAvondetenSection({
                   return (
                     <tr key={r.card_id} className={r.registered_for_date ? 'bg-slate-50/80' : ''}>
                       <td className="px-3 py-2.5">
-                        {canPick ? (
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
-                            checked={checked}
-                            onChange={() => onTogglePick(r.card_id)}
-                            aria-label={`Mee-eten ${r.owner_name}`}
-                          />
-                        ) : null}
+                        <label className={`flex items-start gap-3 ${canPick ? 'cursor-pointer' : ''}`}>
+                          {canPick ? (
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
+                              checked={checked}
+                              onChange={() => onTogglePick(r.card_id)}
+                            />
+                          ) : (
+                            <span aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                          )}
+                          <span className="min-w-0">
+                            <span className="block font-medium text-slate-900">{r.owner_name}</span>
+                            <span className="block break-all text-xs text-slate-500">{r.owner_email}</span>
+                          </span>
+                        </label>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="font-medium text-slate-900">{r.owner_name}</div>
-                        <div className="text-xs text-slate-500">{r.owner_email}</div>
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-600">#{r.card_id}</td>
-                      <td className="px-3 py-2.5 text-slate-700">{r.knipjes_remaining} / 10</td>
-                      <td className="px-3 py-2.5 text-slate-600">
+                      <td data-label="Kaart" className="px-3 py-2.5 font-mono text-slate-600">#{r.card_id}</td>
+                      <td data-label="Knipjes" className="px-3 py-2.5 text-slate-700">{r.knipjes_remaining} / 10</td>
+                      <td data-label="Status" className="px-3 py-2.5 text-slate-600">
                         {r.registered_for_date ? (
                           <span className="text-brand-800">Geregistreerd</span>
                         ) : !r.active ? (
