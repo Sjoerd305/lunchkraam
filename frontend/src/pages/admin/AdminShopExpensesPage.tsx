@@ -474,7 +474,7 @@ export function AdminShopExpensesPage() {
           <strong className="font-semibold text-slate-800">contante uitgave</strong>, een{' '}
           <strong className="font-semibold text-slate-800">digitale uitgave</strong> (bijv. pin; met bonfoto), of{' '}
           <strong className="font-semibold text-slate-800">los contant bij de kas</strong> boeken (verhoogt het saldo
-          in het jaaroverzicht). Omzet = geaccordeerde kaartverkopen dit jaar; de kolom uitgaven op Overzichten is de
+          in het jaaroverzicht). Omzet = geaccordeerde kaartverkopen dit jaar; de kolom uitgaven op Overzicht is de
           som van deze boekingen (uitgaven min contant bij).
           {isOperatorOnly ? ' Verkochte tosti’s op basis van levermoment.' : ''}
         </p>

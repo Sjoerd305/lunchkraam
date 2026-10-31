@@ -45,7 +45,7 @@ func RequireUserAPI(st *store.Store) func(http.Handler) http.Handler {
 				return
 			}
 			u, err := st.UserByID(r.Context(), id)
-			if err != nil {
+			if err != nil || u.IsDisabled() {
 				auth.ClearSessionUser(sess)
 				_ = sess.Save(r, w)
 				writeAPIUnauthorized(w, "Sessie ongeldig.")

@@ -104,8 +104,8 @@ export function revolutImportResultDetail(
             avondetenkaartprijs (€{opts.avoEur}) krijgen dat doel automatisch; andere bedragen krijgen hetzelfde doel
             als bij uitgaven: met <strong>Raad doel op tijd</strong> volgens het tijdvenster, anders het gekozen
             standaard-doel. Aanpassen kan in het voorbeeld onder <em>Waarvoor ink.</em> De omzet telt mee op{' '}
-            <Link to="/admin/expenses-overview" className="font-medium text-brand-700 underline hover:text-brand-900">
-              Overzichten
+            <Link to="/admin" className="font-medium text-brand-700 underline hover:text-brand-900">
+              Overzicht
             </Link>
             , niet als regels in de boodschappenlijst hieronder.
           </p>

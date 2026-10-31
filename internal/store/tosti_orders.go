@@ -182,6 +182,8 @@ RETURNING id, user_id, card_id, bread::text, filling::text, status::text, create
 	return &o, nil
 }
 
+// findPhysicalTostiCardForUser picks the physical tostikaart whose estimate should be decremented:
+// the oldest card that still has an estimate, otherwise the newest card.
 func findPhysicalTostiCardForUser(ctx context.Context, tx pgx.Tx, userID int64) (int64, error) {
 	var cardID int64
 	err := tx.QueryRow(ctx, `
@@ -190,7 +192,9 @@ FROM cards
 WHERE user_id = $1
   AND kind = $2::card_kind
   AND source = 'physical'::card_source
-ORDER BY created_at DESC
+ORDER BY (knipjes_remaining > 0) DESC,
+         CASE WHEN knipjes_remaining > 0 THEN created_at END ASC,
+         created_at DESC
 LIMIT 1
 FOR UPDATE`,
 		userID, CardKindTosti,

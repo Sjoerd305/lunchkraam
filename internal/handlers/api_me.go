@@ -8,6 +8,7 @@ import (
 	"lunchkraam/internal/auth"
 	"lunchkraam/internal/httpx"
 	"lunchkraam/internal/middleware"
+	"lunchkraam/internal/store"
 )
 
 func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
@@ -30,8 +31,8 @@ func (d *Deps) APIMe(w http.ResponseWriter, r *http.Request) {
 		"pending_card_requests":        pending,
 		"tikkie_warnings":              warnings,
 		"csrf_token":                   "",
-		"payment_amount_eur":           d.Config.PaymentAmountEUR,
-		"payment_amount_avondeten_eur": d.Config.AvondetenPaymentAmountEUR,
+		"payment_amount_eur":           d.effectivePaymentAmountStr(r.Context(), store.CardKindTosti),
+		"payment_amount_avondeten_eur": d.effectivePaymentAmountStr(r.Context(), store.CardKindAvondeten),
 	})
 }
 

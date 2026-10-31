@@ -36,6 +36,10 @@ func (d *Deps) APILocalLogin(w http.ResponseWriter, r *http.Request) {
 		httpx.JSONError(w, http.StatusUnauthorized, "invalid_credentials", "Onbekende gebruikersnaam of verkeerd wachtwoord.")
 		return
 	}
+	if errors.Is(err, store.ErrUserDisabled) {
+		httpx.JSONError(w, http.StatusForbidden, "account_disabled", "Dit account is gedeactiveerd. Neem contact op met een beheerder.")
+		return
+	}
 	if err != nil {
 		httpx.JSONError(w, http.StatusInternalServerError, "server_error", "Inloggen mislukt.")
 		return
@@ -58,7 +62,12 @@ type adminUserListJSON struct {
 	IsOperator         bool    `json:"is_operator"`
 	IsMatroosJeugd     bool    `json:"is_matroos_jeugd"`
 	MustChangePassword bool    `json:"must_change_password"`
+	IsActive           bool    `json:"is_active"`
+	DisabledAt         *string `json:"disabled_at,omitempty"`
 	CreatedAt          string  `json:"created_at"`
+	CardsTotal         int64   `json:"cards_total"`
+	KnipjesTotal       int64   `json:"knipjes_total"`
+	PendingRequests    int64   `json:"pending_requests"`
 }
 
 func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +82,15 @@ func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
 			ID: row.ID, Name: row.Name, Email: row.Email,
 			IsAdmin: row.IsAdmin, IsOperator: row.IsOperator, IsMatroosJeugd: row.IsMatroosJeugd,
 			MustChangePassword: row.MustChangePassword,
+			IsActive:           row.DisabledAt == nil,
 			CreatedAt:          row.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
+			CardsTotal:         row.CardsTotal,
+			KnipjesTotal:       row.KnipjesTotal,
+			PendingRequests:    row.PendingRequests,
+		}
+		if row.DisabledAt != nil {
+			t := row.DisabledAt.UTC().Format(httpx.JSONTimeLayout)
+			j.DisabledAt = &t
 		}
 		if row.LoginUsername != nil && *row.LoginUsername != "" {
 			j.AuthKind = "local"
@@ -197,6 +214,82 @@ func (d *Deps) APILocalChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// APIAdminPatchUserRoles sets admin/operator rights for any account (Google or local).
+func (d *Deps) APIAdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
+	actor := auth.MustUserFromContext(r.Context())
+	uid, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige gebruiker.")
+		return
+	}
+	var body struct {
+		IsAdmin    bool `json:"is_admin"`
+		IsOperator bool `json:"is_operator"`
+	}
+	if !httpx.ReadJSON(w, r, 1<<12, &body) {
+		return
+	}
+	if err := d.Store.AdminSetUserRoles(r.Context(), uid, actor.ID, body.IsAdmin, body.IsOperator); err != nil {
+		if httpx.WriteAdminUserChangeError(w, err) {
+			return
+		}
+		httpx.RespondInternalStoreError(w, r, "AdminSetUserRoles", err)
+		return
+	}
+	d.notifyUserProfileMutation(uid)
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// APIAdminPatchUserActive (de)activates an account.
+func (d *Deps) APIAdminPatchUserActive(w http.ResponseWriter, r *http.Request) {
+	actor := auth.MustUserFromContext(r.Context())
+	uid, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige gebruiker.")
+		return
+	}
+	var body struct {
+		IsActive bool `json:"is_active"`
+	}
+	if !httpx.ReadJSON(w, r, 1<<12, &body) {
+		return
+	}
+	if err := d.Store.AdminSetUserDisabled(r.Context(), uid, actor.ID, !body.IsActive); err != nil {
+		if httpx.WriteAdminUserChangeError(w, err) {
+			return
+		}
+		httpx.RespondInternalStoreError(w, r, "AdminSetUserDisabled", err)
+		return
+	}
+	d.notifyUserProfileMutation(uid)
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// APIAdminUserCards lists the cards of one user for the accounts screen.
+func (d *Deps) APIAdminUserCards(w http.ResponseWriter, r *http.Request) {
+	uid, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		httpx.JSONError(w, http.StatusBadRequest, "invalid_id", "Ongeldige gebruiker.")
+		return
+	}
+	cards, err := d.Store.CardsByUser(r.Context(), uid)
+	if err != nil {
+		httpx.RespondInternalStoreError(w, r, "CardsByUser", err)
+		return
+	}
+	out := make([]cardJSON, 0, len(cards))
+	for _, c := range cards {
+		out = append(out, cardJSON{
+			ID:               c.ID,
+			Kind:             c.Kind,
+			Source:           c.Source,
+			KnipjesRemaining: c.KnipjesRemaining,
+			CreatedAt:        c.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
+		})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"cards": out})
 }
 
 func (d *Deps) APIAdminPatchUserMatroosJeugd(w http.ResponseWriter, r *http.Request) {

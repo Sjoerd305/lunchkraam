@@ -110,29 +110,48 @@ WHERE id = $1 AND status = 'pending'`,
 	}
 
 	var knip int
+	var source string
 	err = tx.QueryRow(ctx,
-		`SELECT knipjes_remaining FROM cards WHERE id = $1 AND user_id = $2 AND kind = $3::card_kind FOR UPDATE`,
+		`SELECT knipjes_remaining, source::text FROM cards WHERE id = $1 AND user_id = $2 AND kind = $3::card_kind FOR UPDATE`,
 		*cardID, userID, CardKindTosti,
-	).Scan(&knip)
+	).Scan(&knip, &source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
 	}
-	if knip < qty {
+
+	// A physical card holds an estimate: never block a real delivery on it, just clamp at 0.
+	// An online card holds the real balance: insufficient knipjes block delivery.
+	newBal := knip - qty
+	note := ""
+	if source == "physical" {
+		if newBal < 0 {
+			newBal = 0
+			note = "Schatting stond lager dan het aantal; op 0 gezet"
+		}
+	} else if knip < qty {
 		return ErrNoKnipjes
 	}
 
-	tag, err := tx.Exec(ctx, `
-UPDATE cards SET knipjes_remaining = knipjes_remaining - $3
-WHERE id = $1 AND user_id = $2 AND kind = $4::card_kind AND knipjes_remaining >= $3`,
-		*cardID, userID, qty, CardKindTosti)
+	tag, err := tx.Exec(ctx, `UPDATE cards SET knipjes_remaining = $2 WHERE id = $1`, *cardID, newBal)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNoKnipjes
+		return ErrNotFound
+	}
+	if _, err := insertCardTransaction(ctx, tx, cardTxInput{
+		CardID:       *cardID,
+		Delta:        newBal - knip,
+		BalanceAfter: newBal,
+		Reason:       TxReasonTostiDelivered,
+		ActorUserID:  int64Ptr(deliveredByUserID),
+		TostiOrderID: int64Ptr(orderID),
+		Note:         note,
+	}); err != nil {
+		return err
 	}
 
 	tag, err = tx.Exec(ctx, `

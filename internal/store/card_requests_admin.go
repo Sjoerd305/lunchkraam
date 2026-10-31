@@ -89,6 +89,12 @@ WHERE id = $1 AND status = 'pending'`,
 	if err != nil {
 		return err
 	}
+	if _, err := insertCardTransaction(ctx, tx, cardTxInput{
+		CardID: cardID, Delta: knipjesOnCard, BalanceAfter: knipjesOnCard, Reason: TxReasonIssued,
+		ActorUserID: int64Ptr(adminUserID), Note: "Uitgegeven bij accorderen",
+	}); err != nil {
+		return err
+	}
 
 	tag, err := tx.Exec(ctx, `
 UPDATE card_requests

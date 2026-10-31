@@ -29,7 +29,10 @@ export function KraamAvondetenSection({
     <section className="space-y-4 rounded-2xl border border-brand-200/90 bg-brand-50/50 p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-8">
-          <h2 className="text-lg font-semibold text-brand-950">Avondeten</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-brand-950">Avondeten afboeken</h2>
+            <p className="text-sm text-brand-900/85">Vink aan wie mee-eet; per persoon gaat 1 knipje van de avondetenkaart.</p>
+          </div>
           <label className="flex max-w-[11rem] flex-col gap-1 text-sm">
             <span className="font-medium text-brand-950">Datum</span>
             <input
@@ -51,7 +54,7 @@ export function KraamAvondetenSection({
       {avondetenLoading ? (
         <p className="text-sm text-brand-900/80">Laden…</p>
       ) : avondetenRows.length === 0 ? (
-        <p className="text-sm text-brand-900/80">Geen avondetenkaarten.</p>
+        <p className="text-sm text-brand-900/80">Er zijn nog geen avondetenkaarten uitgegeven.</p>
       ) : (
         <>
           <div className="overflow-x-auto rounded-xl border border-brand-100 bg-white shadow-sm">
@@ -116,6 +119,9 @@ export function KraamAvondetenSection({
               {avondetenSubmitting ? 'Bezig…' : 'Afboeken'}
             </button>
           </div>
+          <p className="text-xs text-brand-900/80">
+            Per ongeluk afgeboekt? Zoek de kaart onder <strong>Knipje</strong> en draai de boeking terug in de historie.
+          </p>
         </>
       )}
     </section>

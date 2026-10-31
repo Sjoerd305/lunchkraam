@@ -26,7 +26,7 @@ services:
     # Server runs as APP_UID (see docker-entrypoint.sh); entrypoint briefly runs as root to chmod the receipts bind mount.
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8084:8080"
     env_file:
       - .env
     environment:

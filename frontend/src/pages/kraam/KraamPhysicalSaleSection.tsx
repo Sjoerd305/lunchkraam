@@ -28,8 +28,11 @@ export function KraamPhysicalSaleSection({
   return (
     <section className="space-y-4 rounded-2xl border border-indigo-200/90 bg-indigo-50/40 p-5 shadow-sm sm:p-6">
       <div>
-        <h2 className="text-lg font-semibold text-indigo-950">Fysieke kaartverkoop registreren</h2>
-        <p className="text-sm text-indigo-900/85">Registreer directe verkoop (operator/admin).</p>
+        <h2 className="text-lg font-semibold text-indigo-950">Fysieke kaart verkopen</h2>
+        <p className="text-sm text-indigo-900/85">
+          Verkoop je aan de kraam een papieren kaart, registreer die hier. De verkoop telt direct mee in de omzet en het
+          lid ziet de kaart in de app met een schatting van 10 knipjes. Online kaarten kopen leden zelf via Kaart kopen.
+        </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         <label className="flex flex-col gap-1 text-sm">
@@ -55,11 +58,11 @@ export function KraamPhysicalSaleSection({
             className="input-control min-h-11 rounded-xl"
           >
             <option value="tosti">Tostikaart</option>
-            <option value="avondeten">Avondetenkaart</option>
+            <option value="avondeten">Avondetenkaart (alleen matroos jeugd)</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-indigo-950">Betaalmiddel</span>
+          <span className="font-medium text-indigo-950">Betaald via</span>
           <select
             value={salePaymentMethod}
             onChange={(e) => onChangePaymentMethod(e.target.value as PaymentMethod)}
@@ -73,11 +76,11 @@ export function KraamPhysicalSaleSection({
       <div className="flex justify-end">
         <button
           type="button"
-          disabled={saleSubmitting || memberOptions.length === 0}
+          disabled={saleSubmitting || memberOptions.length === 0 || saleUserID <= 0}
           onClick={() => void onSubmit()}
           className="min-h-11 rounded-xl bg-indigo-700 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-800 disabled:opacity-50"
         >
-          {saleSubmitting ? 'Bezig…' : 'Verkoop opslaan'}
+          {saleSubmitting ? 'Bezig…' : 'Verkoop registreren'}
         </button>
       </div>
     </section>

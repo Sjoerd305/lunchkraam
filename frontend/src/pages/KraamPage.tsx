@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
 import { useAlertDialog } from '../components/useAlertDialog'
@@ -8,7 +8,7 @@ import { useQueryErrorAlert } from '../hooks/useQueryErrorAlert'
 import { queryKeys } from '../queryKeys'
 import { useTostiRealtime } from '../useTostiRealtime'
 import { breadLabel, fillingLabel } from '../utils/tostiLabels'
-import { localISODate, isPhysicalTostiOrder } from './kraam/kraamFormat'
+import { cardKindLabel, formatAmsterdamDateLong, isPhysicalTostiOrder, localISODate } from './kraam/kraamFormat'
 import { KraamAvondetenSection } from './kraam/KraamAvondetenSection'
 import { KraamCardSearchSection } from './kraam/KraamCardSearchSection'
 import { KraamPaymentQueueSection } from './kraam/KraamPaymentQueueSection'
@@ -16,13 +16,25 @@ import { KraamPhysicalSaleSection } from './kraam/KraamPhysicalSaleSection'
 import { KraamSoldTodayHeader } from './kraam/KraamSoldTodayHeader'
 import { KraamTostiQueueSection } from './kraam/KraamTostiQueueSection'
 
-const operatorEnabled = (user: api.User | null) =>
-  Boolean(user && (user.is_admin || user.is_operator))
+/* Tabs, in volgorde van gebruik aan de kraam. `?tab=` in de URL maakt diepe links mogelijk (bijv. vanuit Beheer). */
+type Tab = 'bestellingen' | 'knipje' | 'avondeten' | 'verkoop' | 'betalingen'
+const TABS: readonly Tab[] = ['bestellingen', 'knipje', 'avondeten', 'verkoop', 'betalingen']
+
+function isTab(v: string | null): v is Tab {
+  return v !== null && (TABS as readonly string[]).includes(v)
+}
+
+const operatorEnabled = (user: api.User | null) => Boolean(user && (user.is_admin || user.is_operator))
 
 export function KraamPage() {
   const { user, csrf, refresh } = useAuth()
   const { alert, confirm } = useAlertDialog()
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const tab: Tab = isTab(tabParam) ? tabParam : 'bestellingen'
+  const setTab = (t: Tab) => setSearchParams(t === 'bestellingen' ? {} : { tab: t }, { replace: true })
+
   const [q, setQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState(q)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -88,13 +100,6 @@ export function KraamPage() {
   const soldToday = soldTodayQuery.isError ? null : (soldTodayQuery.data ?? null)
   const avondetenRows = avondetenQuery.data?.cards ?? []
 
-  const loading = cardsQuery.isFetching
-  const loadingOrders = ordersQuery.isFetching
-  const paymentLoading = paymentsQuery.isFetching
-  const paymentLoadFailed = paymentsQuery.isError
-  const avondetenLoading = avondetenQuery.isFetching
-  const soldTodayLoading = soldTodayQuery.isFetching
-
   useEffect(() => {
     if (avondetenQuery.isSuccess) setAvondetenPicked([])
   }, [avondetenQuery.dataUpdatedAt, avondetenMealDate, avondetenQuery.isSuccess])
@@ -106,6 +111,15 @@ export function KraamPage() {
     ])
   }, [queryClient])
 
+  const invalidateCardsAndBalances = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate) }),
+      queryClient.invalidateQueries({ queryKey: ['member', 'card-transactions'] }),
+      refresh(),
+    ])
+  }, [queryClient, avondetenMealDate, refresh])
+
   const onKraamRealtime = useCallback(
     (reason: string) => {
       if (reason === 'open') {
@@ -116,9 +130,8 @@ export function KraamPage() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders })
         void queryClient.invalidateQueries({ queryKey: queryKeys.operator.soldToday })
         void queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] })
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
-        })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate) })
+        void queryClient.invalidateQueries({ queryKey: ['member', 'card-transactions'] })
         return
       }
       if (reason === 'payment_requests') {
@@ -142,14 +155,8 @@ export function KraamPage() {
   }, [queryClient])
 
   const refreshAvondeten = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
-    })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate) })
   }, [queryClient, avondetenMealDate])
-
-  const refreshCardSearch = useCallback(async () => {
-    await invalidateKraamAll()
-  }, [invalidateKraamAll])
 
   if (!user) {
     return <Navigate to="/login" replace />
@@ -174,8 +181,8 @@ export function KraamPage() {
     }
     const ok = await confirm({
       title: 'Avondeten registreren?',
-      message: `Voor ${avondetenMealDate}: ${avondetenPicked.length} knipje(s) afboeken op de geselecteerde kaarten?`,
-      confirmLabel: 'Ja, opslaan',
+      message: `Voor ${formatAmsterdamDateLong(avondetenMealDate)}: ${avondetenPicked.length} knipje(s) afboeken op de geselecteerde kaarten?`,
+      confirmLabel: 'Ja, afboeken',
       cancelLabel: 'Terug',
       tone: 'brand',
     })
@@ -183,11 +190,7 @@ export function KraamPage() {
     setAvondetenSubmitting(true)
     try {
       const n = await api.postAvondetenRegister(csrf, avondetenMealDate, avondetenPicked)
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate),
-      })
-      await queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] })
-      await refresh()
+      await invalidateCardsAndBalances()
       await alert({
         title: 'Opgeslagen',
         message: n === 1 ? '1 knipje is afgeboekt.' : `${n} knipjes zijn afgeboekt.`,
@@ -202,10 +205,7 @@ export function KraamPage() {
   }
 
   const memberOptions = members
-    .map((m) => ({
-      user_id: m.id,
-      label: `${m.name} (${m.email})`,
-    }))
+    .map((m) => ({ user_id: m.id, label: `${m.name} (${m.email})` }))
     .sort((a, b) => a.label.localeCompare(b.label, 'nl-NL'))
 
   async function onRegisterPhysicalSale() {
@@ -215,10 +215,10 @@ export function KraamPage() {
     }
     const selectedMember = memberOptions.find((m) => m.user_id === saleUserID)
     const kindLabel = saleKind === 'avondeten' ? 'avondetenkaart' : 'tostikaart'
-    const paymentLabel = salePaymentMethod === 'contant' ? 'contant' : 'tikkie'
+    const paymentLabel = salePaymentMethod === 'contant' ? 'contant' : 'Tikkie'
     const ok = await confirm({
       title: 'Fysieke kaartverkoop registreren?',
-      message: `${selectedMember?.label ?? `Gebruiker #${saleUserID}`}: ${kindLabel} betaald via ${paymentLabel}.`,
+      message: `${selectedMember?.label ?? `Gebruiker #${saleUserID}`}: ${kindLabel}, betaald via ${paymentLabel}. De verkoop telt direct als geaccordeerd.`,
       confirmLabel: 'Ja, registreren',
       cancelLabel: 'Terug',
       tone: 'brand',
@@ -231,11 +231,12 @@ export function KraamPage() {
         kind: saleKind,
         payment_method: salePaymentMethod,
       })
+      setSaleUserID(0)
       await invalidateKraamAll()
       await refresh()
       await alert({
         title: 'Verkoop geregistreerd',
-        message: `Kaartverkoop opgeslagen (aanvraag #${requestID}).`,
+        message: `Kaartverkoop opgeslagen (verkoop #${requestID}).`,
         variant: 'success',
       })
     } catch (e) {
@@ -247,13 +248,9 @@ export function KraamPage() {
   }
 
   async function onPaymentFulfill(id: number, knipjesRemaining: number) {
-    const msg =
-      knipjesRemaining === 10
-        ? 'Accorderen? Op de kaart staan nog 10 knipjes.'
-        : `Accorderen? Op de kaart staan nog ${knipjesRemaining} knipje(s).`
     const ok = await confirm({
       title: 'Betaling accorderen?',
-      message: msg,
+      message: `Accorderen? Op de kaart staan nog ${knipjesRemaining} knipje(s).`,
       confirmLabel: 'Accorderen',
       cancelLabel: 'Terug',
       tone: 'brand',
@@ -264,11 +261,7 @@ export function KraamPage() {
       await api.fulfillRequest(csrf, id)
       await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
       await refresh()
-      await alert({
-        title: 'Geaccordeerd',
-        message: 'De aanvraag is uit de wachtrij gehaald.',
-        variant: 'success',
-      })
+      await alert({ title: 'Geaccordeerd', message: 'De aanvraag is uit de wachtrij gehaald.', variant: 'success' })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Toekennen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -303,9 +296,9 @@ export function KraamPage() {
   async function onUseKnipje(c: api.OperatorCardRow) {
     if (c.knipjes_remaining <= 0) return
     const ok = await confirm({
-      title: 'Knipje afnemen?',
-      message: `1 knipje afboeken voor ${c.owner_name} (kaart #${c.id})?`,
-      confirmLabel: 'Ja, knipje gebruiken',
+      title: 'Knipje afboeken?',
+      message: `1 knipje afboeken voor ${c.owner_name} (kaart #${c.id}, ${cardKindLabel(c.kind).toLowerCase()})?`,
+      confirmLabel: 'Ja, afboeken',
       cancelLabel: 'Annuleren',
       tone: 'brand',
     })
@@ -313,18 +306,28 @@ export function KraamPage() {
     setBusyId(c.id)
     try {
       await api.useKnipje(csrf, c.id)
-      await queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] })
-      await refresh()
+      await invalidateCardsAndBalances()
       await alert({
-        title: 'Geregistreerd',
-        message: 'Het knipje is afgetrokken.',
+        title: 'Afgeboekt',
+        message: 'Het knipje staat in de historie en kan daar worden teruggedraaid.',
         variant: 'success',
       })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Mislukt.'
-      await alert({ title: 'Kon geen knipje gebruiken', message: msg, variant: 'error' })
+      await alert({ title: 'Kon geen knipje afboeken', message: msg, variant: 'error' })
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function onSetEstimate(c: api.OperatorCardRow, value: number) {
+    try {
+      await api.setCardEstimate(csrf, c.id, value)
+      await invalidateCardsAndBalances()
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Opslaan mislukt.'
+      await alert({ title: 'Schatting niet opgeslagen', message: msg, variant: 'error' })
+      throw e
     }
   }
 
@@ -332,11 +335,11 @@ export function KraamPage() {
     const qty = o.quantity
     const qtyPrefix = qty > 1 ? `${qty}× ` : ''
     const physical = isPhysicalTostiOrder(o)
-    const knipjeTxt = qty === 1 ? '1 knipje wordt' : `${qty} knipjes worden`
+    const knipjes = qty === 1 ? '1 knipje' : `${qty} knipjes`
     const breadShort = breadLabel(o.bread, 'short')
     const confirmMessage = physical
-      ? `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)} — fysieke kaart. Knip ${qty === 1 ? '1 knipje' : `${qty} knipjes`} op de kaart.`
-      : `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)} — ${knipjeTxt} afgetrokken van kaart #${o.card_id}.`
+      ? `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)}. Fysieke kaart: knip ${knipjes} op de kaart.`
+      : `${o.customer_name}: ${qtyPrefix}${breadShort} brood, ${fillingLabel(o.filling)}. ${knipjes} wordt afgeboekt van kaart #${o.card_id}.`
     const ok = await confirm({
       title: 'Als geleverd markeren?',
       message: confirmMessage,
@@ -350,17 +353,9 @@ export function KraamPage() {
       await api.deliverOperatorTostiOrder(csrf, o.id)
       await invalidateKraamAll()
       await refresh()
-      await alert({
-        title: 'Geleverd',
-        message: physical
-          ? qty === 1
-            ? 'Knip 1 knipje op de fysieke kaart.'
-            : `Knip ${qty} knipjes op de fysieke kaart.`
-          : qty === 1
-            ? 'Het knipje is afgetrokken.'
-            : `De ${qty} knipjes zijn afgetrokken.`,
-        variant: 'success',
-      })
+      if (physical) {
+        await alert({ title: 'Geleverd', message: `Knip ${knipjes} op de fysieke kaart.`, variant: 'success' })
+      }
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Mislukt.'
       await alert({ title: 'Leveren mislukt', message: msg, variant: 'error' })
@@ -382,7 +377,6 @@ export function KraamPage() {
     try {
       await api.cancelOperatorTostiOrder(csrf, o.id)
       await queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders })
-      await alert({ title: 'Geannuleerd', message: 'De bestelling is geannuleerd.', variant: 'success' })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Mislukt.'
       await alert({ title: 'Annuleren mislukt', message: msg, variant: 'error' })
@@ -394,64 +388,117 @@ export function KraamPage() {
   const avondetenSelectable = avondetenRows.filter((r) => !r.registered_for_date && r.knipjes_remaining > 0)
   const avondetenPickableIds = new Set(avondetenSelectable.map((r) => r.card_id))
 
+  const tabs: { id: Tab; label: string; badge?: number }[] = [
+    { id: 'bestellingen', label: 'Bestellingen', badge: orders.length },
+    { id: 'knipje', label: 'Knipje' },
+    { id: 'avondeten', label: 'Avondeten' },
+    { id: 'verkoop', label: 'Verkoop' },
+    { id: 'betalingen', label: 'Betalingen', badge: paymentRows.length },
+  ]
+
   return (
-    <div className="space-y-10">
-      <KraamSoldTodayHeader soldTodayLoading={soldTodayLoading} soldToday={soldToday} />
-
-      <KraamTostiQueueSection
-        loadingOrders={loadingOrders}
-        orders={orders}
-        busyOrder={busyOrder}
-        onRefreshQueue={() => void refreshQueue()}
-        onDeliverOrder={onDeliverOrder}
-        onCancelOrder={onCancelOrder}
+    <div className="space-y-6">
+      <KraamSoldTodayHeader
+        soldTodayLoading={soldTodayQuery.isFetching}
+        soldToday={soldToday}
+        onRefreshAll={() => void invalidateKraamAll()}
       />
 
-      <KraamPaymentQueueSection
-        user={user}
-        paymentLoading={paymentLoading}
-        paymentLoadFailed={paymentLoadFailed}
-        paymentRows={paymentRows}
-        paymentBusyId={paymentBusyId}
-        onRefresh={() => void refreshPayments()}
-        onFulfill={onPaymentFulfill}
-        onReject={onPaymentReject}
-      />
+      <nav className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Kraam-onderdelen">
+        <div className="flex min-w-max gap-2 border-b border-slate-200 pb-2">
+          {tabs.map((t) => {
+            const active = tab === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                aria-current={active ? 'page' : undefined}
+                className={`flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  active ? 'bg-brand-700 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {t.label}
+                {t.badge ? (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${
+                      active ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-950'
+                    }`}
+                  >
+                    {t.badge}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
 
-      <KraamPhysicalSaleSection
-        memberOptions={memberOptions}
-        saleUserID={saleUserID}
-        saleKind={saleKind}
-        salePaymentMethod={salePaymentMethod}
-        saleSubmitting={saleSubmitting}
-        onChangeUser={setSaleUserID}
-        onChangeKind={setSaleKind}
-        onChangePaymentMethod={setSalePaymentMethod}
-        onSubmit={onRegisterPhysicalSale}
-      />
+      {tab === 'bestellingen' ? (
+        <KraamTostiQueueSection
+          loadingOrders={ordersQuery.isFetching}
+          orders={orders}
+          busyOrder={busyOrder}
+          onRefreshQueue={() => void refreshQueue()}
+          onDeliverOrder={onDeliverOrder}
+          onCancelOrder={onCancelOrder}
+        />
+      ) : null}
 
-      <KraamCardSearchSection
-        q={q}
-        onQueryChange={setQ}
-        loading={loading}
-        rows={rows}
-        busyId={busyId}
-        onRefreshAll={() => void refreshCardSearch()}
-        onUseKnipje={onUseKnipje}
-      />
+      {tab === 'knipje' ? (
+        <KraamCardSearchSection
+          q={q}
+          onQueryChange={setQ}
+          loading={cardsQuery.isFetching}
+          rows={rows}
+          busyId={busyId}
+          onUseKnipje={onUseKnipje}
+          onSetEstimate={onSetEstimate}
+          onHistoryChanged={invalidateCardsAndBalances}
+        />
+      ) : null}
 
-      <KraamAvondetenSection
-        avondetenMealDate={avondetenMealDate}
-        onMealDateChange={setAvondetenMealDate}
-        avondetenLoading={avondetenLoading}
-        avondetenRows={avondetenRows}
-        avondetenPicked={avondetenPicked}
-        avondetenPickableIds={avondetenPickableIds}
-        avondetenSubmitting={avondetenSubmitting}
-        onTogglePick={toggleAvondetenPick}
-        onRefresh={() => void refreshAvondeten()}
-        onSubmit={onSubmitAvondeten}
-      />
+      {tab === 'avondeten' ? (
+        <KraamAvondetenSection
+          avondetenMealDate={avondetenMealDate}
+          onMealDateChange={setAvondetenMealDate}
+          avondetenLoading={avondetenQuery.isFetching}
+          avondetenRows={avondetenRows}
+          avondetenPicked={avondetenPicked}
+          avondetenPickableIds={avondetenPickableIds}
+          avondetenSubmitting={avondetenSubmitting}
+          onTogglePick={toggleAvondetenPick}
+          onRefresh={() => void refreshAvondeten()}
+          onSubmit={onSubmitAvondeten}
+        />
+      ) : null}
+
+      {tab === 'verkoop' ? (
+        <KraamPhysicalSaleSection
+          memberOptions={memberOptions}
+          saleUserID={saleUserID}
+          saleKind={saleKind}
+          salePaymentMethod={salePaymentMethod}
+          saleSubmitting={saleSubmitting}
+          onChangeUser={setSaleUserID}
+          onChangeKind={setSaleKind}
+          onChangePaymentMethod={setSalePaymentMethod}
+          onSubmit={onRegisterPhysicalSale}
+        />
+      ) : null}
+
+      {tab === 'betalingen' ? (
+        <KraamPaymentQueueSection
+          user={user}
+          paymentLoading={paymentsQuery.isFetching}
+          paymentLoadFailed={paymentsQuery.isError}
+          paymentRows={paymentRows}
+          paymentBusyId={paymentBusyId}
+          onRefresh={() => void refreshPayments()}
+          onFulfill={onPaymentFulfill}
+          onReject={onPaymentReject}
+        />
+      ) : null}
     </div>
   )
 }

@@ -48,14 +48,11 @@ func (d *Deps) APIAdminFulfill(w http.ResponseWriter, r *http.Request) {
 		httpx.RespondInternalStoreError(w, r, "CardRequestKind", err)
 		return
 	}
-	salePrice := parsePaymentEURAmount(d.Config.PaymentAmountEUR)
-	if kind == store.CardKindAvondeten {
-		if !u.IsAdmin {
-			httpx.JSONError(w, http.StatusForbidden, "admin_required_for_avondeten", "Alleen beheerders mogen avondetenkaarten accorderen.")
-			return
-		}
-		salePrice = parsePaymentEURAmount(d.Config.AvondetenPaymentAmountEUR)
+	if kind == store.CardKindAvondeten && !u.IsAdmin {
+		httpx.JSONError(w, http.StatusForbidden, "admin_required_for_avondeten", "Alleen beheerders mogen avondetenkaarten accorderen.")
+		return
 	}
+	salePrice := d.effectivePaymentAmount(r.Context(), kind)
 	err = d.Store.FulfillCardRequest(r.Context(), reqID, u.ID, salePrice)
 	if err != nil {
 		if httpx.WriteAdminFulfillCardRequestError(w, err) {

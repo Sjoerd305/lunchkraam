@@ -130,7 +130,7 @@ export function AdminShopExpensesRevolutPanel(props: AdminShopExpensesRevolutPan
           Optioneel worden <strong>tegoeden</strong> die exact €15 of €10 zijn (instelbaar) als omzet in de grafieken
           meegeteld: €15 → lunchkraam, €10 → avondeten. Tel die bedragen niet dubbel met al in de app geaccordeerde
           kaartverkopen. <strong>Inkomsten uit deze import</strong> verschijnen niet in de tabel Boekingen op deze pagina;
-          die staan bij <Link to="/admin/expenses-overview">Overzichten</Link> in de omzet.
+          die staan bij <Link to="/admin">Overzicht</Link> in de omzet.
         </p>
         <form
           id="revolut-shop-import-form"

@@ -5,6 +5,7 @@ import (
 
 	"lunchkraam/internal/httpx"
 	"lunchkraam/internal/money"
+	"lunchkraam/internal/store"
 )
 
 func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +45,7 @@ func (d *Deps) APIAdminSalesStats(w http.ResponseWriter, r *http.Request) {
 	resp := adminSalesStatsResponse{
 		Year:                        year,
 		Timezone:                    "Europe/Amsterdam",
-		PaymentAmountEUR:            d.Config.PaymentAmountEUR,
+		PaymentAmountEUR:            d.effectivePaymentAmountStr(r.Context(), store.CardKindTosti),
 		Monthly:                     rollup.Monthly,
 		MonthlyBreakdown:            rollup.MonthlyBreakdown,
 		YearFulfilledCount:          rollup.YearCount,

@@ -37,18 +37,18 @@ flowchart LR
 
 ## CI/CD
 
-Bij push naar `main` (of handmatige dispatch) draait eerst de check-job op GitHub-hosted runners; daarna deploy op een self-hosted runner met Docker Compose. Zie [.github/workflows/deploy.yml](../.github/workflows/deploy.yml).
+Bij push naar `production` (of handmatige dispatch) draait eerst de check-job op GitHub-hosted runners; daarna deploy op een self-hosted runner met Docker Compose. Werk op `main` wordt dus pas uitgerold als het naar `production` is gemerged. Zie [.github/workflows/deploy.yml](../.github/workflows/deploy.yml).
 
 ```mermaid
 flowchart TD
-  trig[Push_naar_main_of_workflow_dispatch] --> v1
+  trig[Push_naar_production_of_workflow_dispatch] --> v1
   subgraph verifyJob [Job_verify]
     v1[npm_ci_en_lint_frontend]
     v2[go_vet_en_go_build]
     v3[docker_build_CI_image]
     v1 --> v2 --> v3
   end
-  v3 --> cond{Branch_is_main}
+  v3 --> cond{Branch_is_production}
   cond -->|nee| done[Einde]
   cond -->|ja| e
   subgraph deployJob [Job_deploy_self_hosted]
@@ -104,7 +104,7 @@ flowchart TD
 
 ## Voorbeelddomein: digitale kaart kopen
 
-Een lid vraagt een kaart aan; een admin of operator accordeert in de betalingswachtrij. De server voltooit de aanvraag en legt o.a. het accorderingsbedrag vast. De UI parseert antwoorden met Zod (`api.schemas.ts`).
+Een lid vraagt een kaart aan; een beheerder of kraammedewerker accordeert in de betalingswachtrij (kraampagina, tabblad **Betalingen**, `/kraam?tab=betalingen`). Elke saldowijziging op een kaart wordt daarnaast vastgelegd in `card_transactions` (knipje-logboek, migratie 00029) en is per kaart terug te draaien via `POST /api/operator/card-transactions/{id}/undo`. De server voltooit de aanvraag en legt o.a. het accorderingsbedrag vast. De UI parseert antwoorden met Zod (`api.schemas.ts`).
 
 ```mermaid
 sequenceDiagram

@@ -104,7 +104,12 @@ export const adminUserRowSchema = z.object({
   is_operator: booleanLike,
   is_matroos_jeugd: booleanLike,
   must_change_password: booleanLike,
+  is_active: z.preprocess((value) => (typeof value === 'boolean' ? value : true), z.boolean()),
+  disabled_at: z.preprocess((value) => (typeof value === 'string' ? value : undefined), z.string().optional()),
   created_at: stringWithDefault(''),
+  cards_total: intWithDefault(0),
+  knipjes_total: intWithDefault(0),
+  pending_requests: intWithDefault(0),
 })
 
 export const adminUsersResponseSchema = z.object({
@@ -600,9 +605,55 @@ export const adminSettingsResponseSchema = z.object({
   tikkie_url: stringWithDefault(''),
   tikkie_url_effective: stringWithDefault(''),
   tikkie_url_env_config: stringWithDefault(''),
+  tikkie_url_set_at: stringWithDefault(''),
+  tikkie_url_expires_at: stringWithDefault(''),
   tikkie_url_avondeten: stringWithDefault(''),
   tikkie_url_avondeten_effective: stringWithDefault(''),
   tikkie_url_avondeten_env_config: stringWithDefault(''),
+  tikkie_url_avondeten_set_at: stringWithDefault(''),
+  tikkie_url_avondeten_expires_at: stringWithDefault(''),
+  tikkie_validity_days: intWithDefault(14),
+  payment_amount_eur: stringWithDefault(''),
+  payment_amount_eur_effective: stringWithDefault(''),
+  payment_amount_eur_env_config: stringWithDefault(''),
+  payment_amount_avondeten_eur: stringWithDefault(''),
+  payment_amount_avondeten_eur_effective: stringWithDefault(''),
+  payment_amount_avondeten_eur_env_config: stringWithDefault(''),
+  bank_transfer_instructions: stringWithDefault(''),
+  bank_transfer_instructions_effective: stringWithDefault(''),
+  bank_transfer_instructions_env_config: stringWithDefault(''),
+})
+
+export const cardTransactionReasonSchema = z
+  .enum(['issued', 'tosti_delivered', 'avondeten_meal', 'manual_knipje', 'estimate_adjust', 'undo', 'backfill'])
+  .catch('manual_knipje')
+
+const optionalIntOrNull = z.preprocess(
+  (value) => (typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : null),
+  z.number().int().nullable(),
+)
+
+const optionalStringOrNull = z.preprocess((value) => (typeof value === 'string' ? value : null), z.string().nullable())
+
+/** Eén regel uit het knipje-logboek van een kaart. */
+export const cardTransactionSchema = z.object({
+  id: intWithDefault(0),
+  card_id: intWithDefault(0),
+  delta: intWithDefault(0),
+  balance_after: optionalIntOrNull,
+  reason: cardTransactionReasonSchema,
+  actor_name: stringWithDefault(''),
+  tosti_order_id: optionalIntOrNull,
+  avondeten_meal_date: optionalStringOrNull,
+  reverses_transaction_id: optionalIntOrNull,
+  reversed_by_transaction_id: optionalIntOrNull,
+  note: stringWithDefault(''),
+  created_at: stringWithDefault(''),
+})
+
+export const cardTransactionsResponseSchema = z.object({
+  transactions: z.array(cardTransactionSchema).catch([]),
+  can_undo: booleanLike,
 })
 
 export const operatorCardSaleResponseSchema = z.object({
