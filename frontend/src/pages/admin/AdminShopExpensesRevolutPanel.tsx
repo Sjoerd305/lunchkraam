@@ -129,8 +129,10 @@ export function AdminShopExpensesRevolutPanel(props: AdminShopExpensesRevolutPan
           ochtend ca. 08:00–13:00 → lunchkraam, avond ca. 16:00–19:00 → avondeten; anders het gekozen standaarddoel).
           Optioneel worden <strong>tegoeden</strong> die exact €15 of €10 zijn (instelbaar) als omzet in de grafieken
           meegeteld: €15 → lunchkraam, €10 → avondeten. Tel die bedragen niet dubbel met al in de app geaccordeerde
-          kaartverkopen. <strong>Inkomsten uit deze import</strong> verschijnen niet in de tabel Boekingen op deze pagina;
-          die staan bij <Link to="/admin">Overzicht</Link> in de omzet.
+          kaartverkopen. <strong>Afschrijvingen</strong> komen als uitgaven op{' '}
+          <Link to="/admin/expenses">Boodschappen</Link> (mogelijke duplicaten in de wachtrij daar);{' '}
+          <strong>bijschrijvingen</strong> verschijnen hieronder als bankregels en bij <Link to="/admin">Overzicht</Link> in
+          de omzet.
         </p>
         <form
           id="revolut-shop-import-form"

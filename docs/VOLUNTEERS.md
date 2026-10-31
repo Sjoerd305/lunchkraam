@@ -11,7 +11,7 @@ Korte gids voor penningmeester en andere vrijwilligers die **Revolut**, **Boodsc
 
 | Taak | Scherm in de app |
 |------|------------------|
-| Saldo uit het Revolut-afschrift (CSV-kolom) | **Beheer → Boodschappen** — bovenaan bij Revolut-import |
+| Revolut-afschrift (CSV) importeren en het saldo uit die export zien | **Beheer → Financiën** — blok Revolut-saldo / Revolut-import |
 | Uitgaven en bonnen, contante kas | **Beheer → Boodschappen** |
 | Jaaroverzicht omzet / uitgaven / tosti’s / grafieken | **Beheer → Overzicht** (jaarkeuze bovenaan) |
 | Betaling van een online kaartaanvraag accorderen (maakt de kaart actief; tot dan kan het lid wel bestellen maar levert de kraam niet) | **Kraam → Betalingen** of de knop *Betaling accorderen* bij de bestelling |
@@ -28,13 +28,13 @@ Korte gids voor penningmeester en andere vrijwilligers die **Revolut**, **Boodsc
 - **Kaartverkopen** in de app zijn de administratieve **controle**: klopt de omzet met de bank?
 - Koppel bankregels waar mogelijk aan een verkoop; anders kun je een regel **afhandelen zonder verkoop** (bijv. terugbetaling) — zie de uitleg op **Financiën**.
 
-## Stappenplan Revolut-import (boodschappen)
+## Stappenplan Revolut-import
 
 1. Download het afschrift bij Revolut (CSV).
-2. Ga naar **Boodschappen** → Revolut-blok.
+2. Ga naar **Beheer → Financiën** → Revolut-blok.
 3. Kies het **doel** (lunchkraam / avondeten) waar de import onder valt.
 4. **Preview** controleren, daarna **Importeren**.
-5. Dubbele of verdachte regels komen in de **wachtrij** (pending reviews) — daar kun je samenvoegen of negeren.
+5. Afschrijvingen worden uitgaven op **Boodschappen**; dubbele of verdachte regels komen daar in de **wachtrij** (mogelijke duplicaten), waar je kunt samenvoegen of negeren. Bijschrijvingen verschijnen als bankregels op Financiën om aan kaartverkopen te koppelen.
 
 Voor een vergelijking op basis van het **ruwe afschrift** (zonder alleen de database te vertrouwen) kun je lokaal het hulpprogramma gebruiken:
 

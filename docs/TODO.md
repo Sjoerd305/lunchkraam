@@ -10,7 +10,7 @@
 
 ## Revolut vs tostikraam-verkoop
 
-- [x] **Saldo / import:** Revolut-CSV-import (uitgaven + optioneel inkomsten als bank-omzet), saldo uit afschrift-kolom op **Boodschappen** (`AdminShopExpensesPage`), openstaande bankregels koppelen op **Financiën** (`AdminFinancePage`).
+- [x] **Saldo / import:** Revolut-CSV-import (uitgaven + optioneel inkomsten als bank-omzet), saldo en import staan op **Financiën** (`AdminRevolutImportSection` in `AdminFinancePage`), afschrijvingen landen als uitgaven op **Boodschappen** (`AdminShopExpensesPage`), openstaande bankregels koppelen op **Financiën**.
 - [x] **Saldo vs verwachting in één beeld:** maandvergelijking in-app onder **Beheer → Verkoopcontrole** (zelfde delta-teken als `cmd/revolut-import reconcile`; legenda synchroon / Revolut hoger / App hoger). CLI blijft nuttig voor ruwe CSV. — **PR-K** (MVP geleverd; uitbreidingen mogelijk).
 - [x] **Avondeten vs lunchkraam:** zelfde rekening, **apart doel** (`lunchkraam` / `avondeten`) bij import en handmatige boekingen; omzet- en uitgaven**split** in dashboard, grafieken, overzichten en import-voorbeeld.
 

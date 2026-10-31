@@ -10,6 +10,7 @@ import { useQueryErrorAlert } from '../../hooks/useQueryErrorAlert'
 import { queryKeys } from '../../queryKeys'
 import { adminYearSelectOptions } from '../../utils/adminYearSelectOptions'
 import { formatEUR } from '../../utils/formatMoney'
+import { AdminRevolutImportSection } from './AdminRevolutImportSection'
 
 function formatFulfilledShort(iso: string): string {
   if (!iso) return ''
@@ -533,6 +534,8 @@ export function AdminFinancePage() {
           ) : null}
         </section>
       ) : null}
+
+      <AdminRevolutImportSection year={year} isOperatorOnly={isOperatorOnly} />
 
       <section className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
