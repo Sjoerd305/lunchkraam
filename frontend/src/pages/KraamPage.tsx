@@ -405,7 +405,7 @@ export function KraamPage() {
       />
 
       <nav className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Kraam-onderdelen">
-        <div className="flex min-w-max gap-2 border-b border-slate-200 pb-2">
+        <div className="flex min-w-max gap-1 border-b border-line">
           {tabs.map((t) => {
             const active = tab === t.id
             return (
@@ -414,15 +414,15 @@ export function KraamPage() {
                 type="button"
                 onClick={() => setTab(t.id)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                  active ? 'bg-brand-700 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                className={`-mb-px flex min-h-12 items-center gap-2 border-b-[3px] px-4 text-[15px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  active ? 'border-accent-400 text-brand-900' : 'border-transparent text-ink-muted hover:text-ink'
                 }`}
               >
                 {t.label}
                 {t.badge ? (
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${
-                      active ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-950'
+                      active ? 'bg-brand-900 text-white' : 'bg-accent-100 text-accent-800'
                     }`}
                   >
                     {t.badge}

@@ -4,10 +4,11 @@ import { Link } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
 import { CardHistoryPanel } from '../components/CardHistoryPanel'
+import { KnipDots } from '../components/KnipDots'
 import { useAlertDialog } from '../components/useAlertDialog'
 import { useQueryErrorAlert } from '../hooks/useQueryErrorAlert'
 import { queryKeys } from '../queryKeys'
-import { cardKindBadgeClass, cardKindLabel } from '../utils/cardKindPresentation'
+import { cardKindLabel } from '../utils/cardKindPresentation'
 import { formatDateNL } from '../utils/cardTransactionLabels'
 
 export function CardsPage() {
@@ -47,18 +48,14 @@ export function CardsPage() {
   }
 
   if (cardsQuery.isPending) {
-    return <p className="text-slate-600">Kaarten laden…</p>
+    return <p className="text-ink-muted">Kaarten laden…</p>
   }
 
   if (cardsQuery.isError && cards.length === 0) {
     return (
-      <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-md">
-        <p className="text-slate-600">Je kaarten konden niet worden geladen.</p>
-        <button
-          type="button"
-          onClick={() => void cardsQuery.refetch()}
-          className="min-h-12 w-full max-w-xs rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-brand-800"
-        >
+      <div className="surface-card mx-auto flex max-w-md flex-col items-center gap-4 px-6 py-12 text-center">
+        <p className="text-ink-muted">Je kaarten konden niet worden geladen.</p>
+        <button type="button" onClick={() => void cardsQuery.refetch()} className="btn-primary w-full max-w-xs">
           Opnieuw proberen
         </button>
       </div>
@@ -67,10 +64,10 @@ export function CardsPage() {
 
   if (cards.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-inner">
-        <p className="text-slate-600">
+      <div className="surface-card border-dashed p-10 text-center">
+        <p className="text-ink-muted">
           Je hebt nog geen kaarten.{' '}
-          <Link to="/buy" className="font-semibold text-brand-700 underline">
+          <Link to="/buy" className="font-semibold text-brand-900 underline">
             Koop een kaart
           </Link>
           . De knipjes zijn meteen bruikbaar bij Tosti bestellen.
@@ -82,10 +79,10 @@ export function CardsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Mijn kaarten</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-3xl font-bold text-ink">Mijn kaarten</h1>
+        <p className="mt-1 text-sm text-ink-muted">
           Tosti's bestel je via{' '}
-          <Link to="/tosti" className="font-semibold text-brand-700 underline">
+          <Link to="/tosti" className="font-semibold text-brand-900 underline">
             Tosti bestellen
           </Link>
           ; de kraam schrijft knipjes af bij levering. Per kaart zie je hier de volledige historie.
@@ -97,41 +94,44 @@ export function CardsPage() {
           const reserved = reservedByCard.get(c.id) ?? 0
           const showHistory = openHistory.has(c.id)
           return (
-            <article key={c.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-md">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                <span>Kaart #{c.id}</span>
-                <span className={cardKindBadgeClass(c.kind, 'cards')}>{cardKindLabel(c.kind)}</span>
-                {c.source === 'physical' ? (
-                  <span className="rounded-md bg-amber-100 px-2 py-0.5 normal-case text-amber-900">
-                    Fysieke kaart (schatting)
-                  </span>
-                ) : null}
+            <article key={c.id} className="surface-card flex flex-col p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="eyebrow text-brand-900">{cardKindLabel(c.kind)}</span>
+                <span className="flex items-center gap-2">
+                  {c.source === 'physical' ? <span className="pill-neutral">Fysiek · schatting</span> : null}
+                  <span className="text-xs font-medium text-ink-muted">#{c.id}</span>
+                </span>
               </div>
-              <p className="mt-3 text-3xl font-bold text-brand-800">
+              <KnipDots remaining={c.knipjes_remaining} className="mt-4" />
+              <p className="mt-4 font-display text-3xl font-semibold leading-none text-ink">
                 {c.knipjes_remaining}
-                <span className="text-lg font-medium text-slate-500"> / 10</span>
+                <span className="font-sans text-base font-medium text-ink-muted"> van 10</span>
               </p>
-              <p className="text-sm text-slate-600">
+              <p className="mt-1 text-sm text-ink-muted">
                 knipjes over
                 {reserved > 0 ? (
-                  <span className="text-slate-500">
+                  <span>
                     {' '}
                     · {reserved} gereserveerd in {reserved === 1 ? 'een open bestelling' : 'open bestellingen'}
                   </span>
                 ) : null}
               </p>
-              <p className="mt-1 text-xs text-slate-500">Uitgegeven op {formatDateNL(c.created_at)}</p>
+              <p className="mt-1 text-xs text-ink-muted">Uitgegeven op {formatDateNL(c.created_at)}</p>
               {c.source === 'physical' ? (
-                <p className="mt-2 text-xs text-amber-900/90">
+                <p className="mt-2 text-xs text-accent-800">
                   De kraam knipt op je echte kaart; dit getal is een schatting die de kraam kan bijstellen.
                 </p>
               ) : null}
-              {c.knipjes_remaining === 0 ? <p className="mt-2 text-sm text-slate-500">Deze kaart is op.</p> : null}
+              {c.knipjes_remaining === 0 ? (
+                <Link to="/buy" className="btn-accent mt-4 w-full">
+                  Deze kaart is op · nieuwe kaart kopen
+                </Link>
+              ) : null}
               <div className="mt-5">
                 <button
                   type="button"
                   onClick={() => toggleHistory(c.id)}
-                  className="text-sm font-semibold text-brand-700 hover:text-brand-800 hover:underline"
+                  className="text-sm font-semibold text-brand-900 hover:underline"
                   aria-expanded={showHistory}
                 >
                   {showHistory ? 'Historie verbergen' : 'Historie bekijken'}

@@ -2,6 +2,8 @@
 
 @theme {
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
   /* Huisstijl: anker #0B2154 (RGB 11, 33, 84) — afgeleide ladder */
   --color-brand-50: #f0f4fa;
   --color-brand-100: #dbe3f0;
@@ -14,27 +16,83 @@
   --color-brand-800: #0e2860;
   --color-brand-900: #0b2154;
   --color-brand-950: #050d22;
+
+  /* Accent: amber voor de primaire actie, actieve tab en live-indicator. Tekst erop altijd donker. */
+  --color-accent-100: #fbebd0;
+  --color-accent-200: #f2d9a8;
+  --color-accent-400: #f2b733;
+  --color-accent-500: #e6a91f;
+  --color-accent-800: #8a4b00;
+  --color-accent-900: #5a3a00;
+
+  /* Ondergrond en lijnen: warm neutraal, geen gradient. */
+  --color-ground: #f4f2ec;
+  --color-ground-deep: #ece9e1;
+  --color-line: #e4e1d8;
+  --color-ink: #15203a;
+  --color-ink-muted: #5e6574;
 }
 
 body {
   margin: 0;
   font-family: var(--font-sans);
+  background-color: var(--color-ground);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
 }
 
 @layer components {
   .input-control {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500;
+    @apply w-full rounded-[10px] border border-slate-300 bg-white px-3 py-2.5 text-sm text-ink transition-colors placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500;
   }
   .select-control {
-    @apply rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition-colors focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60;
+    @apply rounded-[10px] border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-ink transition-colors focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60;
   }
   .surface-card {
-    @apply rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm;
+    @apply rounded-[14px] border border-line bg-white p-6;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[10px] bg-brand-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-accent {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-accent-400 px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-accent-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[10px] border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-brand-900 transition-colors hover:bg-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-success {
+    @apply inline-flex min-h-11 items-center justify-center rounded-[10px] bg-emerald-800 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-danger-ghost {
+    @apply inline-flex min-h-11 items-center justify-center rounded-[10px] border border-line bg-white px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:pointer-events-none disabled:opacity-50;
+  }
+  /* Kleine kop boven een blok: "ZATERDAG 31 OKTOBER", "TOSTIKAART". */
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.06em] text-ink-muted;
+  }
+  /* Statuspillen; kleur = betekenis (amber te controleren, groen akkoord, rood geweigerd). */
+  .pill {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .pill-pending {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-accent-100 text-accent-800;
+  }
+  .pill-ok {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-900;
+  }
+  .pill-rejected {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-100 text-red-800;
+  }
+  .pill-neutral {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-ground-deep text-ink;
   }
 }

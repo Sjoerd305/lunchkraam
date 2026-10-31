@@ -12,24 +12,25 @@ export function KraamSoldTodayHeader({ soldTodayLoading, soldToday, onRefreshAll
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Kraam</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="eyebrow">Kraam</p>
+        <h1 className="mt-1 text-3xl font-bold text-ink">Wachtrij</h1>
+        <p className="mt-1 text-sm text-ink-muted">
           {soldTodayLoading ? (
             'Verkocht vandaag: laden…'
           ) : soldToday ? (
             <>
-              Vandaag <strong className="text-slate-900">{soldToday.quantity}</strong>{' '}
+              Vandaag <strong className="text-ink">{soldToday.quantity}</strong>{' '}
               {soldToday.quantity === 1 ? 'tosti' : 'tosti’s'} geleverd · {formatAmsterdamDateLong(soldToday.amsterdam_date)}
             </>
           ) : (
-            <span className="text-amber-800">Kon het dagtotaal niet laden.</span>
+            <span className="text-accent-800">Kon het dagtotaal niet laden.</span>
           )}
         </p>
       </div>
       <button
         type="button"
         onClick={() => void onRefreshAll()}
-        className="btn-secondary min-h-10 self-start rounded-xl px-4 lg:self-auto"
+        className="btn-secondary self-start lg:self-auto"
       >
         Alles vernieuwen
       </button>

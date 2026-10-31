@@ -1,270 +1,240 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api'
-import { useAuth } from '../useAuth'
+import { KnipDots } from '../components/KnipDots'
+import { useMyCards } from '../hooks/useMyCards'
 import { queryKeys } from '../queryKeys'
-import { useTostiRealtime } from '../useTostiRealtime'
-import { cardKindBadgeClass, cardKindLabel } from '../utils/cardKindPresentation'
+import { useAuth } from '../useAuth'
+import { cardKindLabel } from '../utils/cardKindPresentation'
+import { formatDateNL } from '../utils/cardTransactionLabels'
 import { formatEURFromString } from '../utils/formatMoney'
 import { breadLabel, fillingLabel } from '../utils/tostiLabels'
 
 /* Dashboard links follow the same routes and role rules as App.tsx and AdminLayout.tsx */
 
-const cardClassName =
-  'group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-md transition hover:border-brand-300 hover:shadow-lg'
+function greeting(d: Date): string {
+  const h = d.getHours()
+  if (h < 6) return 'Goedenacht'
+  if (h < 12) return 'Goedemorgen'
+  if (h < 18) return 'Goedemiddag'
+  return 'Goedenavond'
+}
 
-function DashCard({
-  to,
-  title,
-  description,
-  cta,
-  children,
-  className = '',
-}: {
-  to: string
-  title: string
-  description?: string
-  cta: string
-  children?: ReactNode
-  className?: string
-}) {
+export function DashboardPage() {
+  const { user, pendingCardRequests } = useAuth()
+  const firstName = user?.name?.trim().split(/\s+/)[0] || 'daar'
+  const staff = Boolean(user?.is_admin || user?.is_operator)
+  const adminOnly = Boolean(user?.is_admin)
+  const now = new Date()
+  const dateLabel = now.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  const cardsQuery = useMyCards()
+  const buyQuery = useQuery({
+    queryKey: queryKeys.member.buyInfo,
+    queryFn: () => api.getBuyInfo(),
+    enabled: Boolean(user),
+  })
+  const queueQuery = useQuery({
+    queryKey: queryKeys.member.tostiQueue,
+    queryFn: () => api.getTostiQueue(),
+    enabled: Boolean(user),
+    refetchInterval: 30_000,
+  })
+
+  const cards = [...(cardsQuery.data ?? [])].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'tosti' ? -1 : 1
+    return a.created_at.localeCompare(b.created_at)
+  })
+  const pendingByKind = new Map<api.CardKind, api.MyPendingRequest>()
+  for (const r of buyQuery.data?.my_pending_requests ?? []) {
+    if (!pendingByKind.has(r.kind)) pendingByKind.set(r.kind, r)
+  }
+  const myQueue = (queueQuery.data ?? []).filter((e) => e.is_mine)
+  const queue = queueQuery.data ?? []
+
   return (
-    <Link to={to} className={`${cardClassName} ${className}`}>
-      <div className="text-sm font-semibold text-brand-700">{title}</div>
-      {description ? <p className="mt-2 text-slate-600 group-hover:text-slate-800">{description}</p> : null}
-      {children}
-      <span className="mt-4 inline-block text-sm font-semibold text-brand-700">{cta}</span>
-    </Link>
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">{dateLabel}</p>
+          <h1 className="mt-1 text-3xl font-bold leading-tight text-ink sm:text-4xl">
+            {greeting(now)}, {firstName}
+          </h1>
+        </div>
+        <Link to="/tosti" className="btn-accent min-h-12 px-5 text-base">
+          <svg
+            aria-hidden="true"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          >
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+          Tosti bestellen
+        </Link>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className="space-y-4 lg:col-span-2">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-semibold text-ink">Mijn kaarten</h2>
+            <Link to="/cards" className="text-sm font-semibold text-brand-900 hover:underline">
+              Alle kaarten
+            </Link>
+          </div>
+
+          {cardsQuery.isPending ? (
+            <p className="text-ink-muted">Kaarten laden…</p>
+          ) : cards.length === 0 ? (
+            <div className="surface-card border-dashed text-center">
+              <p className="text-ink-muted">Je hebt nog geen kaart.</p>
+              <Link to="/buy" className="btn-primary mt-4">
+                Kaart kopen
+              </Link>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {cards.map((c) => {
+                const pending = pendingByKind.get(c.kind)
+                return (
+                  <article key={c.id} className="surface-card flex flex-col gap-4 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="eyebrow text-brand-900">{cardKindLabel(c.kind)}</span>
+                      {c.source === 'physical' ? (
+                        <span className="pill-neutral">Fysiek · schatting</span>
+                      ) : pending ? (
+                        <span className="pill-pending">Betaling in controle</span>
+                      ) : (
+                        <span className="text-xs font-medium text-ink-muted">Sinds {formatDateNL(c.created_at)}</span>
+                      )}
+                    </div>
+                    <KnipDots remaining={c.knipjes_remaining} />
+                    <p className="font-display text-3xl font-semibold leading-none text-ink">
+                      {c.knipjes_remaining}{' '}
+                      <span className="font-sans text-base font-medium text-ink-muted">van 10 knipjes over</span>
+                    </p>
+                    {c.knipjes_remaining === 0 ? (
+                      <Link to="/buy" className="btn-accent w-full">
+                        Deze kaart is op · nieuwe kaart kopen
+                      </Link>
+                    ) : c.kind === 'tosti' ? (
+                      <Link to="/tosti" className="btn-secondary w-full">
+                        Tosti bestellen met deze kaart
+                      </Link>
+                    ) : (
+                      <p className="text-sm text-ink-muted">De kraam boekt avondeten per datum af.</p>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        <aside className="space-y-4">
+          <h2 className="text-xl font-semibold text-ink">Vandaag bij de kraam</h2>
+
+          <section className="rounded-[14px] bg-brand-900 p-5 text-white">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.05em] text-brand-200">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-accent-400" />
+              Tosti-wachtrij · live
+            </div>
+            {queueQuery.isPending ? (
+              <p className="mt-3 text-sm text-brand-200">Wachtrij laden…</p>
+            ) : myQueue.length > 0 ? (
+              <>
+                <p className="mt-3 font-display text-2xl font-semibold leading-tight">
+                  Je bent nummer {myQueue[0].place}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-brand-200">
+                  {myQueue[0].place === 1
+                    ? 'Jij bent aan de beurt.'
+                    : `${myQueue[0].place - 1} ${myQueue[0].place === 2 ? 'bestelling gaat' : 'bestellingen gaan'} voor je.`}{' '}
+                  {myQueue[0].quantity > 1 ? `${myQueue[0].quantity}× ` : ''}
+                  {breadLabel(myQueue[0].bread, 'short')}, {fillingLabel(myQueue[0].filling)}.
+                </p>
+                <Link to="/tosti" className="mt-3 inline-block text-sm font-semibold text-accent-400">
+                  Bestelling bekijken
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 font-display text-2xl font-semibold leading-tight">
+                  {queue.length === 0 ? 'Geen wachtrij' : `${queue.length} in de wachtrij`}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-brand-200">
+                  {queue.length === 0 ? 'Je tosti kan meteen op het ijzer.' : 'Bestel nu, dan sta je erachter.'}
+                </p>
+              </>
+            )}
+          </section>
+
+          {pendingCardRequests > 0 ? (
+            <Panel title="Openstaande aanvraag">
+              <p className="text-sm leading-relaxed text-ink-muted">
+                {pendingCardRequests === 1 ? 'Je kaartaanvraag wordt' : `${pendingCardRequests} kaartaanvragen worden`}{' '}
+                door de kraam gecontroleerd. Je kaart is al bruikbaar.
+              </p>
+              <Link to="/buy" className="text-sm font-semibold text-brand-900 hover:underline">
+                Betaalgegevens bekijken
+              </Link>
+            </Panel>
+          ) : null}
+
+          <Panel title="Nieuwe kaart nodig?">
+            <p className="text-sm leading-relaxed text-ink-muted">
+              Tostikaart {formatEURFromString(buyQuery.data?.payment_amount_eur ?? '')}
+              {user?.is_matroos_jeugd
+                ? ` · Avondetenkaart ${formatEURFromString(buyQuery.data?.payment_amount_avondeten_eur ?? '')}`
+                : ''}
+              . Knipjes zijn meteen bruikbaar.
+            </p>
+            <Link to="/buy" className="btn-primary self-start">
+              Kaart kopen
+            </Link>
+          </Panel>
+        </aside>
+      </div>
+
+      {staff ? (
+        <section className="space-y-3">
+          <h2 className="text-xl font-semibold text-ink">Voor de kraam</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <QuickLink to="/kraam" title="Kraam" description="Wachtrij, betalingen, fysieke verkoop, avondeten." />
+            <QuickLink to="/admin/requests" title="Betalingswachtrij" description="Accordeer of weiger openstaande betalingen." />
+            <QuickLink to="/admin/expenses" title="Boodschappen" description="Bonnetjes en uitgaven registreren." />
+            {adminOnly ? (
+              <QuickLink to="/admin" title="Beheer" description="Cijfers, accounts en instellingen." />
+            ) : (
+              <QuickLink to="/admin/expenses-overview" title="Overzichten" description="Financieel overzicht en statistieken." />
+            )}
+          </div>
+        </section>
+      ) : null}
+    </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    <section className="surface-card flex flex-col gap-2.5 p-5">
+      <h3 className="text-base font-semibold text-ink">{title}</h3>
+      {children}
     </section>
   )
 }
 
-export function DashboardPage() {
-  const { user, pendingCardRequests, paymentAmountEUR, refresh } = useAuth()
-  const queryClient = useQueryClient()
-  const name = user?.name?.trim() || 'daar'
-  const staff = Boolean(user?.is_admin || user?.is_operator)
-  const adminOnly = Boolean(user?.is_admin)
-  const enabled = Boolean(user)
-
-  const cardsQuery = useQuery({ queryKey: queryKeys.member.myCards, queryFn: () => api.getCards(), enabled })
-  const ordersQuery = useQuery({
-    queryKey: queryKeys.member.myTostiOrders,
-    queryFn: () => api.getMyTostiOrders(),
-    enabled,
-  })
-  const queueQuery = useQuery({ queryKey: queryKeys.member.tostiQueue, queryFn: () => api.getTostiQueue(), enabled })
-
-  const onRealtime = useCallback(
-    (reason: string) => {
-      if (reason === 'my_tosti_orders' || reason === 'tosti_public_queue') {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.member.myTostiOrders })
-        void queryClient.invalidateQueries({ queryKey: queryKeys.member.tostiQueue })
-        void queryClient.invalidateQueries({ queryKey: queryKeys.member.myCards })
-        void refresh()
-      }
-    },
-    [queryClient, refresh],
-  )
-  useTostiRealtime('/ws/mijn-tosti', enabled, onRealtime, ['my_tosti_orders', 'tosti_public_queue'])
-
-  const cards = useMemo(() => cardsQuery.data ?? [], [cardsQuery.data])
-  const queue = useMemo(() => queueQuery.data ?? [], [queueQuery.data])
-  const myOpenOrders = useMemo(
-    () => (ordersQuery.data ?? []).filter((o) => o.status === 'pending'),
-    [ordersQuery.data],
-  )
-  const myQueuePlaces = useMemo(() => {
-    const places = new Map<number, number>()
-    for (const e of queue) if (e.is_mine) places.set(e.id, e.place)
-    return places
-  }, [queue])
-  const onlineTostiCards = useMemo(() => cards.filter((c) => c.kind === 'tosti' && c.source === 'online'), [cards])
-  const freeTostiKnipjes = useMemo(() => {
-    const reserved = new Map<number, number>()
-    for (const o of myOpenOrders) {
-      if (o.card_id !== null) reserved.set(o.card_id, (reserved.get(o.card_id) ?? 0) + o.quantity)
-    }
-    return onlineTostiCards.reduce((sum, c) => sum + Math.max(0, c.knipjes_remaining - (reserved.get(c.id) ?? 0)), 0)
-  }, [onlineTostiCards, myOpenOrders])
-  const loading = cardsQuery.isPending || ordersQuery.isPending || queueQuery.isPending
-
+function QuickLink({ to, title, description }: { to: string; title: string; description: string }) {
   return (
-    <div className="space-y-10">
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-8 shadow-lg shadow-slate-200/40">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Hallo, {name}</h1>
-        <p className="mt-2 text-lg text-slate-600">Welkom bij je lunchkraam-overzicht.</p>
-      </div>
-
-      <Section title="Lunchkraam">
-        <DashCard
-          to="/tosti"
-          cta="Tosti bestellen →"
-          title="Tosti bestellen"
-          className="border-brand-200 bg-brand-50/40 sm:col-span-2 lg:col-span-3"
-        >
-          <p className="mt-2 text-slate-700">
-            {loading
-              ? 'Laden…'
-              : freeTostiKnipjes > 0
-                ? `Je hebt ${freeTostiKnipjes} ${freeTostiKnipjes === 1 ? 'vrij knipje' : 'vrije knipjes'} op je digitale tostikaart${
-                    onlineTostiCards.length > 1 ? 'en' : ''
-                  }.`
-                : 'Geen vrije digitale knipjes. Bestellen kan met een fysieke kaart, of koop een nieuwe kaart.'}
-          </p>
-          {myOpenOrders.length > 0 ? (
-            <ul className="mt-4 space-y-2">
-              {myOpenOrders.map((o) => {
-                const place = myQueuePlaces.get(o.id)
-                return (
-                  <li
-                    key={o.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm"
-                  >
-                    <span className="font-medium text-slate-900">
-                      {o.quantity > 1 ? `${o.quantity}× ` : ''}
-                      {breadLabel(o.bread)}, {fillingLabel(o.filling)}
-                      <span className="text-slate-500">
-                        {' '}
-                        · {o.is_physical_card ? 'fysieke kaart' : `kaart #${o.card_id}`}
-                      </span>
-                    </span>
-                    <span className="rounded-md bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-900">
-                      {place ? `Plek ${place} van ${queue.length} in de wachtrij` : 'In de wachtrij'}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : !loading ? (
-            <p className="mt-3 text-sm text-slate-500">
-              {queue.length === 0
-                ? 'De wachtrij is leeg.'
-                : `Geen open bestelling. Er ${
-                    queue.length === 1 ? 'staat 1 bestelling' : `staan ${queue.length} bestellingen`
-                  } in de wachtrij.`}
-            </p>
-          ) : null}
-        </DashCard>
-
-        <DashCard to="/cards" title="Mijn kaarten" cta="Kaarten en historie →">
-          {loading ? (
-            <p className="mt-2 text-slate-600">Laden…</p>
-          ) : cards.length === 0 ? (
-            <p className="mt-2 text-slate-600">Je hebt nog geen kaarten.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {cards.map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono text-xs text-slate-500">#{c.id}</span>
-                    <span className={cardKindBadgeClass(c.kind, 'cards')}>{cardKindLabel(c.kind)}</span>
-                    {c.source === 'physical' ? (
-                      <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-900">fysiek</span>
-                    ) : null}
-                  </span>
-                  <span className="font-semibold tabular-nums text-slate-900">
-                    {c.knipjes_remaining}
-                    <span className="font-normal text-slate-500"> / 10</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </DashCard>
-
-        <DashCard
-          to="/buy"
-          title="Kaart kopen"
-          description={`Nieuwe tostikaart met 10 knipjes voor ${formatEURFromString(
-            paymentAmountEUR,
-          )}. Betalen via Tikkie of overschrijving.`}
-          cta="Kaart kopen →"
-        >
-          <p className="mt-3 text-sm text-slate-500">
-            {pendingCardRequests > 0 ? (
-              <>
-                Je hebt <strong className="text-slate-800">{pendingCardRequests}</strong> openstaande{' '}
-                {pendingCardRequests === 1 ? 'aanvraag' : 'aanvragen'}. De betaling wordt nog gecontroleerd; de kaart kun je
-                al gebruiken.
-              </>
-            ) : (
-              'Geen openstaande aanvragen.'
-            )}
-          </p>
-        </DashCard>
-      </Section>
-
-      {staff ? (
-        <Section title="Kraam en beheer">
-          <DashCard
-            to="/kraam"
-            title="Kraam"
-            description="Bestellingen leveren, knipjes en historie, avondeten, kaartverkoop en de betalingswachtrij."
-            cta="Open kraam →"
-          />
-          <DashCard
-            to="/admin"
-            title="Overzicht"
-            description="Omzet, uitgaven, tosti's en grafieken per jaar."
-            cta="Open overzicht →"
-          />
-          <DashCard
-            to="/admin/finance"
-            title="Financiën"
-            description="Revolut-bankregels koppelen aan verkopen."
-            cta="Open financiën →"
-          />
-          <DashCard
-            to="/admin/finance-control"
-            title="Verkoopcontrole"
-            description="Maandvergelijking Revolut-import tegenover app-omzet."
-            cta="Open verkoopcontrole →"
-          />
-          <DashCard
-            to="/admin/expenses"
-            title="Boodschappen"
-            description="Bonnetjes, uitgaven en Revolut-import."
-            cta="Open boodschappen →"
-          />
-          {adminOnly ? (
-            <DashCard
-              to="/admin/accounts"
-              title="Accounts"
-              description="Rechten, jeugd-vlag, activeren en kaarten per lid."
-              cta="Open accounts →"
-            />
-          ) : null}
-          {adminOnly ? (
-            <DashCard
-              to="/admin/settings"
-              title="Instellingen"
-              description="Prijzen, Tikkie-links en overschrijfinstructies."
-              cta="Open instellingen →"
-            />
-          ) : null}
-        </Section>
-      ) : null}
-
-      {user?.auth_kind === 'local' ? (
-        <Section title="Account">
-          <DashCard
-            to="/account/password"
-            title="Wachtwoord wijzigen"
-            description="Stel een nieuw wachtwoord in voor je lokale account."
-            cta="Wachtwoord wijzigen →"
-          />
-        </Section>
-      ) : null}
-    </div>
+    <Link to={to} className="surface-card group flex flex-col gap-1 p-5 transition-colors hover:border-brand-300">
+      <span className="font-semibold text-brand-900">{title} →</span>
+      <span className="text-sm text-ink-muted">{description}</span>
+    </Link>
   )
 }

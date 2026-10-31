@@ -1,8 +1,6 @@
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../useAuth'
 
-/* Tabs follow the routes in App.tsx. Kraammedewerkers see a subset; the betalingswachtrij lives on /kraam. */
-
 export function AdminLayout() {
   const { user } = useAuth()
   const loc = useLocation()
@@ -13,47 +11,58 @@ export function AdminLayout() {
 
   const operatorOnly = Boolean(user.is_operator && !user.is_admin)
   const operatorPathAllowed =
-    loc.pathname === '/admin' ||
+    loc.pathname.startsWith('/admin/requests') ||
     loc.pathname === '/admin/expenses' ||
+    loc.pathname === '/admin/expenses-overview' ||
     loc.pathname === '/admin/finance' ||
-    loc.pathname === '/admin/finance-control' ||
-    loc.pathname === '/admin/requests' ||
-    loc.pathname === '/admin/expenses-overview'
+    loc.pathname === '/admin/finance-control'
   if (operatorOnly && !operatorPathAllowed) {
-    return <Navigate to="/admin" replace />
+    return <Navigate to="/admin/requests" replace />
   }
-
   return (
-    <div className="space-y-10">
-      <div className="flex flex-col gap-6 border-b border-slate-200/90 pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-500">Lunchkraam</p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Beheer</h1>
+    <div className="flex flex-wrap gap-8">
+      <nav className="w-full shrink-0 md:w-52" aria-label="Beheer">
+        <div className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-col md:gap-1 md:overflow-visible md:px-0">
+          <SideGroup label="Dagelijks" />
+          {user.is_admin ? (
+            <SideLink to="/admin" end>
+              Overzicht
+            </SideLink>
+          ) : null}
+          <SideLink to="/admin/requests">Betalingswachtrij</SideLink>
+          <SideLink to="/admin/expenses">Boodschappen</SideLink>
+          <SideGroup label="Financiën" />
+          <SideLink to="/admin/expenses-overview">Overzichten</SideLink>
+          <SideLink to="/admin/finance">Financiën</SideLink>
+          <SideLink to="/admin/finance-control">Verkoopcontrole</SideLink>
+          {user.is_admin ? (
+            <>
+              <SideGroup label="Instellingen" />
+              <SideLink to="/admin/accounts">Accounts</SideLink>
+              <SideLink to="/admin/settings">Instellingen</SideLink>
+            </>
+          ) : null}
         </div>
-        <nav className="flex flex-wrap gap-2 sm:justify-end" aria-label="Beheer">
-          <AdminTab to="/admin" end>
-            Overzicht
-          </AdminTab>
-          {user.is_admin ? <AdminTab to="/admin/accounts">Accounts</AdminTab> : null}
-          <AdminTab to="/admin/finance">Financiën</AdminTab>
-          <AdminTab to="/admin/finance-control">Verkoopcontrole</AdminTab>
-          <AdminTab to="/admin/expenses">Boodschappen</AdminTab>
-          {user.is_admin ? <AdminTab to="/admin/settings">Instellingen</AdminTab> : null}
-        </nav>
+      </nav>
+      <div className="min-w-0 flex-[999_1_560px]">
+        <Outlet />
       </div>
-      <Outlet />
     </div>
   )
 }
 
-function AdminTab({ to, end, children }: { to: string; end?: boolean; children: React.ReactNode }) {
+function SideGroup({ label }: { label: string }) {
+  return <p className="eyebrow hidden pb-2 pl-3 pt-4 first:pt-0 md:block">{label}</p>
+}
+
+function SideLink({ to, end, children }: { to: string; end?: boolean; children: React.ReactNode }) {
   return (
     <NavLink
       to={to}
       end={end}
       className={({ isActive }) =>
-        `rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-          isActive ? 'bg-brand-700 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+        `flex min-h-11 shrink-0 items-center rounded-[10px] px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+          isActive ? 'bg-brand-900 text-white' : 'text-ink hover:bg-ground-deep'
         }`
       }
     >

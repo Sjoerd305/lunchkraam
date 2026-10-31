@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import * as api from '../api'
 import { useAuth } from '../useAuth'
+import { LogoBadge } from '../components/Logo'
 
 const loginErrors: Record<string, string> = {
   oauth: 'Inloggen bij Google is geannuleerd of mislukt.',
@@ -60,13 +61,14 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-linear-to-br from-brand-100/80 via-white to-slate-100 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-200/50">
-        <div className="mb-2 text-center text-sm font-semibold uppercase tracking-wider text-brand-700">
-          Lunchkraam
+    <div className="flex min-h-screen flex-col items-center justify-center bg-ground px-4">
+      <div className="w-full max-w-md rounded-[14px] border border-line bg-white p-8">
+        <div className="mb-4 flex justify-center">
+          <LogoBadge variant="mark" size={56} title="Lunchkraam" />
         </div>
-        <h1 className="mb-2 text-center text-2xl font-bold text-slate-900">Maasgroep 18</h1>
-        <p className="mb-6 text-center text-slate-600">
+        <h1 className="mb-1 text-center text-3xl font-bold text-ink">Lunchkraam</h1>
+        <p className="eyebrow mb-4 text-center">Maasgroep 18</p>
+        <p className="mb-6 text-center text-ink-muted">
           Log in met Google, of met een door de beheerder aangemaakt account (zonder Google).
         </p>
         {errMsg ? (
@@ -77,8 +79,8 @@ export function LoginPage() {
             {errMsg}
           </div>
         ) : null}
-        <form onSubmit={(e) => void onLocalSubmit(e)} className="mb-8 space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-5">
-          <h2 className="text-sm font-semibold text-slate-800">Lokaal inloggen</h2>
+        <form onSubmit={(e) => void onLocalSubmit(e)} className="mb-8 space-y-4 rounded-[12px] border border-line bg-ground p-5">
+          <h2 className="text-sm font-semibold text-ink">Lokaal inloggen</h2>
           {localErr ? (
             <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
               {localErr}
@@ -112,7 +114,7 @@ export function LoginPage() {
         <p className="mb-4 text-center text-xs text-slate-500">of</p>
         <a
           href="/auth/google"
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-md shadow-brand-700/25 transition hover:bg-brand-800"
+          className="btn-primary w-full gap-2 py-3.5"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
             <path
