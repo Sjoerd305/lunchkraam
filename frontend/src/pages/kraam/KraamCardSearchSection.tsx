@@ -87,6 +87,11 @@ export function KraamCardSearchSection({
                           Fysiek (schatting)
                         </span>
                       ) : null}
+                      {!c.active ? (
+                        <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-red-900">
+                          Betaling nog niet geaccordeerd
+                        </span>
+                      ) : null}
                     </p>
                     <p className="font-semibold text-slate-900">{c.owner_name}</p>
                     <p className="text-sm text-slate-600">{c.owner_email}</p>
@@ -106,6 +111,8 @@ export function KraamCardSearchSection({
                       >
                         Schatting zetten
                       </button>
+                    ) : !c.active ? (
+                      <span className="text-sm text-slate-500">Eerst accorderen (tab Betalingen)</span>
                     ) : c.knipjes_remaining <= 0 ? (
                       <span className="text-sm text-slate-400">Op</span>
                     ) : (

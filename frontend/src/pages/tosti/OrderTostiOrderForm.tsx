@@ -24,6 +24,8 @@ type Props = {
   submitting: boolean
   maxDigitalQty: number
   effectiveMaxQty: number
+  /** Gekozen kaart wacht nog op controle van de betaling: bestellen kan, leveren pas daarna. */
+  selectedCardInactive: boolean
 }
 
 export function OrderTostiOrderForm({
@@ -45,6 +47,7 @@ export function OrderTostiOrderForm({
   submitting,
   maxDigitalQty,
   effectiveMaxQty,
+  selectedCardInactive,
 }: Props) {
   return (
     <section className="surface-card">
@@ -116,11 +119,17 @@ export function OrderTostiOrderForm({
                   const free = freeKnipjesForCard(c, orders)
                   return (
                     <option key={c.id} value={c.id}>
-                      Kaart #{c.id} — {c.knipjes_remaining} knipjes ({free} vrij)
+                      Kaart #{c.id} — {c.knipjes_remaining} knipjes ({free} vrij){c.active ? '' : ' · nog niet actief'}
                     </option>
                   )
                 })}
               </select>
+              {selectedCardInactive ? (
+                <span className="mt-1.5 block text-xs text-accent-800">
+                  Deze kaart wacht op controle van je betaling. Bestellen kan alvast; de kraam levert zodra de kaart
+                  actief is.
+                </span>
+              ) : null}
             </label>
           ) : null}
           <div className="block text-sm">

@@ -34,6 +34,9 @@ type tostiOrderOperatorJSON struct {
 	tostiOrderJSON
 	CustomerName  string `json:"customer_name"`
 	CustomerEmail string `json:"customer_email"`
+	// PendingCardRequestID is set when the card's payment still awaits accordering; delivery is
+	// blocked until that request is fulfilled.
+	PendingCardRequestID *int64 `json:"pending_card_request_id,omitempty"`
 }
 
 // tostiQueueEntryJSON is a public queue row (FIFO); omits email.
@@ -185,9 +188,10 @@ func (d *Deps) APIOperatorTostiOrders(w http.ResponseWriter, r *http.Request) {
 	out := make([]tostiOrderOperatorJSON, 0, len(list))
 	for _, row := range list {
 		out = append(out, tostiOrderOperatorJSON{
-			tostiOrderJSON: tostiOrderToJSON(row.TostiOrder),
-			CustomerName:   row.CustomerName,
-			CustomerEmail:  row.CustomerEmail,
+			tostiOrderJSON:       tostiOrderToJSON(row.TostiOrder),
+			CustomerName:         row.CustomerName,
+			CustomerEmail:        row.CustomerEmail,
+			PendingCardRequestID: row.PendingCardRequestID,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"orders": out})

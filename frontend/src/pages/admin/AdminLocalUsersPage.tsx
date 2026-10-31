@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Fragment, useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import * as api from '../../api'
 import { useAuth } from '../../useAuth'
 import { CardHistoryPanel } from '../../components/CardHistoryPanel'
@@ -10,6 +10,14 @@ import { cardKindBadgeClass, cardKindLabel } from '../../utils/cardKindPresentat
 import { formatDateNL } from '../../utils/cardTransactionLabels'
 
 type Filter = 'active' | 'all'
+
+const LOCAL_EMAIL_SUFFIX = '@local.lunchkraam'
+
+/** Lokaal account met een echt Google-adres: de koppeling is klaargezet (zie Naar Google). */
+function preparedGoogleEmail(r: api.AdminUserRow): string | null {
+  if (r.auth_kind !== 'local' || r.email.endsWith(LOCAL_EMAIL_SUFFIX)) return null
+  return r.email
+}
 
 const checkbox = 'h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500 disabled:opacity-40'
 
@@ -36,6 +44,7 @@ function UserCardsRow({ userId, onChanged }: { userId: number; onChanged: () => 
               {c.source === 'physical' ? (
                 <span className="rounded-md bg-amber-100 px-2 py-0.5 text-amber-900">fysiek (schatting)</span>
               ) : null}
+              {!c.active ? <span className="rounded-md bg-red-100 px-2 py-0.5 text-red-900">betaling open</span> : null}
               <span className="text-slate-500">· {formatDateNL(c.created_at)}</span>
             </span>
             <span className="font-semibold tabular-nums text-slate-900">
@@ -87,6 +96,11 @@ export function AdminLocalUsersPage() {
   const [editPwd, setEditPwd] = useState('')
   const [editMustChangePassword, setEditMustChangePassword] = useState(false)
   const [savingId, setSavingId] = useState<number | null>(null)
+
+  const [googleDialogId, setGoogleDialogId] = useState<number | null>(null)
+  const [googleEmail, setGoogleEmail] = useState('')
+  const [mergeTargetId, setMergeTargetId] = useState<number | ''>('')
+  const [googleBusy, setGoogleBusy] = useState(false)
 
   const rows = useMemo(() => listQuery.data ?? [], [listQuery.data])
   const inactiveCount = rows.filter((r) => !r.is_active).length
@@ -212,6 +226,94 @@ export function AdminLocalUsersPage() {
     setEditId(r.id)
     setEditPwd('')
     setEditMustChangePassword(r.must_change_password)
+  }
+
+  const googleAccounts = useMemo(
+    () => rows.filter((r) => r.auth_kind === 'google' && r.is_active).sort((a, b) => a.name.localeCompare(b.name, 'nl-NL')),
+    [rows],
+  )
+  const googleDialogRow = googleDialogId !== null ? (rows.find((r) => r.id === googleDialogId) ?? null) : null
+
+  function startGoogleDialog(r: api.AdminUserRow) {
+    if (r.auth_kind !== 'local' || r.is_system) return
+    setGoogleDialogId(r.id)
+    setGoogleEmail(preparedGoogleEmail(r) ?? '')
+    setMergeTargetId('')
+  }
+
+  async function saveGoogleEmail() {
+    if (googleDialogId === null) return
+    setGoogleBusy(true)
+    try {
+      await api.setLocalUserGoogleEmail(csrf, googleDialogId, googleEmail)
+      await invalidateUsers()
+      setGoogleDialogId(null)
+      await alert({
+        title: googleEmail.trim() ? 'Koppeling klaargezet' : 'Koppeling verwijderd',
+        message: googleEmail.trim()
+          ? `Zodra dit lid inlogt met Google als ${googleEmail.trim()} neemt die login dit account over. Tot die tijd werkt de lokale login gewoon.`
+          : 'Het account blijft een lokaal account.',
+        variant: 'success',
+      })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Opslaan mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
+
+  async function mergeIntoGoogle() {
+    if (googleDialogId === null || mergeTargetId === '' || !googleDialogRow) return
+    const target = googleAccounts.find((g) => g.id === mergeTargetId)
+    if (!target) return
+    const ok = await confirm({
+      title: 'Accounts samenvoegen?',
+      message: `Alle kaarten, aanvragen, bestellingen en historie van ${googleDialogRow.name} (lokaal) gaan naar ${target.name} (${target.email}). Het lokale account wordt daarna verwijderd. Dit kan niet ongedaan worden gemaakt.`,
+      confirmLabel: 'Ja, samenvoegen',
+      cancelLabel: 'Terug',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setGoogleBusy(true)
+    try {
+      await api.mergeUserInto(csrf, googleDialogId, mergeTargetId)
+      setGoogleDialogId(null)
+      await invalidateUsers()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.operator.members })
+      await alert({
+        title: 'Samengevoegd',
+        message: `${target.name} heeft nu ook de kaarten en historie van het lokale account.`,
+        variant: 'success',
+      })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Samenvoegen mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
+
+  async function onDelete(r: api.AdminUserRow) {
+    const ok = await confirm({
+      title: 'Account verwijderen?',
+      message: `${r.name} wordt definitief verwijderd en kan niet meer worden geactiveerd. Open aanvragen en bestellingen vervallen. Geaccordeerde verkopen, geleverde tosti's en het logboek blijven bewaard onder "Verwijderde leden", zodat de omzetcijfers niet veranderen.`,
+      confirmLabel: 'Ja, verwijderen',
+      cancelLabel: 'Terug',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setBusyId(r.id)
+    try {
+      await api.deleteUser(csrf, r.id)
+      await invalidateUsers()
+      await alert({ title: 'Verwijderd', message: `${r.name} is verwijderd.`, variant: 'success' })
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Verwijderen mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setBusyId(null)
+    }
   }
 
   async function saveEdit() {
@@ -360,153 +462,161 @@ export function AdminLocalUsersPage() {
         </div>
         <p className="px-6 pt-3 text-xs text-slate-500">
           Rechten en de jeugd-vlag kun je voor elk account direct aanvinken, ook voor Google-accounts. Je eigen rechten en
-          status zijn vergrendeld.
+          status zijn vergrendeld. Een lokaal account zet je via <strong>Naar Google</strong> om naar een Google-account
+          met behoud van kaarten en historie; een gedeactiveerd account kun je verwijderen.
         </p>
         {listQuery.isLoading ? (
           <p className="px-6 py-10 text-sm text-slate-600">Laden…</p>
         ) : visibleRows.length === 0 ? (
           <p className="px-6 py-10 text-sm text-slate-600">Geen gebruikers gevonden.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[60rem] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/95 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3.5">Naam</th>
-                  <th className="px-4 py-3.5">Login / e-mail</th>
-                  <th className="px-4 py-3.5">Kaarten</th>
-                  <th className="px-4 py-3.5" title="Kraampagina en beheer">
-                    Kraam
-                  </th>
-                  <th className="px-4 py-3.5">Beheerder</th>
-                  <th className="px-4 py-3.5" title="Mag avondetenkaart kopen">
-                    Matroos (jeugd)
-                  </th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((r) => {
-                  const isMe = me?.id === r.id
-                  const locked = busyId === r.id || isMe
-                  const expanded = expandedUser === r.id
-                  return (
-                    <Fragment key={r.id}>
-                      <tr className={`transition-colors hover:bg-slate-50/90 ${r.is_active ? '' : 'bg-slate-50 text-slate-500'}`}>
-                        <td className="px-4 py-3.5">
-                          <div className="font-medium text-slate-900">{r.name}</div>
-                          <div className="text-xs text-slate-500">
-                            {r.auth_kind === 'local' ? 'Lokaal' : 'Google'} · #{r.id}
-                            {isMe ? ' · jij' : ''}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-600">
-                          {r.auth_kind === 'local' ? <span className="font-mono">{r.local_username}</span> : r.email}
-                          {r.must_change_password ? (
-                            <div className="text-xs text-amber-800">Wachtwoordwissel verplicht</div>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3.5">
+          <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
+            {visibleRows.map((r) => {
+              const isMe = me?.id === r.id
+              const locked = busyId === r.id || isMe || r.is_system
+              const expanded = expandedUser === r.id
+              const prepared = preparedGoogleEmail(r)
+              return (
+                <li key={r.id} className={r.is_active ? '' : 'bg-slate-50 text-slate-500'}>
+                  <div className="grid gap-x-6 gap-y-3 px-6 py-4 lg:grid-cols-12 lg:items-center">
+                    <div className="min-w-0 lg:col-span-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-slate-900">{r.name}</span>
+                        {r.is_system ? (
+                          <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">Systeem</span>
+                        ) : r.is_active ? (
+                          <span className="rounded-md bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-900">Actief</span>
+                        ) : (
+                          <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                            Gedeactiveerd{r.disabled_at ? ` ${formatDateNL(r.disabled_at)}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 break-all text-xs text-slate-500">
+                        {r.auth_kind === 'local' ? 'Lokaal' : 'Google'} · #{r.id}
+                        {isMe ? ' · jij' : ''} ·{' '}
+                        {r.auth_kind === 'local' ? <span className="font-mono">{r.local_username}</span> : r.email}
+                      </div>
+                      {r.must_change_password ? (
+                        <div className="text-xs text-amber-800">Wachtwoordwissel verplicht</div>
+                      ) : null}
+                      {prepared ? (
+                        <div className="text-xs text-brand-800">Wordt Google-account bij eerste login als {prepared}</div>
+                      ) : null}
+                    </div>
+
+                    <div className="min-w-0 lg:col-span-2">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedUser(expanded ? null : r.id)}
+                        className="text-left text-sm font-semibold text-brand-700 hover:underline"
+                        aria-expanded={expanded}
+                      >
+                        {r.cards_total === 0
+                          ? 'Geen kaarten'
+                          : `${r.cards_total} ${r.cards_total === 1 ? 'kaart' : 'kaarten'} · ${r.knipjes_total} knipjes`}
+                      </button>
+                      {r.pending_requests > 0 ? (
+                        <div className="text-xs text-amber-800">
+                          {r.pending_requests} {r.pending_requests === 1 ? 'betaling' : 'betalingen'} open
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-700 lg:col-span-3">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className={checkbox}
+                          checked={r.is_operator}
+                          disabled={locked}
+                          onChange={(e) => void toggleRole(r, 'is_operator', e.target.checked)}
+                          aria-label={`Kraammedewerker voor ${r.name}`}
+                        />
+                        <span title="Kraampagina en beheer">Kraam</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className={checkbox}
+                          checked={r.is_admin}
+                          disabled={locked}
+                          onChange={(e) => void toggleRole(r, 'is_admin', e.target.checked)}
+                          aria-label={`Beheerder voor ${r.name}`}
+                        />
+                        <span>Beheerder</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className={checkbox}
+                          checked={r.is_matroos_jeugd}
+                          disabled={busyId === r.id || r.is_system}
+                          onChange={(e) => void toggleMatroosJeugd(r, e.target.checked)}
+                          aria-label={`Matroos (jeugd) voor ${r.name}`}
+                        />
+                        <span title="Mag avondetenkaart kopen">Jeugd</span>
+                      </label>
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm lg:col-span-3 lg:justify-end">
+                      {r.auth_kind === 'local' && !r.is_system ? (
+                        <>
                           <button
                             type="button"
-                            onClick={() => setExpandedUser(expanded ? null : r.id)}
-                            className="text-left text-sm font-semibold text-brand-700 hover:underline"
-                            aria-expanded={expanded}
+                            onClick={() => startEdit(r)}
+                            className="font-semibold text-brand-700 hover:underline"
                           >
-                            {r.cards_total === 0
-                              ? 'Geen kaarten'
-                              : `${r.cards_total} ${r.cards_total === 1 ? 'kaart' : 'kaarten'} · ${r.knipjes_total} knipjes`}
+                            Wachtwoord
                           </button>
-                          {r.pending_requests > 0 ? (
-                            <div className="text-xs text-amber-800">
-                              {r.pending_requests} {r.pending_requests === 1 ? 'betaling' : 'betalingen'} open
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <input
-                            type="checkbox"
-                            className={checkbox}
-                            checked={r.is_operator}
-                            disabled={locked}
-                            onChange={(e) => void toggleRole(r, 'is_operator', e.target.checked)}
-                            aria-label={`Kraammedewerker voor ${r.name}`}
-                          />
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <input
-                            type="checkbox"
-                            className={checkbox}
-                            checked={r.is_admin}
-                            disabled={locked}
-                            onChange={(e) => void toggleRole(r, 'is_admin', e.target.checked)}
-                            aria-label={`Beheerder voor ${r.name}`}
-                          />
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <input
-                            type="checkbox"
-                            className={checkbox}
-                            checked={r.is_matroos_jeugd}
-                            disabled={busyId === r.id}
-                            onChange={(e) => void toggleMatroosJeugd(r, e.target.checked)}
-                            aria-label={`Matroos (jeugd) voor ${r.name}`}
-                          />
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {r.is_active ? (
-                            <span className="rounded-md bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-900">Actief</span>
-                          ) : (
-                            <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                              Gedeactiveerd{r.disabled_at ? ` ${formatDateNL(r.disabled_at)}` : ''}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
-                            {r.auth_kind === 'local' ? (
-                              <button
-                                type="button"
-                                onClick={() => startEdit(r)}
-                                className="text-sm font-semibold text-brand-700 hover:underline"
-                              >
-                                Wachtwoord
-                              </button>
-                            ) : null}
-                            {!isMe ? (
-                              <button
-                                type="button"
-                                disabled={busyId === r.id}
-                                onClick={() => void toggleActive(r)}
-                                className={`text-sm font-semibold hover:underline disabled:opacity-50 ${
-                                  r.is_active ? 'text-red-700' : 'text-brand-700'
-                                }`}
-                              >
-                                {r.is_active ? 'Deactiveren' : 'Activeren'}
-                              </button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                      {expanded ? (
-                        <tr className="bg-slate-50/70">
-                          <td colSpan={8} className="px-4 py-4">
-                            <UserCardsRow
-                              userId={r.id}
-                              onChanged={async () => {
-                                await queryClient.invalidateQueries({ queryKey: queryKeys.admin.userCards(r.id) })
-                                await invalidateUsers()
-                              }}
-                            />
-                          </td>
-                        </tr>
+                          <button
+                            type="button"
+                            onClick={() => startGoogleDialog(r)}
+                            className="font-semibold text-brand-700 hover:underline"
+                          >
+                            Naar Google
+                          </button>
+                        </>
                       ) : null}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                      {!isMe && !r.is_system ? (
+                        <button
+                          type="button"
+                          disabled={busyId === r.id}
+                          onClick={() => void toggleActive(r)}
+                          className={`font-semibold hover:underline disabled:opacity-50 ${
+                            r.is_active ? 'text-red-700' : 'text-brand-700'
+                          }`}
+                        >
+                          {r.is_active ? 'Deactiveren' : 'Activeren'}
+                        </button>
+                      ) : null}
+                      {!isMe && !r.is_system && !r.is_active ? (
+                        <button
+                          type="button"
+                          disabled={busyId === r.id}
+                          onClick={() => void onDelete(r)}
+                          className="font-semibold text-red-700 hover:underline disabled:opacity-50"
+                        >
+                          Verwijderen
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {expanded ? (
+                    <div className="bg-slate-50/70 px-6 py-4">
+                      <UserCardsRow
+                        userId={r.id}
+                        onChanged={async () => {
+                          await queryClient.invalidateQueries({ queryKey: queryKeys.admin.userCards(r.id) })
+                          await invalidateUsers()
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
         )}
       </section>
 
@@ -555,6 +665,104 @@ export function AdminLocalUsersPage() {
                 className="btn-primary"
               >
                 {savingId !== null ? 'Opslaan…' : 'Opslaan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {googleDialogRow ? (
+        <div
+          className="fixed inset-0 z-[280] flex items-end justify-center bg-slate-900/50 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="google-migrate-title"
+        >
+          <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="google-migrate-title" className="text-lg font-bold text-slate-900">
+              {googleDialogRow.name} naar Google-account
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Kaarten (ook openstaande aanvragen), bestellingen en de hele historie blijven bij het lid. Kies een van de
+              twee manieren.
+            </p>
+
+            <section className="mt-5 rounded-xl border border-slate-200 p-4">
+              <h4 className="text-sm font-semibold text-slate-900">1. Heeft nog geen Google-account in de app</h4>
+              <p className="mt-1 text-xs text-slate-600">
+                Vul het Workspace-adres in. Bij de eerste Google-login met dat adres wordt dít account het
+                Google-account; de gebruikersnaam en het wachtwoord vervallen dan. Tot die tijd werkt de lokale login.
+              </p>
+              <label className="mt-3 block text-sm">
+                <span className="font-medium text-slate-700">Google e-mailadres</span>
+                <input
+                  type="email"
+                  autoComplete="off"
+                  value={googleEmail}
+                  onChange={(e) => setGoogleEmail(e.target.value)}
+                  placeholder="naam@jouw-domein.nl"
+                  className="input-control mt-1.5"
+                />
+              </label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={googleBusy || !googleEmail.trim()}
+                  onClick={() => void saveGoogleEmail()}
+                  className="btn-primary"
+                >
+                  {googleBusy ? 'Bezig…' : 'Koppeling klaarzetten'}
+                </button>
+                {preparedGoogleEmail(googleDialogRow) ? (
+                  <button
+                    type="button"
+                    disabled={googleBusy}
+                    onClick={() => {
+                      setGoogleEmail('')
+                      void saveGoogleEmail()
+                    }}
+                    className="btn-secondary"
+                  >
+                    Koppeling verwijderen
+                  </button>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="mt-4 rounded-xl border border-slate-200 p-4">
+              <h4 className="text-sm font-semibold text-slate-900">2. Heeft al met Google ingelogd</h4>
+              <p className="mt-1 text-xs text-slate-600">
+                Kies het bestaande Google-account. Alles van het lokale account gaat daarnaartoe; het lokale account
+                wordt verwijderd.
+              </p>
+              <label className="mt-3 block text-sm">
+                <span className="font-medium text-slate-700">Google-account</span>
+                <select
+                  value={mergeTargetId === '' ? '' : String(mergeTargetId)}
+                  onChange={(e) => setMergeTargetId(e.target.value ? Number(e.target.value) : '')}
+                  className="select-control mt-1.5 w-full"
+                >
+                  <option value="">Kies een account…</option>
+                  {googleAccounts.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g.email})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={googleBusy || mergeTargetId === ''}
+                onClick={() => void mergeIntoGoogle()}
+                className="btn-danger-ghost mt-3"
+              >
+                {googleBusy ? 'Bezig…' : 'Samenvoegen'}
+              </button>
+            </section>
+
+            <div className="mt-6 flex justify-end">
+              <button type="button" onClick={() => setGoogleDialogId(null)} className="btn-secondary">
+                Sluiten
               </button>
             </div>
           </div>

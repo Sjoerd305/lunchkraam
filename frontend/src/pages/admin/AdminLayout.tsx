@@ -11,6 +11,7 @@ export function AdminLayout() {
 
   const operatorOnly = Boolean(user.is_operator && !user.is_admin)
   const operatorPathAllowed =
+    loc.pathname === '/admin' ||
     loc.pathname.startsWith('/admin/requests') ||
     loc.pathname === '/admin/expenses' ||
     loc.pathname === '/admin/expenses-overview' ||
@@ -24,15 +25,12 @@ export function AdminLayout() {
       <nav className="w-full shrink-0 md:w-52" aria-label="Beheer">
         <div className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-col md:gap-1 md:overflow-visible md:px-0">
           <SideGroup label="Dagelijks" />
-          {user.is_admin ? (
-            <SideLink to="/admin" end>
-              Overzicht
-            </SideLink>
-          ) : null}
+          <SideLink to="/admin" end>
+            Overzicht
+          </SideLink>
           <SideLink to="/admin/requests">Betalingswachtrij</SideLink>
           <SideLink to="/admin/expenses">Boodschappen</SideLink>
           <SideGroup label="Financiën" />
-          <SideLink to="/admin/expenses-overview">Overzichten</SideLink>
           <SideLink to="/admin/finance">Financiën</SideLink>
           <SideLink to="/admin/finance-control">Verkoopcontrole</SideLink>
           {user.is_admin ? (

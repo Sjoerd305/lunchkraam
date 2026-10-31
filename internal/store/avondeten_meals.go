@@ -22,6 +22,8 @@ type AvondetenRegistrationRow struct {
 	OwnerEmail        string
 	KnipjesRemaining  int
 	RegisteredForDate bool
+	// Active is false while the card's online aanvraag awaits accordering; no meal can be booked then.
+	Active bool
 }
 
 // ListAvondetenCardsForMealDate returns all avondeten cards and whether each is already used on mealDate (calendar date in Europe/Amsterdam).
@@ -33,12 +35,13 @@ func (s *Store) ListAvondetenCardsForMealDate(ctx context.Context, mealDate time
 	d := mealDate.In(loc)
 	day := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, loc)
 
-	const q = `
+	q := `
 SELECT c.id, c.user_id, u.name, u.email, c.knipjes_remaining,
        EXISTS(
          SELECT 1 FROM avondeten_meals m
          WHERE m.card_id = c.id AND m.meal_date = $1::date
-       ) AS registered
+       ) AS registered,
+       ` + cardActiveSQL + ` AS active
 FROM cards c
 JOIN users u ON u.id = c.user_id
 WHERE c.kind = 'avondeten'::card_kind
@@ -51,7 +54,7 @@ ORDER BY u.name ASC, c.id ASC`
 	var out []AvondetenRegistrationRow
 	for rows.Next() {
 		var r AvondetenRegistrationRow
-		if err := rows.Scan(&r.CardID, &r.UserID, &r.OwnerName, &r.OwnerEmail, &r.KnipjesRemaining, &r.RegisteredForDate); err != nil {
+		if err := rows.Scan(&r.CardID, &r.UserID, &r.OwnerName, &r.OwnerEmail, &r.KnipjesRemaining, &r.RegisteredForDate, &r.Active); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -109,6 +112,11 @@ func (s *Store) RegisterAvondetenMealsForDate(ctx context.Context, mealDate time
 		}
 		if knip <= 0 {
 			return 0, fmt.Errorf("kaart %d: %w", cardID, ErrNoKnipjes)
+		}
+		if pending, err := cardAwaitsVerification(ctx, tx, cardID); err != nil {
+			return 0, err
+		} else if pending {
+			return 0, fmt.Errorf("kaart %d: %w", cardID, ErrCardNotVerified)
 		}
 		var already bool
 		err = tx.QueryRow(ctx,

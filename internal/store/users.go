@@ -39,7 +39,9 @@ func scanUser(scanner interface{ Scan(dest ...any) error }) (*User, error) {
 }
 
 // UpsertUser updates or creates the Google-linked user. A deactivated account returns ErrUserDisabled
-// and is not updated.
+// and is not updated. A local account whose email was set to this (verified, in-domain) address by an
+// admin is linked to the Google identity instead of creating a second account, so its cards and
+// history carry over (see AdminSetLocalUserGoogleEmail).
 func (s *Store) UpsertUser(ctx context.Context, googleSub, email, name string, bootstrapAdmin bool) (*User, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -62,6 +64,17 @@ RETURNING `+userSelectColumns,
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("upsert user update: %w", err)
+	}
+
+	u, err = linkGoogleToPreparedLocalUser(ctx, tx, googleSub, email, name, bootstrapAdmin)
+	if err == nil {
+		if u.IsDisabled() {
+			return nil, ErrUserDisabled
+		}
+		return u, tx.Commit(ctx)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("upsert user link local: %w", err)
 	}
 
 	row = tx.QueryRow(ctx, `
@@ -145,7 +158,7 @@ SELECT id, password_hash FROM users WHERE lower(login_username) = $1 AND passwor
 
 // AdminSetMatroosJeugd sets the matroos-jeugd flag for any user (Google or local).
 func (s *Store) AdminSetMatroosJeugd(ctx context.Context, userID int64, v bool) error {
-	tag, err := s.pool.Exec(ctx, `UPDATE users SET is_matroos_jeugd = $2 WHERE id = $1`, userID, v)
+	tag, err := s.pool.Exec(ctx, `UPDATE users SET is_matroos_jeugd = $2 WHERE id = $1 AND login_username IS DISTINCT FROM $3`, userID, v, deletedMemberLoginUsername)
 	if err != nil {
 		return err
 	}
@@ -160,7 +173,7 @@ func (s *Store) AdminSetUserRoles(ctx context.Context, userID, actorUserID int64
 	if userID == actorUserID {
 		return ErrCannotChangeSelf
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE users SET is_admin = $2, is_operator = $3 WHERE id = $1`, userID, isAdmin, isOperator)
+	tag, err := s.pool.Exec(ctx, `UPDATE users SET is_admin = $2, is_operator = $3 WHERE id = $1 AND login_username IS DISTINCT FROM $4`, userID, isAdmin, isOperator, deletedMemberLoginUsername)
 	if err != nil {
 		return err
 	}
@@ -180,7 +193,7 @@ func (s *Store) AdminSetUserDisabled(ctx context.Context, userID, actorUserID in
 	if disabled {
 		tag, err = s.pool.Exec(ctx, `UPDATE users SET disabled_at = COALESCE(disabled_at, now()) WHERE id = $1`, userID)
 	} else {
-		tag, err = s.pool.Exec(ctx, `UPDATE users SET disabled_at = NULL WHERE id = $1`, userID)
+		tag, err = s.pool.Exec(ctx, `UPDATE users SET disabled_at = NULL WHERE id = $1 AND login_username IS DISTINCT FROM $2`, userID, deletedMemberLoginUsername)
 	}
 	if err != nil {
 		return err
@@ -221,6 +234,7 @@ ORDER BY (u.disabled_at IS NOT NULL) ASC, lower(u.name) ASC, u.created_at DESC`)
 		if lun.Valid {
 			s := lun.String
 			r.LoginUsername = &s
+			r.IsSystem = s == deletedMemberLoginUsername
 		}
 		if disabledAt.Valid {
 			t := disabledAt.Time
@@ -256,7 +270,7 @@ ORDER BY lower(name) ASC, lower(email) ASC`)
 // AdminUpdateLocalUser updates flags and optionally replaces the password (local accounts only).
 func (s *Store) AdminUpdateLocalUser(ctx context.Context, userID int64, newPassword *string, isAdmin, isOperator, mustChangePassword bool) error {
 	var ok bool
-	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND login_username IS NOT NULL)`, userID).Scan(&ok)
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND login_username IS NOT NULL AND login_username <> $2)`, userID, deletedMemberLoginUsername).Scan(&ok)
 	if err != nil {
 		return err
 	}

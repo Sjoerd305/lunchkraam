@@ -38,10 +38,13 @@ type TostiOrder struct {
 }
 
 // TostiOrderOperatorRow is a pending order with customer name and email for operators.
+// PendingCardRequestID is set when the linked card still awaits accordering of its payment: the
+// order can then not be delivered until that request is fulfilled.
 type TostiOrderOperatorRow struct {
 	TostiOrder
-	CustomerName  string
-	CustomerEmail string
+	CustomerName         string
+	CustomerEmail        string
+	PendingCardRequestID *int64
 }
 
 func nullInt64ToPtr(n sql.NullInt64) *int64 {

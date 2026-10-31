@@ -9,6 +9,7 @@ function card(overrides: Partial<Card> = {}): Card {
     source: 'online',
     knipjes_remaining: 10,
     created_at: '',
+    active: true,
     ...overrides,
   }
 }

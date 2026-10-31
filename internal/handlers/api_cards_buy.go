@@ -68,13 +68,7 @@ func (d *Deps) APICards(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]cardJSON, 0, len(cards))
 	for _, c := range cards {
-		out = append(out, cardJSON{
-			ID:               c.ID,
-			Kind:             c.Kind,
-			Source:           c.Source,
-			KnipjesRemaining: c.KnipjesRemaining,
-			CreatedAt:        c.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
-		})
+		out = append(out, cardToJSON(c))
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"cards": out})
 }

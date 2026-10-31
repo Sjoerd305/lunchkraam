@@ -14,7 +14,8 @@ Korte gids voor penningmeester en andere vrijwilligers die **Revolut**, **Boodsc
 | Saldo uit het Revolut-afschrift (CSV-kolom) | **Beheer → Boodschappen** — bovenaan bij Revolut-import |
 | Uitgaven en bonnen, contante kas | **Beheer → Boodschappen** |
 | Jaaroverzicht omzet / uitgaven / tosti’s / grafieken | **Beheer → Overzicht** (jaarkeuze bovenaan) |
-| Betaling van een online kaartaanvraag accorderen | **Kraam → Betalingen** |
+| Betaling van een online kaartaanvraag accorderen (maakt de kaart actief; tot dan kan het lid wel bestellen maar levert de kraam niet) | **Kraam → Betalingen** of de knop *Betaling accorderen* bij de bestelling |
+| Lokaal account omzetten naar Google-account, of een gedeactiveerd account verwijderen | **Beheer → Accounts** (alleen beheerder) |
 | Knipje-historie van een kaart bekijken of terugdraaien | **Kraam → Knipje** (lid: **Mijn kaarten**) |
 | Schatting van een fysieke kaart corrigeren | **Kraam → Knipje → Schatting zetten** |
 | Prijzen, Tikkie-links en overschrijfinstructies | **Beheer → Instellingen** (alleen beheerder) |

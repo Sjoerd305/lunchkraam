@@ -47,12 +47,13 @@ func (d *Deps) APIOperatorAvondetenList(w http.ResponseWriter, r *http.Request) 
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, map[string]any{
-			"card_id":              row.CardID,
-			"user_id":              row.UserID,
-			"owner_name":           row.OwnerName,
-			"owner_email":          row.OwnerEmail,
-			"knipjes_remaining":    row.KnipjesRemaining,
-			"registered_for_date":  row.RegisteredForDate,
+			"card_id":             row.CardID,
+			"user_id":             row.UserID,
+			"owner_name":          row.OwnerName,
+			"owner_email":         row.OwnerEmail,
+			"knipjes_remaining":   row.KnipjesRemaining,
+			"registered_for_date": row.RegisteredForDate,
+			"active":              row.Active,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{

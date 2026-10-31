@@ -123,7 +123,8 @@ WHERE id = $1 AND status = 'pending'`,
 	}
 
 	// A physical card holds an estimate: never block a real delivery on it, just clamp at 0.
-	// An online card holds the real balance: insufficient knipjes block delivery.
+	// An online card holds the real balance: insufficient knipjes block delivery, and the card
+	// must be active (payment accordeerd) before anything can be deducted.
 	newBal := knip - qty
 	note := ""
 	if source == "physical" {
@@ -131,8 +132,15 @@ WHERE id = $1 AND status = 'pending'`,
 			newBal = 0
 			note = "Schatting stond lager dan het aantal; op 0 gezet"
 		}
-	} else if knip < qty {
-		return ErrNoKnipjes
+	} else {
+		if pending, err := cardAwaitsVerification(ctx, tx, *cardID); err != nil {
+			return err
+		} else if pending {
+			return ErrCardNotVerified
+		}
+		if knip < qty {
+			return ErrNoKnipjes
+		}
 	}
 
 	tag, err := tx.Exec(ctx, `UPDATE cards SET knipjes_remaining = $2 WHERE id = $1`, *cardID, newBal)

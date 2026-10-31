@@ -59,7 +59,8 @@ SELECT o.id, o.user_id, o.card_id, o.bread::text, o.filling::text, o.status::tex
     WHEN o.card_id IS NULL THEN TRUE
     ELSE EXISTS(SELECT 1 FROM cards c WHERE c.id = o.card_id AND c.source = 'physical'::card_source)
   END AS is_physical_card,
-  u.name, u.email
+  u.name, u.email,
+  (SELECT cr.id FROM card_requests cr WHERE cr.card_id = o.card_id AND cr.status = 'pending' ORDER BY cr.id LIMIT 1) AS pending_card_request_id
 FROM tosti_orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.status = 'pending'
@@ -74,14 +75,16 @@ LIMIT $1`, limit)
 		var r TostiOrderOperatorRow
 		var cardIDScan sql.NullInt64
 		var remarkScan sql.NullString
+		var pendingReqScan sql.NullInt64
 		if err := rows.Scan(
 			&r.ID, &r.UserID, &cardIDScan, &r.Bread, &r.Filling, &r.Status, &r.CreatedAt,
 			&r.DeliveredAt, &r.DeliveredByUserID, &r.CancelledAt, &r.CancelledByUserID, &r.Quantity, &remarkScan, &r.IsPhysicalCard,
-			&r.CustomerName, &r.CustomerEmail,
+			&r.CustomerName, &r.CustomerEmail, &pendingReqScan,
 		); err != nil {
 			return nil, err
 		}
 		r.CardID = nullInt64ToPtr(cardIDScan)
+		r.PendingCardRequestID = nullInt64ToPtr(pendingReqScan)
 		if remarkScan.Valid {
 			r.Remark = remarkScan.String
 		}

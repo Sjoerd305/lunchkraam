@@ -116,6 +116,9 @@ func WriteTostiOperatorDeliverStoreError(w http.ResponseWriter, err error) bool 
 	case errors.Is(err, store.ErrNoKnipjes):
 		JSONError(w, http.StatusBadRequest, "no_knipjes", "Niet genoeg knipjes op de kaart voor dit aantal.")
 		return true
+	case errors.Is(err, store.ErrCardNotVerified):
+		JSONError(w, http.StatusConflict, "card_not_verified", "De kaart is nog niet actief: accordeer eerst de betaling (tabblad Betalingen) en markeer daarna als geleverd.")
+		return true
 	case errors.Is(err, store.ErrTostiInvalidQuantity):
 		JSONError(w, http.StatusInternalServerError, "server_error", "Ongeldige bestelregel.")
 		return true
@@ -150,6 +153,9 @@ func WriteAvondetenRegisterStoreError(w http.ResponseWriter, err error) bool {
 	case errors.Is(err, store.ErrNoKnipjes):
 		JSONError(w, http.StatusBadRequest, "no_knipjes", "Een van de kaarten heeft geen knipjes meer.")
 		return true
+	case errors.Is(err, store.ErrCardNotVerified):
+		JSONError(w, http.StatusConflict, "card_not_verified", "Een van de kaarten is nog niet actief: accordeer eerst de betaling onder Betalingen.")
+		return true
 	case errors.Is(err, store.ErrAvondetenAlreadyRegistered):
 		JSONError(w, http.StatusConflict, "already_registered", "Een van de kaarten was al geregistreerd voor deze datum. Vernieuw de lijst en probeer opnieuw.")
 		return true
@@ -169,6 +175,9 @@ func WriteCardUseStoreError(w http.ResponseWriter, err error) bool {
 		return true
 	case errors.Is(err, store.ErrCardPhysicalReadonly):
 		JSONError(w, http.StatusBadRequest, "physical_card_readonly", "Een fysieke kaart heeft een schatting; gebruik 'Schatting zetten' in plaats van een knipje.")
+		return true
+	case errors.Is(err, store.ErrCardNotVerified):
+		JSONError(w, http.StatusConflict, "card_not_verified", "Deze kaart is nog niet actief: accordeer eerst de betaling onder Betalingen.")
 		return true
 	default:
 		return false
@@ -319,6 +328,38 @@ func WriteAdminUserChangeError(w http.ResponseWriter, err error) bool {
 		return true
 	case errors.Is(err, store.ErrCannotChangeSelf):
 		JSONError(w, http.StatusBadRequest, "cannot_change_self", "Je kunt je eigen rechten of status niet wijzigen.")
+		return true
+	default:
+		return false
+	}
+}
+
+// WriteAdminUserLifecycleError maps store errors from the Google-link, merge and delete account actions.
+func WriteAdminUserLifecycleError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		JSONError(w, http.StatusNotFound, "not_found", "Account niet gevonden.")
+		return true
+	case errors.Is(err, store.ErrCannotChangeSelf):
+		JSONError(w, http.StatusBadRequest, "cannot_change_self", "Je kunt je eigen account niet samenvoegen of verwijderen.")
+		return true
+	case errors.Is(err, store.ErrSystemUser):
+		JSONError(w, http.StatusBadRequest, "system_user", "Het systeemaccount 'Verwijderde leden' kan niet worden gewijzigd.")
+		return true
+	case errors.Is(err, store.ErrEmailTaken):
+		JSONError(w, http.StatusConflict, "email_taken", "Dit e-mailadres hoort al bij een ander account. Gebruik dan 'Samenvoegen'.")
+		return true
+	case errors.Is(err, store.ErrMergeSourceNotLocal):
+		JSONError(w, http.StatusBadRequest, "not_local", "Alleen een lokaal account kan worden samengevoegd.")
+		return true
+	case errors.Is(err, store.ErrMergeTargetNotGoogle):
+		JSONError(w, http.StatusBadRequest, "target_not_google", "Kies een bestaand Google-account als doel.")
+		return true
+	case errors.Is(err, store.ErrMergeConflict):
+		JSONError(w, http.StatusConflict, "merge_conflict", "Beide accounts hebben een open aanvraag van hetzelfde kaarttype. Accordeer of weiger er eerst één.")
+		return true
+	case errors.Is(err, store.ErrUserNotDisabled):
+		JSONError(w, http.StatusConflict, "not_disabled", "Deactiveer het account eerst; daarna kun je het verwijderen.")
 		return true
 	default:
 		return false

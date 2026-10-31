@@ -94,6 +94,8 @@ export function KraamAvondetenSection({
                       <td className="px-3 py-2.5 text-slate-600">
                         {r.registered_for_date ? (
                           <span className="text-brand-800">Geregistreerd</span>
+                        ) : !r.active ? (
+                          <span className="text-amber-800">Betaling nog niet geaccordeerd</span>
                         ) : r.knipjes_remaining <= 0 ? (
                           <span className="text-slate-500">Op</span>
                         ) : (

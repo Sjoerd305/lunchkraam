@@ -197,9 +197,12 @@ export function OrderTostiPage() {
         })
       } else {
         const knipWord = quantity === 1 ? 'knipje' : 'knipjes'
+        const cardActive = selectedCard?.active ?? true
         await alert({
           title: 'Bestelling geplaatst',
-          message: `${quantity === 1 ? '1' : String(quantity)} ${knipWord} wordt bij levering afgeschreven.`,
+          message: cardActive
+            ? `${quantity === 1 ? '1' : String(quantity)} ${knipWord} wordt bij levering afgeschreven.`
+            : `${quantity === 1 ? '1' : String(quantity)} ${knipWord} wordt bij levering afgeschreven. Je kaart is nog niet actief: de kraam controleert eerst je betaling en levert daarna.`,
           variant: 'success',
         })
       }
@@ -270,6 +273,7 @@ export function OrderTostiPage() {
         submitting={submitting}
         maxDigitalQty={maxDigitalQty}
         effectiveMaxQty={effectiveMaxQty}
+        selectedCardInactive={paymentMode === 'digital' && selectedCard !== undefined && !selectedCard.active}
       />
 
       <OrderTostiRecentSection orders={orders} />

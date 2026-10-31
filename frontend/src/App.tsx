@@ -60,6 +60,7 @@ export default function App() {
                 <Route path="expenses" element={<AdminShopExpensesPage />} />
                 {/* Oude routes: de betalingswachtrij zit op de kraampagina, Overzichten is samengevoegd met Overzicht. */}
                 <Route path="requests" element={<Navigate to="/kraam?tab=betalingen" replace />} />
+                {/* Oude link "Overzichten"; het overzicht staat nu voor beide rollen op /admin. */}
                 <Route path="expenses-overview" element={<Navigate to="/admin" replace />} />
               </Route>
             </Route>

@@ -68,6 +68,8 @@ type adminUserListJSON struct {
 	CardsTotal         int64   `json:"cards_total"`
 	KnipjesTotal       int64   `json:"knipjes_total"`
 	PendingRequests    int64   `json:"pending_requests"`
+	// IsSystem: placeholder "Verwijderde leden"; cannot be edited, activated or deleted.
+	IsSystem bool `json:"is_system"`
 }
 
 func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +89,7 @@ func (d *Deps) APIAdminUsers(w http.ResponseWriter, r *http.Request) {
 			CardsTotal:         row.CardsTotal,
 			KnipjesTotal:       row.KnipjesTotal,
 			PendingRequests:    row.PendingRequests,
+			IsSystem:           row.IsSystem,
 		}
 		if row.DisabledAt != nil {
 			t := row.DisabledAt.UTC().Format(httpx.JSONTimeLayout)
@@ -281,13 +284,7 @@ func (d *Deps) APIAdminUserCards(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]cardJSON, 0, len(cards))
 	for _, c := range cards {
-		out = append(out, cardJSON{
-			ID:               c.ID,
-			Kind:             c.Kind,
-			Source:           c.Source,
-			KnipjesRemaining: c.KnipjesRemaining,
-			CreatedAt:        c.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
-		})
+		out = append(out, cardToJSON(c))
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"cards": out})
 }
@@ -332,6 +329,7 @@ func (d *Deps) APIOperatorCards(w http.ResponseWriter, r *http.Request) {
 			"source":            row.Source,
 			"knipjes_remaining": row.KnipjesRemaining,
 			"created_at":        row.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
+			"active":            row.Active,
 			"owner_name":        row.OwnerName,
 			"owner_email":       row.OwnerEmail,
 			"owner_user_id":     row.UserID,

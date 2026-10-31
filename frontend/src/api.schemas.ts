@@ -22,6 +22,9 @@ const optionalInt = z.preprocess(
 
 const booleanLike = z.preprocess((value) => Boolean(value), z.boolean())
 
+const booleanWithDefault = (fallback: boolean) =>
+  z.preprocess((value) => (typeof value === 'boolean' ? value : fallback), z.boolean())
+
 export const cardKindSchema = z.enum(['tosti', 'avondeten']).catch('tosti')
 export const paymentMethodSchema = z.enum(['tikkie', 'contant']).catch('tikkie')
 export const cardSourceSchema = z.enum(['online', 'physical']).catch('online')
@@ -56,6 +59,8 @@ export const cardSchema = z.object({
   source: cardSourceSchema,
   knipjes_remaining: intWithDefault(0),
   created_at: stringWithDefault(''),
+  /** false zolang de betaling van deze online kaart nog niet is geaccordeerd. */
+  active: booleanWithDefault(true),
 })
 
 export const tikkieWarningSchema = z.object({
@@ -110,6 +115,8 @@ export const adminUserRowSchema = z.object({
   cards_total: intWithDefault(0),
   knipjes_total: intWithDefault(0),
   pending_requests: intWithDefault(0),
+  /** Systeemaccount "Verwijderde leden": bewaart historie van verwijderde accounts, niet te wijzigen. */
+  is_system: booleanWithDefault(false),
 })
 
 export const adminUsersResponseSchema = z.object({
@@ -123,6 +130,7 @@ export const avondetenRegistrationCardSchema = z.object({
   owner_email: stringWithDefault(''),
   knipjes_remaining: intWithDefault(0),
   registered_for_date: booleanLike,
+  active: booleanWithDefault(true),
 })
 
 export const avondetenRegistrationsResponseSchema = z.object({
@@ -143,6 +151,7 @@ export const operatorCardRowSchema = z.object({
   owner_name: stringWithDefault(''),
   owner_email: stringWithDefault(''),
   owner_user_id: intWithDefault(0),
+  active: booleanWithDefault(true),
 })
 
 export const operatorCardsResponseSchema = z.object({
@@ -218,6 +227,8 @@ export const createTostiOrderResponseSchema = z.object({
 export const operatorTostiOrderSchema = tostiOrderSchema.extend({
   customer_name: stringWithDefault(''),
   customer_email: stringWithDefault(''),
+  /** Gezet zolang de betaling van de kaart nog niet is geaccordeerd; leveren kan dan nog niet. */
+  pending_card_request_id: optionalInt,
 })
 
 export const operatorTostiOrdersResponseSchema = z.object({

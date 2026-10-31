@@ -38,7 +38,7 @@ export function KraamPage() {
   const [q, setQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState(q)
   const [busyId, setBusyId] = useState<number | null>(null)
-  const [busyOrder, setBusyOrder] = useState<{ id: number; action: 'deliver' | 'cancel' } | null>(null)
+  const [busyOrder, setBusyOrder] = useState<{ id: number; action: 'deliver' | 'cancel' | 'verify' } | null>(null)
   const [paymentBusyId, setPaymentBusyId] = useState<number | null>(null)
   const [avondetenMealDate, setAvondetenMealDate] = useState(() => localISODate())
   const [avondetenPicked, setAvondetenPicked] = useState<number[]>([])
@@ -158,6 +158,16 @@ export function KraamPage() {
     await queryClient.invalidateQueries({ queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate) })
   }, [queryClient, avondetenMealDate])
 
+  const invalidateAfterPaymentChange = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.operator.tostiOrders }),
+      queryClient.invalidateQueries({ queryKey: ['operator', 'cards'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.operator.avondetenRegistrations(avondetenMealDate) }),
+      refresh(),
+    ])
+  }, [queryClient, avondetenMealDate, refresh])
+
   if (!user) {
     return <Navigate to="/login" replace />
   }
@@ -250,7 +260,7 @@ export function KraamPage() {
   async function onPaymentFulfill(id: number, knipjesRemaining: number) {
     const ok = await confirm({
       title: 'Betaling accorderen?',
-      message: `Accorderen? Op de kaart staan nog ${knipjesRemaining} knipje(s).`,
+      message: `Betaling ontvangen? De kaart wordt dan actief (nog ${knipjesRemaining} knipje(s) op de kaart).`,
       confirmLabel: 'Accorderen',
       cancelLabel: 'Terug',
       tone: 'brand',
@@ -259,9 +269,8 @@ export function KraamPage() {
     setPaymentBusyId(id)
     try {
       await api.fulfillRequest(csrf, id)
-      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
-      await refresh()
-      await alert({ title: 'Geaccordeerd', message: 'De aanvraag is uit de wachtrij gehaald.', variant: 'success' })
+      await invalidateAfterPaymentChange()
+      await alert({ title: 'Geaccordeerd', message: 'De kaart is actief en de aanvraag is uit de wachtrij.', variant: 'success' })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Toekennen mislukt.'
       await alert({ title: 'Mislukt', message: msg, variant: 'error' })
@@ -270,10 +279,31 @@ export function KraamPage() {
     }
   }
 
+  async function onVerifyPaymentForOrder(o: api.OperatorTostiOrderRow, requestId: number) {
+    const ok = await confirm({
+      title: 'Betaling accorderen?',
+      message: `Betaling van ${o.customer_name} voor kaart #${o.card_id} ontvangen? De kaart wordt dan actief en de bestelling kan worden geleverd.`,
+      confirmLabel: 'Accorderen',
+      cancelLabel: 'Terug',
+      tone: 'brand',
+    })
+    if (!ok) return
+    setBusyOrder({ id: o.id, action: 'verify' })
+    try {
+      await api.fulfillRequest(csrf, requestId)
+      await invalidateAfterPaymentChange()
+    } catch (e) {
+      const msg = e instanceof api.ApiError ? e.message : 'Accorderen mislukt.'
+      await alert({ title: 'Mislukt', message: msg, variant: 'error' })
+    } finally {
+      setBusyOrder(null)
+    }
+  }
+
   async function onPaymentReject(id: number) {
     const ok = await confirm({
       title: 'Aanvraag weigeren?',
-      message: 'De voorlopige kaart wordt verwijderd.',
+      message: 'De nog niet actieve kaart wordt verwijderd, inclusief open tostibestellingen op die kaart.',
       confirmLabel: 'Ja, weigeren',
       cancelLabel: 'Terug',
       tone: 'danger',
@@ -282,8 +312,7 @@ export function KraamPage() {
     setPaymentBusyId(id)
     try {
       await api.rejectAdminRequest(csrf, id)
-      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.requests })
-      await refresh()
+      await invalidateAfterPaymentChange()
       await alert({ title: 'Afgewezen', message: 'De aanvraag is geannuleerd.', variant: 'success' })
     } catch (e) {
       const msg = e instanceof api.ApiError ? e.message : 'Weigeren mislukt.'
@@ -385,7 +414,7 @@ export function KraamPage() {
     }
   }
 
-  const avondetenSelectable = avondetenRows.filter((r) => !r.registered_for_date && r.knipjes_remaining > 0)
+  const avondetenSelectable = avondetenRows.filter((r) => !r.registered_for_date && r.knipjes_remaining > 0 && r.active)
   const avondetenPickableIds = new Set(avondetenSelectable.map((r) => r.card_id))
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
@@ -442,6 +471,7 @@ export function KraamPage() {
           onRefreshQueue={() => void refreshQueue()}
           onDeliverOrder={onDeliverOrder}
           onCancelOrder={onCancelOrder}
+          onVerifyPayment={onVerifyPaymentForOrder}
         />
       ) : null}
 

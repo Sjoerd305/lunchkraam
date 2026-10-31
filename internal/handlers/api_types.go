@@ -1,6 +1,9 @@
 package handlers
 
-import "lunchkraam/internal/store"
+import (
+	"lunchkraam/internal/httpx"
+	"lunchkraam/internal/store"
+)
 
 type userPublicJSON struct {
 	ID                 int64   `json:"id"`
@@ -27,6 +30,19 @@ type cardJSON struct {
 	Source           string `json:"source"`
 	KnipjesRemaining int    `json:"knipjes_remaining"`
 	CreatedAt        string `json:"created_at"`
+	// Active is false while the payment for this online card still awaits accordering.
+	Active bool `json:"active"`
+}
+
+func cardToJSON(c store.Card) cardJSON {
+	return cardJSON{
+		ID:               c.ID,
+		Kind:             c.Kind,
+		Source:           c.Source,
+		KnipjesRemaining: c.KnipjesRemaining,
+		CreatedAt:        c.CreatedAt.UTC().Format(httpx.JSONTimeLayout),
+		Active:           c.Active,
+	}
 }
 
 type adminRequestJSON struct {

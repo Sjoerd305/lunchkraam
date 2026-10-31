@@ -42,6 +42,8 @@ type AdminUserSummary struct {
 	CardsTotal         int64
 	KnipjesTotal       int64
 	PendingRequests    int64
+	// IsSystem marks the placeholder that holds the history of deleted accounts.
+	IsSystem bool
 }
 
 type OperatorMemberSummary struct {
@@ -58,6 +60,9 @@ type Card struct {
 	KnipjesRemaining int
 	Note             *string
 	CreatedAt        time.Time
+	// Active is false while the online aanvraag for this card is still pending: the member can
+	// place orders on it, but no knipjes can be deducted until an operator accordeert the payment.
+	Active bool
 }
 
 type CardRequest struct {

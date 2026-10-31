@@ -2,7 +2,7 @@ import { breadLabel, fillingLabel } from '../../utils/tostiLabels'
 import { isPhysicalTostiOrder } from './kraamFormat'
 import type { OperatorTostiOrderRow } from '../../api'
 
-type BusyOrder = { id: number; action: 'deliver' | 'cancel' } | null
+type BusyOrder = { id: number; action: 'deliver' | 'cancel' | 'verify' } | null
 
 type Props = {
   loadingOrders: boolean
@@ -11,6 +11,8 @@ type Props = {
   onRefreshQueue: () => void
   onDeliverOrder: (o: OperatorTostiOrderRow) => void
   onCancelOrder: (o: OperatorTostiOrderRow) => void
+  /** Betaling van de kaart accorderen (aanvraag-id uit `pending_card_request_id`). */
+  onVerifyPayment: (o: OperatorTostiOrderRow, requestId: number) => void
 }
 
 export function KraamTostiQueueSection({
@@ -20,6 +22,7 @@ export function KraamTostiQueueSection({
   onRefreshQueue,
   onDeliverOrder,
   onCancelOrder,
+  onVerifyPayment,
 }: Props) {
   return (
     <section className="space-y-4">
@@ -27,7 +30,8 @@ export function KraamTostiQueueSection({
         <div>
           <h2 className="text-xl font-semibold text-ink">Tosti-bestellingen</h2>
           <p className="text-sm text-ink-muted">
-            Oudste eerst. Digitale kaart: knipjes gaan er bij "Geleverd" af. Fysieke kaart: knip zelf op de kaart.
+            Oudste eerst. Digitale kaart: knipjes gaan er bij "Geleverd" af. Fysieke kaart: knip zelf op de kaart. Staat
+            de betaling van een kaart nog open, accordeer die dan eerst; leveren kan pas daarna.
           </p>
         </div>
         <button
@@ -48,6 +52,7 @@ export function KraamTostiQueueSection({
         <ul className="space-y-3">
           {orders.map((o, idx) => {
             const physical = isPhysicalTostiOrder(o)
+            const pendingRequestId = o.pending_card_request_id ?? null
             return (
               <li
                 key={o.id}
@@ -66,6 +71,9 @@ export function KraamTostiQueueSection({
                     <p className="flex flex-wrap items-center gap-2 text-lg font-semibold text-ink">
                       {o.customer_name}
                       {physical ? <span className="pill-pending">Fysieke kaart · knip zelf</span> : null}
+                      {pendingRequestId !== null ? (
+                        <span className="pill-rejected">Betaling nog niet geaccordeerd</span>
+                      ) : null}
                     </p>
                     <p className="text-sm text-ink-muted">{o.customer_email}</p>
                     <p className="mt-1 text-ink">
@@ -85,11 +93,22 @@ export function KraamTostiQueueSection({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {pendingRequestId !== null ? (
+                    <button
+                      type="button"
+                      disabled={busyOrder !== null}
+                      onClick={() => void onVerifyPayment(o, pendingRequestId)}
+                      className="btn-accent min-h-12 px-5"
+                    >
+                      {busyOrder?.id === o.id && busyOrder.action === 'verify' ? 'Bezig…' : 'Betaling accorderen'}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    disabled={busyOrder !== null}
+                    disabled={busyOrder !== null || pendingRequestId !== null}
+                    title={pendingRequestId !== null ? 'Accordeer eerst de betaling van de kaart.' : undefined}
                     onClick={() => void onDeliverOrder(o)}
-                    className="btn-success min-h-12 px-6"
+                    className="btn-success min-h-12 px-6 disabled:opacity-50"
                   >
                     {busyOrder?.id === o.id && busyOrder.action === 'deliver' ? 'Bezig…' : 'Geleverd'}
                   </button>

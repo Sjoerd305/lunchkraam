@@ -50,8 +50,8 @@ export function BuyPage() {
       await alert({
         title: 'Aanvraag ontvangen',
         message: isAvondeten
-          ? 'Je kaart staat op Mijn kaarten. De beheerder accordeert later.'
-          : 'Je tostikaart met 10 knipjes staat op Mijn kaarten; je kunt meteen bestellen. Beheerder accordeert later.',
+          ? 'Je avondetenkaart staat op Mijn kaarten en wordt actief zodra een beheerder je betaling heeft gecontroleerd.'
+          : 'Je tostikaart staat op Mijn kaarten. Bestellen kan alvast; de kraam levert zodra je betaling is gecontroleerd en de kaart actief is.',
         variant: 'success',
       })
     } catch (e) {
@@ -152,8 +152,9 @@ export function BuyPage() {
           <h2 className="text-lg font-semibold text-slate-900">Tostikaart (lunchkraam)</h2>
           <p className="mt-2 text-slate-700">
             Nieuwe kaart:{' '}
-            <strong className="text-brand-800">{formatEURFromString(info.payment_amount_eur)}</strong>. Meteen{' '}
-            <strong>10 knipjes</strong> op <strong>Mijn kaarten</strong>. Beheerder accordeert de betaling later.
+            <strong className="text-brand-800">{formatEURFromString(info.payment_amount_eur)}</strong> voor{' '}
+            <strong>10 knipjes</strong>. De kaart verschijnt op <strong>Mijn kaarten</strong> en wordt actief zodra de
+            kraam je betaling heeft gecontroleerd. Bestellen kan alvast.
           </p>
         </div>
         {showAvondeten ? (
@@ -161,8 +162,8 @@ export function BuyPage() {
             <h2 className="text-lg font-semibold text-slate-900">Avondetenkaart (matroos jeugd)</h2>
             <p className="mt-2 text-slate-700">
               <strong className="text-brand-800">{formatEURFromString(info.payment_amount_avondeten_eur)}</strong> —
-              10 knipjes op Mijn
-              kaarten. Afboeken via de kraam.
+              10 knipjes op Mijn kaarten. Actief zodra een beheerder je betaling heeft gecontroleerd; afboeken via de
+              kraam.
             </p>
           </div>
         ) : null}
@@ -184,7 +185,8 @@ export function BuyPage() {
             ) : null}
           </div>
           <p className="mt-2 text-sm text-amber-900/90">
-            Max. één open aanvraag per kaarttype. Annuleren alleen zonder knipjegebruik; daarna contact beheerder.
+            Max. één open aanvraag per kaarttype. Zolang de betaling niet is gecontroleerd kun je de aanvraag hier
+            annuleren; open bestellingen op die kaart vervallen dan mee.
           </p>
           <ul className="mt-4 space-y-2">
             {pending.map((r) => (
@@ -285,8 +287,8 @@ export function BuyPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md">
         <h2 className="text-lg font-semibold text-slate-900">Aanvragen</h2>
         <p className="mt-2 text-slate-600">
-          Na betaling hier aanvragen — meteen een kaart op Mijn kaarten; beheerder ziet de wachtrij nog. Max.{' '}
-          <strong>één open aanvraag per kaarttype</strong>.
+          Na betaling hier aanvragen. Je kaart staat dan op Mijn kaarten als <strong>nog niet actief</strong>: de kraam
+          controleert je betaling en zet de kaart daarna actief. Max. <strong>één open aanvraag per kaarttype</strong>.
         </p>
         {hasPendingTosti ? (
           <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">

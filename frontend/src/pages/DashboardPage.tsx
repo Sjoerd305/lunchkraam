@@ -46,10 +46,6 @@ export function DashboardPage() {
     if (a.kind !== b.kind) return a.kind === 'tosti' ? -1 : 1
     return a.created_at.localeCompare(b.created_at)
   })
-  const pendingByKind = new Map<api.CardKind, api.MyPendingRequest>()
-  for (const r of buyQuery.data?.my_pending_requests ?? []) {
-    if (!pendingByKind.has(r.kind)) pendingByKind.set(r.kind, r)
-  }
   const myQueue = (queueQuery.data ?? []).filter((e) => e.is_mine)
   const queue = queueQuery.data ?? []
 
@@ -101,15 +97,14 @@ export function DashboardPage() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {cards.map((c) => {
-                const pending = pendingByKind.get(c.kind)
                 return (
                   <article key={c.id} className="surface-card flex flex-col gap-4 p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="eyebrow text-brand-900">{cardKindLabel(c.kind)}</span>
                       {c.source === 'physical' ? (
                         <span className="pill-neutral">Fysiek · schatting</span>
-                      ) : pending ? (
-                        <span className="pill-pending">Betaling in controle</span>
+                      ) : !c.active ? (
+                        <span className="pill-pending">Nog niet actief · betaling in controle</span>
                       ) : (
                         <span className="text-xs font-medium text-ink-muted">Sinds {formatDateNL(c.created_at)}</span>
                       )}
@@ -125,8 +120,10 @@ export function DashboardPage() {
                       </Link>
                     ) : c.kind === 'tosti' ? (
                       <Link to="/tosti" className="btn-secondary w-full">
-                        Tosti bestellen met deze kaart
+                        {c.active ? 'Tosti bestellen met deze kaart' : 'Alvast tosti bestellen'}
                       </Link>
+                    ) : !c.active ? (
+                      <p className="text-sm text-ink-muted">Actief zodra een beheerder je betaling heeft gecontroleerd.</p>
                     ) : (
                       <p className="text-sm text-ink-muted">De kraam boekt avondeten per datum af.</p>
                     )}
@@ -179,7 +176,7 @@ export function DashboardPage() {
             <Panel title="Openstaande aanvraag">
               <p className="text-sm leading-relaxed text-ink-muted">
                 {pendingCardRequests === 1 ? 'Je kaartaanvraag wordt' : `${pendingCardRequests} kaartaanvragen worden`}{' '}
-                door de kraam gecontroleerd. Je kaart is al bruikbaar.
+                door de kraam gecontroleerd. Bestellen kan alvast; de kraam levert zodra de kaart actief is.
               </p>
               <Link to="/buy" className="text-sm font-semibold text-brand-900 hover:underline">
                 Betaalgegevens bekijken
@@ -193,7 +190,7 @@ export function DashboardPage() {
               {user?.is_matroos_jeugd
                 ? ` · Avondetenkaart ${formatEURFromString(buyQuery.data?.payment_amount_avondeten_eur ?? '')}`
                 : ''}
-              . Knipjes zijn meteen bruikbaar.
+              . Bestellen kan direct; de kaart wordt actief na controle van je betaling.
             </p>
             <Link to="/buy" className="btn-primary self-start">
               Kaart kopen
@@ -212,7 +209,7 @@ export function DashboardPage() {
             {adminOnly ? (
               <QuickLink to="/admin" title="Beheer" description="Cijfers, accounts en instellingen." />
             ) : (
-              <QuickLink to="/admin/expenses-overview" title="Overzichten" description="Financieel overzicht en statistieken." />
+              <QuickLink to="/admin" title="Overzicht" description="Financieel overzicht en statistieken." />
             )}
           </div>
         </section>

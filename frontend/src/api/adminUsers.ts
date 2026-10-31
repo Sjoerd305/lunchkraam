@@ -74,3 +74,21 @@ export async function getAdminUserCards(userId: number): Promise<Card[]> {
   const payload = await apiJson(`/api/admin/users/${userId}/cards`, cardsResponseSchema)
   return payload.cards
 }
+
+/**
+ * Lokaal account voorbereiden op Google: bij de eerste Google-login met dit adres neemt die login het
+ * account over (zelfde id: kaarten, aanvragen en historie blijven). Leeg adres = voorbereiding ongedaan maken.
+ */
+export async function setLocalUserGoogleEmail(csrf: string, userId: number, email: string): Promise<void> {
+  await apiVoid(`/api/admin/users/${userId}/google-email`, { method: 'PATCH', csrf, body: { email: email.trim() } })
+}
+
+/** Lokaal account samenvoegen met een bestaand Google-account; het lokale account verdwijnt. */
+export async function mergeUserInto(csrf: string, userId: number, targetUserId: number): Promise<void> {
+  await apiVoid(`/api/admin/users/${userId}/merge-into`, { method: 'POST', csrf, body: { target_user_id: targetUserId } })
+}
+
+/** Gedeactiveerd account verwijderen; historie blijft onder "Verwijderde leden". */
+export async function deleteUser(csrf: string, userId: number): Promise<void> {
+  await apiVoid(`/api/admin/users/${userId}`, { method: 'DELETE', csrf })
+}

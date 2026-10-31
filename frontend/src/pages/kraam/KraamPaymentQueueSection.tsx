@@ -28,8 +28,9 @@ export function KraamPaymentQueueSection({
         <div>
           <h2 className="text-lg font-semibold text-amber-950">Betalingen in de wachtrij</h2>
           <p className="text-sm text-amber-900/85">
-            Online aangevraagde kaarten. Accordeer zodra de Tikkie of overschrijving binnen is. Weigeren kan alleen zolang er
-            nog geen knipje is gebruikt.
+            Online aangevraagde kaarten. Zolang je niet accordeert is de kaart niet actief: het lid kan wel bestellen,
+            maar er gaan geen knipjes af. Accordeer zodra de Tikkie of overschrijving binnen is; weigeren verwijdert de
+            kaart.
             {!user.is_admin ? ' Avondetenkaarten accordeert een beheerder.' : ''}
           </p>
         </div>

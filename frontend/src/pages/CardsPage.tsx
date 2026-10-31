@@ -70,7 +70,7 @@ export function CardsPage() {
           <Link to="/buy" className="font-semibold text-brand-900 underline">
             Koop een kaart
           </Link>
-          . De knipjes zijn meteen bruikbaar bij Tosti bestellen.
+          . Bestellen kan direct na je aanvraag; de kaart wordt actief zodra de kraam je betaling heeft gecontroleerd.
         </p>
       </div>
     )
@@ -99,6 +99,7 @@ export function CardsPage() {
                 <span className="eyebrow text-brand-900">{cardKindLabel(c.kind)}</span>
                 <span className="flex items-center gap-2">
                   {c.source === 'physical' ? <span className="pill-neutral">Fysiek · schatting</span> : null}
+                  {!c.active ? <span className="pill-pending">Nog niet actief</span> : null}
                   <span className="text-xs font-medium text-ink-muted">#{c.id}</span>
                 </span>
               </div>
@@ -120,6 +121,11 @@ export function CardsPage() {
               {c.source === 'physical' ? (
                 <p className="mt-2 text-xs text-accent-800">
                   De kraam knipt op je echte kaart; dit getal is een schatting die de kraam kan bijstellen.
+                </p>
+              ) : null}
+              {!c.active ? (
+                <p className="mt-2 text-xs text-accent-800">
+                  Je betaling wordt nog gecontroleerd. Bestellen kan alvast; de kraam levert zodra de kaart actief is.
                 </p>
               ) : null}
               {c.knipjes_remaining === 0 ? (
