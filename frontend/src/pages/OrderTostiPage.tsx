@@ -36,16 +36,11 @@ export function OrderTostiPage() {
     queryKey: queryKeys.member.myTostiOrders,
     queryFn: () => api.getMyTostiOrders(),
   })
+  // Zelfde sleutel én zelfde vorm (array) als op het dashboard: de cache wordt gedeeld tussen pagina's.
   const queueQuery = useQuery({
     queryKey: queryKeys.member.tostiQueue,
-    queryFn: async (): Promise<{ rows: api.TostiQueueEntry[]; loadError: boolean }> => {
-      try {
-        const rows = await api.getTostiQueue()
-        return { rows, loadError: false }
-      } catch {
-        return { rows: [], loadError: true }
-      }
-    },
+    queryFn: () => api.getTostiQueue(),
+    retry: false,
   })
 
   useQueryErrorAlert(cardsQuery, { title: 'Laden mislukt', alert })
@@ -56,8 +51,8 @@ export function OrderTostiPage() {
     [cardsQuery.data],
   )
   const orders = useMemo(() => ordersQuery.data ?? [], [ordersQuery.data])
-  const queue = useMemo(() => queueQuery.data?.rows ?? [], [queueQuery.data])
-  const queueLoadError = queueQuery.data?.loadError ?? false
+  const queue = useMemo(() => queueQuery.data ?? [], [queueQuery.data])
+  const queueLoadError = queueQuery.isError
 
   /** Same as vorige `Promise.all`: UI pas na kaarten + mijn orders + wachtrij-poging. */
   const waitingInitial =
