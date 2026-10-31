@@ -26,8 +26,27 @@ func TestParsePhysicalCardSaleInput(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects avondeten for operator without admin rights", func(t *testing.T) {
+		_, err := parsePhysicalCardSaleInput(operator, 10, "avondeten", "contant")
+		var inv *errPhysicalSaleInput
+		if !errors.As(err, &inv) || inv.Code != "admin_required_for_avondeten" {
+			t.Fatalf("expected admin_required_for_avondeten, got %v", err)
+		}
+	})
+
+	t.Run("accepts tosti for operator", func(t *testing.T) {
+		in, err := parsePhysicalCardSaleInput(operator, 10, "tosti", "tikkie")
+		if err != nil {
+			t.Fatalf("expected no validation error, got %v", err)
+		}
+		if in.Kind != store.CardKindTosti || in.PaymentMethod != store.PaymentMethodTikkie {
+			t.Fatalf("unexpected input %+v", in)
+		}
+	})
+
 	t.Run("accepts valid contant input", func(t *testing.T) {
-		in, err := parsePhysicalCardSaleInput(operator, 10, "avondeten", "contant")
+		admin := &store.User{IsAdmin: true}
+		in, err := parsePhysicalCardSaleInput(admin, 10, "avondeten", "contant")
 		if err != nil {
 			t.Fatalf("expected no validation error, got %v", err)
 		}

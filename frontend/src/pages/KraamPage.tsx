@@ -505,6 +505,7 @@ export function KraamPage() {
 
       {tab === 'verkoop' ? (
         <KraamPhysicalSaleSection
+          canSellAvondeten={Boolean(user.is_admin)}
           memberOptions={memberOptions}
           saleUserID={saleUserID}
           saleKind={saleKind}

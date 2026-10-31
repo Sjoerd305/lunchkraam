@@ -3,6 +3,8 @@ import type { CardKind, PaymentMethod } from '../../api'
 export type MemberOption = { user_id: number; label: string }
 
 type Props = {
+  /** Alleen beheerders mogen avondetenkaarten verkopen (zelfde regel als bij accorderen). */
+  canSellAvondeten: boolean
   memberOptions: MemberOption[]
   saleUserID: number
   saleKind: CardKind
@@ -15,6 +17,7 @@ type Props = {
 }
 
 export function KraamPhysicalSaleSection({
+  canSellAvondeten,
   memberOptions,
   saleUserID,
   saleKind,
@@ -32,6 +35,7 @@ export function KraamPhysicalSaleSection({
         <p className="text-sm text-indigo-900/85">
           Verkoop je aan de kraam een papieren kaart, registreer die hier. De verkoop telt direct mee in de omzet en het
           lid ziet de kaart in de app met een schatting van 10 knipjes. Online kaarten kopen leden zelf via Kaart kopen.
+          {!canSellAvondeten ? ' Avondetenkaarten verkoopt een beheerder.' : ''}
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -58,7 +62,7 @@ export function KraamPhysicalSaleSection({
             className="input-control min-h-11 rounded-xl"
           >
             <option value="tosti">Tostikaart</option>
-            <option value="avondeten">Avondetenkaart (alleen matroos jeugd)</option>
+            {canSellAvondeten ? <option value="avondeten">Avondetenkaart (alleen matroos jeugd)</option> : null}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">

@@ -71,7 +71,7 @@ Zie [.env.example](.env.example) voor uitleg bij `COOKIE_SECURE` en tunnel-HTTP.
 ## Rollen
 
 - **Bootstrap-admin**: zet e-mail(s) in `BOOTSTRAP_ADMIN_EMAILS`; na inloggen heb je beheerdersrechten. Daarna zet je rechten voor **elk** account (Google of lokaal) in de UI onder **Beheer → Accounts**; je eigen rechten en status zijn daar vergrendeld.
-- **Beheerder (admin)**: alles van kraammedewerker, plus **Accounts** (rechten, jeugd-vlag, (de)activeren, kaarten en historie per lid), **Instellingen** en het accorderen van avondetenkaarten.
+- **Beheerder (admin)**: alles van kraammedewerker, plus **Accounts** (rechten, jeugd-vlag, (de)activeren, kaarten en historie per lid), **Instellingen** en alles rond avondetenkaarten (accorderen van online aanvragen én fysieke verkoop aan de kraam).
 - **Kraammedewerker (operator)**: **kraampagina** (`/kraam`, tabbladen Bestellingen · Knipje · Avondeten · Verkoop · Betalingen) en onder **Beheer**: **Overzicht**, **Financiën**, **Verkoopcontrole** en **Boodschappen**. De betalingswachtrij staat alleen op de kraampagina (`/kraam?tab=betalingen`).
 - **Matroos (jeugd)** (vlag op gebruiker, geen rechten): alleen wie deze vlag heeft ziet de **avondetenkaart** op Kaart kopen.
 - **Gedeactiveerd account**: kan niet meer inloggen (Google én lokaal), staat niet in de ledenkeuze aan de kraam; kaarten en historie blijven bewaard en het account kan weer worden geactiveerd. Een gedeactiveerd account kan daarna **verwijderd** worden: open aanvragen en bestellingen vervallen, geaccordeerde verkopen, geleverde tosti's en het logboek blijven staan onder het systeemaccount **Verwijderde leden** (niet te wijzigen, kan niet inloggen), zodat omzetcijfers niet veranderen.

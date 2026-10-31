@@ -48,6 +48,14 @@ func parsePhysicalCardSaleInput(actor *store.User, buyerUserID int64, kind, paym
 			Status: http.StatusBadRequest,
 		}
 	}
+	// Same rule as accorderen of an online aanvraag: avondetenkaarten only via a beheerder.
+	if normalizedKind == store.CardKindAvondeten && !actor.IsAdmin {
+		return physicalCardSaleInput{}, &errPhysicalSaleInput{
+			Code:   "admin_required_for_avondeten",
+			Msg:    "Alleen beheerders mogen avondetenkaarten verkopen.",
+			Status: http.StatusForbidden,
+		}
+	}
 	normalizedPaymentMethod, err := store.NormalizePaymentMethod(paymentMethod)
 	if err != nil {
 		return physicalCardSaleInput{}, &errPhysicalSaleInput{
